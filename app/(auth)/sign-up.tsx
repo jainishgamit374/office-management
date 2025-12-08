@@ -1,6 +1,6 @@
 import Custominputs from '@/components/Custominputs';
 import { Image } from 'expo-image';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -26,7 +26,12 @@ const signup = () => {
         setIsSubmitting(true);
         try {
             // Your user creation logic here
-            Alert.alert('Success', 'User registered successfully!');
+            Alert.alert('Success', 'User registered successfully!', [
+                {
+                    text: 'OK',
+                    onPress: () => router.push('/sign-in')
+                }
+            ]);
         } catch (error) {
             Alert.alert('Error', (error as Error).message || 'Something went wrong');
         } finally {

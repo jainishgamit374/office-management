@@ -378,3 +378,144 @@ const styles = StyleSheet.create({
 export default index
 
 }
+
+
+
+
+
+
+
+<!-- Other code singin, signup -->
+
+  // const navItems = [
+  //   { key: 'signInButton', title: 'Sign In', path: '/sign-in' },
+  //   { key: 'signUpButton', title: 'Sign Up', path: '/sign-up' },
+  // ]
+
+
+  const router = useRouter()
+
+  return (
+
+     {/* 
+      <View style={styles.navBarWrapper}>
+        <FlatList
+          data={navItems}
+          horizontal={true}
+          contentContainerStyle={styles.navBarContainer}
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => router.push(item.path)}
+              style={({ pressed }) => [
+                styles.Button,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={{ color: '#333' }}>{item.title}</Text>
+            </Pressable>
+          )}
+        />
+      </View> */}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    width: '100%',
+    backgroundColor: '#f0f2f5',
+  },
+  greetingSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  helloText: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 5,
+  },
+  goodMorningText: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 10,
+  },
+  taskCountText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+  },
+  taskCountBold: {
+    fontWeight: '700',
+    color: '#000',
+  },
+  Button: {
+    marginHorizontal: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    backgroundColor: '#e0e0e0',
+    width: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  navBarWrapper: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  navBarContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly', // Align items to the right
+    alignItems: 'center',
+    paddingHorizontal: 5,
+    width: "100%",
+    gap: 10,
+  },
+  navItem: {
+    marginHorizontal: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    backgroundColor: '#e0e0e0',
+    width: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  navItemText: {
+    width: '100%',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    backgroundColor: '#f0f2f5',
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#2c3e50', // Darker, more prominent color
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#7f8c8d', // Softer color for subtitle
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+})
+
+
+  )

@@ -1,15 +1,16 @@
 import { TabBarProvider } from '@/constants/TabBarContext';
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 
 export default function TabsLayout() {
 
-  function TabsLayout() {
+  function TabsLayoutContent() { // Renamed to avoid conflict with outer function
 
     return <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true, // Changed to true to show labels
         tabBarStyle: {
           borderTopLeftRadius: 50,
           borderTopRightRadius: 50,
@@ -32,19 +33,27 @@ export default function TabsLayout() {
         } as any,
       }}
     >
-      <Tabs.Screen name="index" />
-      <Tabs.Screen name="explore" />
+      <Tabs.Screen
+        name="index"
+        options={{
+          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
+          title: 'Home',
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          tabBarIcon: ({ color, size }) => <Ionicons name="compass" size={size} color={color} />,
+          title: 'Services',
+        }}
+      />
     </Tabs>
 
   }
 
   return (
-    // <Stack screenOptions={{ headerShown: false }}>
-    //   <Stack.Screen name="index" />
-    //   <Stack.Screen name="explore" />
-    // </Stack>
     <TabBarProvider>
-      <TabsLayout />
+      <TabsLayoutContent />
     </TabBarProvider>
   )
 }

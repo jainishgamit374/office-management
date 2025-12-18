@@ -14,7 +14,7 @@ export default function AuthLayout() {
                 <View style={styles.headerContainer}>
                     <View style={styles.logoWrapper}>
                         <Image
-                            source={require('@/assets/images/image.png')}
+                            source={require('@/assets/images/Logo.jpg')}
                             style={styles.logo}
                             resizeMode="contain"
                         />
@@ -50,8 +50,17 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     logo: {
-        width: 180,
-        height: 180,
+        width: 140,
+        height: 140,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 15,
     },
     formContainer: {
         flex: 1,

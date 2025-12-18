@@ -1,3 +1,12 @@
-import Wfhlist from '@/components/MySpace/Attendance/Wfhlist';
+import React from 'react'
+import { Text, View } from 'react-native'
 
-export default Wfhlist;
+const Wfhlist = () => {
+    return (
+        <View>
+            <Text>Wfhlist</Text>
+        </View>
+    )
+}
+
+export default Wfhlist

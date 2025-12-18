@@ -1,6 +1,8 @@
+import CustomModal from '@/components/CustomModal';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Toast from 'react-native-toast-message';
 
 const ForgotPassword = () => {
     const router = useRouter();
@@ -9,19 +11,104 @@ const ForgotPassword = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [codeSent, setCodeSent] = useState(false);
 
+    // Modal state for custom popup
+    const [modalConfig, setModalConfig] = useState({
+        visible: false,
+        type: 'info' as 'success' | 'error' | 'warning' | 'info',
+        title: '',
+        message: '',
+    });
+
     const handleSendCode = () => {
+        if (!email) {
+            Toast.show({
+                type: 'error',
+                text1: 'Email Required',
+                text2: 'Please enter your email address',
+                position: 'top',
+                visibilityTime: 3000,
+            });
+            return;
+        }
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            Toast.show({
+                type: 'error',
+                text1: 'Invalid Email',
+                text2: 'Please enter a valid email address',
+                position: 'top',
+                visibilityTime: 3000,
+            });
+            return;
+        }
+
         console.log('Sending code to:', email);
         setCodeSent(true);
+
+        // Show success notification
+        setModalConfig({
+            visible: true,
+            type: 'success',
+            title: 'Reset Code Sent',
+            message: `A password reset code has been sent to ${email}`,
+        });
     };
 
     const handleCreateNewPassword = () => {
-        if (newPassword !== confirmPassword) {
-            alert('Passwords do not match!');
+        // Validation
+        if (!newPassword || !confirmPassword) {
+            Toast.show({
+                type: 'error',
+                text1: 'Missing Fields',
+                text2: 'Please fill in all password fields',
+                position: 'top',
+                visibilityTime: 3000,
+            });
             return;
         }
+
+        if (newPassword !== confirmPassword) {
+            Toast.show({
+                type: 'error',
+                text1: 'Passwords Don\'t Match',
+                text2: 'Please make sure both passwords are the same',
+                position: 'top',
+                visibilityTime: 3000,
+            });
+            return;
+        }
+
+        if (newPassword.length < 8) {
+            Toast.show({
+                type: 'error',
+                text1: 'Password Too Short',
+                text2: 'Password must be at least 8 characters',
+                position: 'top',
+                visibilityTime: 3000,
+            });
+            return;
+        }
+
         console.log('Creating new password for:', email, 'Password:', newPassword);
-        alert('Password reset successfully!');
-        router.push('/sign-in');
+
+        // Show success notification
+        setModalConfig({
+            visible: true,
+            type: 'success',
+            title: 'Password Created Successfully',
+            message: 'Your new password has been set. You can now sign in with your new password.',
+        });
+
+        // Navigate to sign-in after showing success
+        setTimeout(() => {
+            router.push('/sign-in');
+        }, 2500);
+    };
+
+    const closeModal = () => {
+        setModalConfig({ ...modalConfig, visible: false });
     };
 
     return (
@@ -81,6 +168,15 @@ const ForgotPassword = () => {
                     </View>
                 )}
             </View>
+
+            {/* Custom Modal Popup */}
+            <CustomModal
+                visible={modalConfig.visible}
+                onClose={closeModal}
+                type={modalConfig.type}
+                title={modalConfig.title}
+                message={modalConfig.message}
+            />
         </View>
     );
 };

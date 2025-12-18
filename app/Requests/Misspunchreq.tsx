@@ -1,3 +1,12 @@
-import Misspunchreq from '@/components/MySpace/Requests/Misspunchreq';
+import React from 'react'
+import { Text, View } from 'react-native'
 
-export default Misspunchreq;
+const Misspunchreq = () => {
+    return (
+        <View>
+            <Text>Misspunchreq</Text>
+        </View>
+    )
+}
+
+export default Misspunchreq

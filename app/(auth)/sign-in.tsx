@@ -63,17 +63,15 @@ const signin = () => {
                 });
 
                 setIsSubmitting(false);
-                // IMPORTANT: Return here to prevent any further execution
                 return;
             }
 
             // Email is verified - proceed with login
-            // Using Custom Modal for success (Style 2)
             setModalConfig({
                 visible: true,
                 type: 'success',
-                title: 'Welcome Back! 👋',
-                message: 'You have successfully signed in. Redirecting to your dashboard...',
+                title: 'Sign-In Successfully 👋',
+                message: 'Redirecting to your dashboard...',
             });
 
             // Navigate after modal is shown

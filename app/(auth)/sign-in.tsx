@@ -1,4 +1,5 @@
 import Custominputs from '@/components/Custominputs';
+import CustomModal from '@/components/CustomModal';
 import { account, signIn, signOut } from '@/lib/appwrite';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
@@ -8,6 +9,14 @@ import Toast from 'react-native-toast-message';
 const signin = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Modal state for custom popup
+    const [modalConfig, setModalConfig] = useState({
+        visible: false,
+        type: 'info' as 'success' | 'error' | 'warning' | 'info',
+        title: '',
+        message: '',
+    });
+
     const [form, setForm] = useState({
         email: '',
         password: '',
@@ -16,6 +25,7 @@ const signin = () => {
     const submit = async () => {
         const { email, password } = form;
 
+        // Using Toast for validation errors (Style 1)
         if (!email || !password) {
             Toast.show({
                 type: 'error',
@@ -37,45 +47,57 @@ const signin = () => {
 
             // Check if email is verified
             if (!(user as any).emailVerification) {
-                // Email not verified - sign out and show error
-                await signOut();
+                // Email not verified - MUST sign out immediately
+                try {
+                    await signOut();
+                } catch (signOutError) {
+                    console.error('Error signing out unverified user:', signOutError);
+                }
 
-                Toast.show({
-                    type: 'error',
-                    text1: 'Email Not Verified ⚠️',
-                    text2: 'Please check your inbox and verify your email',
-                    position: 'top',
-                    visibilityTime: 5000,
+                // Show warning modal
+                setModalConfig({
+                    visible: true,
+                    type: 'warning',
+                    title: 'Email Not Verified ⚠️',
+                    message: 'Please check your inbox and verify your email before signing in. Click the verification link sent to your email.',
                 });
 
                 setIsSubmitting(false);
+                // IMPORTANT: Return here to prevent any further execution
                 return;
             }
 
             // Email is verified - proceed with login
-            Toast.show({
+            // Using Custom Modal for success (Style 2)
+            setModalConfig({
+                visible: true,
                 type: 'success',
-                text1: 'Welcome Back! 👋',
-                text2: 'Signed in successfully',
-                position: 'top',
-                visibilityTime: 2000,
+                title: 'Welcome Back! 👋',
+                message: 'You have successfully signed in. Redirecting to your dashboard...',
             });
 
-            // Navigate after a short delay to let user see the toast
+            // Navigate after modal is shown
             setTimeout(() => {
                 router.replace('/(tabs)');
-            }, 800);
+            }, 2000);
         } catch (error: any) {
             console.error('Sign in error:', error);
-            Toast.show({
+
+            // Using Custom Modal for errors (Style 2)
+            setModalConfig({
+                visible: true,
                 type: 'error',
-                text1: 'Sign In Failed',
-                text2: error.message || 'Invalid credentials',
-                position: 'top',
-                visibilityTime: 4000,
+                title: 'Sign In Failed',
+                message: error.message || 'Invalid email or password. Please check your credentials and try again.',
             });
+
             setIsSubmitting(false);
         }
+    };
+
+    const closeModal = () => {
+        setModalConfig({ ...modalConfig, visible: false });
+        setIsSubmitting(false);
     };
 
     const handleChange = (field: string, value: string) => {
@@ -84,9 +106,6 @@ const signin = () => {
 
     return (
         <ScrollView contentContainerStyle={styles.scrollContent}>
-            {/* <View style={styles.Imageheader}>
-                <Image source={require('@/assets/images/image.png')} style={styles.logo} resizeMode="contain" />
-            </View> */}
             <View style={styles.container}>
                 <Text style={styles.title}>Welcome Back</Text>
 
@@ -130,6 +149,15 @@ const signin = () => {
                 </View>
 
             </View>
+
+            {/* Custom Modal Popup - Style 2 */}
+            <CustomModal
+                visible={modalConfig.visible}
+                onClose={closeModal}
+                type={modalConfig.type}
+                title={modalConfig.title}
+                message={modalConfig.message}
+            />
         </ScrollView>
     )
 }

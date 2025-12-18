@@ -100,17 +100,17 @@ const styles = StyleSheet.create({
         backgroundColor: '#ffffff',
         borderRadius: 12,
         padding: 25,
-        // ...Platform.select({
-        //     ios: {
-        //         shadowColor: '#000',
-        //         shadowOffset: { width: 0, height: 4 },
-        //         shadowOpacity: 0.1,
-        //         shadowRadius: 8,
-        //     },
-        //     android: {
-        //         elevation: 8,
-        //     },
-        // }),
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 8,
+            },
+        }),
     },
     title: {
         fontSize: 28,
@@ -155,17 +155,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: 10,
-        // ...Platform.select({
-        //     ios: {
-        //         shadowColor: '#007bff',
-        //         shadowOffset: { width: 0, height: 2 },
-        //         shadowOpacity: 0.3,
-        //         shadowRadius: 4,
-        //     },
-        //     android: {
-        //         elevation: 5,
-        //     },
-        // }),
+        ...Platform.select({
+            ios: {
+                shadowColor: '#007bff',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.3,
+                shadowRadius: 4,
+            },
+            android: {
+                elevation: 5,
+            },
+        }),
     },
     buttonDisabled: {
         backgroundColor: '#a0c8f5',

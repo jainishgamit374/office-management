@@ -1,4 +1,5 @@
 import Custominputs from '@/components/Custominputs';
+import CustomModal from '@/components/CustomModal';
 import { createUser } from '@/lib/appwrite';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
@@ -7,6 +8,14 @@ import Toast from 'react-native-toast-message';
 
 const signup = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Modal state for custom popup
+    const [modalConfig, setModalConfig] = useState({
+        visible: false,
+        type: 'info' as 'success' | 'error' | 'warning' | 'info',
+        title: '',
+        message: '' as string | undefined,
+    });
 
     const [form, setForm] = useState({
         name: '',
@@ -18,6 +27,7 @@ const signup = () => {
     const submit = async () => {
         const { name, email, phone, password } = form;
 
+        // Using Toast for validation errors (Style 1)
         if (!name || !email || !phone || !password) {
             Toast.show({
                 type: 'error',
@@ -32,30 +42,38 @@ const signup = () => {
         setIsSubmitting(true);
         try {
             await createUser({ name, email, phone, password });
-            Toast.show({
+
+            // Using Custom Modal for success (Style 2)
+            setModalConfig({
+                visible: true,
                 type: 'success',
-                text1: 'Account Created! 🎉',
-                text2: 'Please verify your email before signing in',
-                position: 'top',
-                visibilityTime: 5000,
+                title: 'User Created Successfully',
+                message: undefined,
             });
 
-            // Navigate to sign-in page after a short delay
+            // Navigate to sign-in page after modal is closed
             setTimeout(() => {
                 router.replace('/(auth)/sign-in');
-            }, 1500);
+            }, 3000);
         } catch (error: any) {
             console.error('Sign up error:', error);
-            Toast.show({
+
+            // Using Custom Modal for errors (Style 2 - Alternative)
+            setModalConfig({
+                visible: true,
                 type: 'error',
-                text1: 'Sign Up Failed',
-                text2: error.message || 'Failed to create account',
-                position: 'top',
-                visibilityTime: 4000,
+                title: 'Sign Up Failed',
+                message: undefined,
             });
+
             setIsSubmitting(false);
         }
     }
+
+    const closeModal = () => {
+        setModalConfig({ ...modalConfig, visible: false });
+        setIsSubmitting(false);
+    };
 
     const handleSignIn = () => {
         router.push('/(auth)/sign-in');
@@ -119,6 +137,15 @@ const signup = () => {
                 </View>
 
             </View>
+
+            {/* Custom Modal Popup - Style 2 */}
+            <CustomModal
+                visible={modalConfig.visible}
+                onClose={closeModal}
+                type={modalConfig.type}
+                title={modalConfig.title}
+                message={modalConfig.message}
+            />
         </ScrollView>
     )
 }

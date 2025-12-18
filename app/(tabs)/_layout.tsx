@@ -1,68 +1,184 @@
-import { TabBarProvider } from '@/constants/TabBarContext';
+import { TabBarProvider, useTabBar } from '@/constants/TabBarContext';
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { Redirect, Tabs } from 'expo-router';
+import "global.css";
 import React from 'react';
+import Toast from 'react-native-toast-message';
+
+import { Animated, Platform, Pressable, StyleSheet, Text } from 'react-native';
+
+// Custom Animated Tab Bar Component
+function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+    const { tabBarTranslateY } = useTabBar();
+
+    return (
+        <Animated.View
+            style={[
+                styles.tabBarContainer,
+                {
+                    transform: [{ translateY: tabBarTranslateY }],
+                },
+            ]}
+        >
+            {state.routes.map((route, index) => {
+                const { options } = descriptors[route.key];
+                const label =
+                    options.tabBarLabel !== undefined
+                        ? options.tabBarLabel
+                        : options.title !== undefined
+                            ? options.title
+                            : route.name;
+
+                const isFocused = state.index === index;
+
+                const onPress = () => {
+                    const event = navigation.emit({
+                        type: 'tabPress',
+                        target: route.key,
+                        canPreventDefault: true,
+                    });
+
+                    if (!isFocused && !event.defaultPrevented) {
+                        navigation.navigate(route.name);
+                    }
+                };
+
+                const onLongPress = () => {
+                    navigation.emit({
+                        type: 'tabLongPress',
+                        target: route.key,
+                    });
+                };
+
+                // Get icon based on route name
+                const getIcon = () => {
+                    if (route.name === 'index') {
+                        return <Ionicons name="home" size={24} color={isFocused ? '#4289f4ff' : '#666'} />;
+                    } else if (route.name === 'explore') {
+                        return <Ionicons name="compass" size={24} color={isFocused ? '#4289f4ff' : '#666'} />;
+                    } else if (route.name === 'profile') {
+                        return <Ionicons name="person" size={24} color={isFocused ? '#4289f4ff' : '#666'} />;
+                    }
+                    return null;
+                };
+
+                return (
+                    <Pressable
+                        key={route.key}
+                        accessibilityRole="button"
+                        accessibilityState={isFocused ? { selected: true } : {}}
+                        accessibilityLabel={options.tabBarAccessibilityLabel}
+                        onPress={onPress}
+                        onLongPress={onLongPress}
+                        style={styles.tabButton}
+                    >
+                        {getIcon()}
+                        <Text style={[
+                            styles.tabLabel,
+                            { color: isFocused ? '#4289f4ff' : '#666' }
+                        ]}>
+                            {typeof label === 'string' ? label : ''}
+                        </Text>
+                    </Pressable>
+                );
+            })}
+        </Animated.View>
+    );
+}
 
 export default function TabsLayout() {
 
+    const isAuthenticated = true;
+    if (!isAuthenticated) {
+        return <Redirect href="/sign-in" />;
+    }
+
     function TabsLayoutContent() {
-
-        return <Tabs
-            screenOptions={{
-                headerShown: false,
-                tabBarShowLabel: true,
-                tabBarStyle: {
-                    borderTopLeftRadius: 50,
-                    borderTopRightRadius: 50,
-                    borderBottomLeftRadius: 50,
-                    borderBottomRightRadius: 50,
-                    paddingTop: 15,
-                    paddingBottom: 16,
-                    paddingHorizontal: 0,
-                    marginHorizontal: 20,
-                    height: 80,
-                    position: 'absolute',
-                    bottom: 10,
-                    backgroundColor: '#fff',
-                    shadowColor: "#1a1a1a",
-                    shadowOffset: {
-                        width: 0,
-                        height: 2,
-                    },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 5,
-                } as any,
-            }}
-        >
-            <Tabs.Screen
-                name="index"
-                options={{
-                    tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
-                    title: 'Home',
+        return (
+            <Tabs
+                tabBar={(props) => <CustomTabBar {...props} />}
+                screenOptions={{
+                    headerShown: false,
+                    tabBarShowLabel: true,
                 }}
-            />
-            <Tabs.Screen
-                name="explore"
-                options={{
-                    tabBarIcon: ({ color, size }) => <Ionicons name="compass" size={size} color={color} />,
-                    title: 'Services',
-                }}
-            />
-            <Tabs.Screen
-                name="profile"
-                options={{
-                    tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
-                    title: 'Profile',
-                }}
-            />
-        </Tabs>
-
+            >
+                <Tabs.Screen
+                    name="index"
+                    options={{
+                        title: 'Home',
+                    }}
+                />
+                <Tabs.Screen
+                    name="explore"
+                    options={{
+                        title: 'MySpace',
+                    }}
+                />
+                <Tabs.Screen
+                    name="profile"
+                    options={{
+                        title: 'Profile',
+                    }}
+                />
+            </Tabs>
+        );
     }
 
     return (
-        <TabBarProvider>
-            <TabsLayoutContent />
-        </TabBarProvider>
-    )
+        <>
+            <TabBarProvider>
+                <TabsLayoutContent />
+            </TabBarProvider>
+            <Toast />
+        </>
+    );
 }
+
+const styles = StyleSheet.create({
+    tabBarContainer: {
+        position: 'absolute',
+        bottom: 22,
+        left: 20,
+        right: 20,
+        height: 80,
+        backgroundColor: '#fff',
+        borderRadius: 50,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-around',
+        paddingHorizontal: 20,
+        shadowColor: "#1a1a1a",
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 5,
+        ...Platform.select({
+            ios: {
+                shadowColor: "#1a1a1a",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+            },
+            android: {
+                elevation: 5,
+            },
+        }),
+    },
+    tabButton: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 8,
+    },
+    tabLabel: {
+        fontSize: 12,
+        width: '100%',
+        textAlign: 'center',
+        marginTop: 4,
+        fontWeight: '500',
+    },
+});

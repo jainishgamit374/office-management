@@ -1,110 +1,299 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// app/(tabs)/explore.tsx
+import { useTabBar } from '@/constants/TabBarContext';
+import Feather from '@expo/vector-icons/Feather';
+import { router } from 'expo-router';
+import React from 'react';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Fonts } from '@/constants/theme';
+import { useThemeColors } from '@/hooks/useThemeColor';
 
-export default function TabTwoScreen() {
+const ExploreCard = ({
+  icon,
+  title,
+  description,
+  route,
+}: {
+  icon: React.ComponentProps<typeof Feather>['name'];
+  title: string;
+  description: string;
+  route?: string;
+}) => {
+  const colors = useThemeColors();
+
+  const handlePress = () => {
+    if (route) router.push(route);
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
+    <Pressable onPress={handlePress} disabled={!route}>
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.borderLight }]}>
+        <View style={[styles.cardIcon, { backgroundColor: colors.profileBg }]}>
+          <Feather name={icon} size={20} color={colors.primary} />
+        </View>
+        <View style={styles.cardContent}>
+          <ThemedText style={[styles.cardTitle, { color: colors.text, justifyContent: 'center', alignItems: 'center' }]}>{title}</ThemedText>
+          <ThemedText style={[styles.cardDescription, { color: colors.textSecondary }]}>
+            {description}
+          </ThemedText>
+        </View>
+        {route && (
+          <Feather name="chevron-right" size={18} color={colors.textMuted} />
+        )}
+      </View>
+    </Pressable>
+  );
+};
+
+export default function ExploreScreen() {
+  const colors = useThemeColors();
+
+  // Get tab bar context for scroll animation
+  const { scrollY, lastScrollY, tabBarTranslateY } = useTabBar();
+
+  // Handle scroll for tab bar animation
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    {
+      useNativeDriver: false,
+      listener: (event: any) => {
+        const currentScrollY = event.nativeEvent.contentOffset.y;
+        const diff = currentScrollY - lastScrollY.current;
+
+        if (diff > 0 && currentScrollY > 50) {
+          // Scrolling down - hide tab bar
+          Animated.spring(tabBarTranslateY, {
+            toValue: 150,
+            useNativeDriver: true,
+            friction: 8,
+            tension: 40,
+          }).start();
+        } else if (diff < 0) {
+          // Scrolling up - show tab bar
+          Animated.spring(tabBarTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            friction: 8,
+            tension: 40,
+          }).start();
+        }
+
+        lastScrollY.current = currentScrollY;
+      },
+    }
+  );
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <Animated.ScrollView
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Header */}
+        <View style={styles.headerContainer}>
+          <Feather name="grid" size={60} color={colors.textMuted} />
+        </View>
+
+        {/* Title */}
+        <ThemedText type="title" style={[styles.title, { color: colors.text }]}>
+          MySpace
         </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
+        <ThemedText style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Tools and resources to manage your work.
         </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+
+        {/* Attendance & Time */}
+        <ThemedView style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Attendance & Time
+          </ThemedText>
+
+          <ExploreCard
+            icon="clock"
+            title="Attendance History"
+            description="View your check-in and check-out records"
+            route="/Attendance/AttendenceList"
+          />
+          <ExploreCard
+            icon="calendar"
+            title="Leave Calendar"
+            description="See upcoming leaves and holidays"
+            route="/Attendance/LeaveCalender"
+          />
+
+          <ExploreCard
+            icon="home"
+            title="Work From Home"
+            description="Manage your WFH requests"
+            route="/Attendance/Wfhlist"
+          />
+        </ThemedView>
+
+        {/* Requests */}
+        <ThemedView style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Requests
+          </ThemedText>
+
+          <ExploreCard
+            icon="file-plus"
+            title="Apply Leave Application"
+            description="Apply for leave"
+            route="/Requests/Leaveapplyreq"
+          />
+          <ExploreCard
+            icon="alert-circle"
+            title="Miss Punch Request"
+            description="Report a missed check-in or check-out"
+            route="/Requests/Misspunchreq"
+          />
+          <ExploreCard
+            icon="log-out"
+            title="Early Check-Out/ Late check In"
+            description="Request to leave early or late check in"
+            route="/Requests/Earlycheckoutreq"
+          />
+          <ExploreCard
+            icon="home"
+            title="Apply WFH"
+            description="Apply for work from home"
+            route="/Requests/Wfhapplyreq"
+          />
+        </ThemedView>
+
+        {/* View All Requests */}
+        <ThemedView style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            View All  Requests
+          </ThemedText>
+
+          <ExploreCard
+            icon="file-plus"
+            title="Leave Requests"
+            description="View all leave applications"
+            route="/Requests/Leaveapplyreq"
+          />
+          <ExploreCard
+            icon="log-out"
+            title="Early Checkout Requests/Late CheckIn Requests"
+            description="View all early checkout requests or late checkIn requests"
+            route="/Requests/Earlycheckoutreq"
+          />
+          <ExploreCard
+            icon="home"
+            title="WFH Requests"
+            description="View all WFH requests"
+            route="/Requests/Wfhapplyreq"
+          />
+          <ExploreCard
+            icon="alert-circle"
+            title="View Miss Punch Requests"
+            description="View all miss punch requests"
+            route="/Requests/Misspunchreq"
+          />
+        </ThemedView>
+
+        {/* Resources */}
+        <ThemedView style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Resources
+          </ThemedText>
+
+          <ExploreCard
+            icon="file-text"
+            title="HR Policies"
+            description="Company rules and guidelines"
+          />
+          <ExploreCard
+            icon="users"
+            title="Team Directory"
+            description="Find teammates and contacts"
+          />
+        </ThemedView>
+
+        {/* Support */}
+        <ThemedView style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Support
+          </ThemedText>
+
+          <ExploreCard
+            icon="help-circle"
+            title="Help & FAQ"
+            description="Get answers to common questions"
+          />
+          <ExploreCard
+            icon="info"
+            title="About"
+            description="App version and info"
+          />
+        </ThemedView>
+      </Animated.ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    flex: 1,
   },
-  titleContainer: {
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 120, // Extra padding for tab bar
+  },
+  headerContainer: {
+    paddingVertical: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 15,
+    marginBottom: 24,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  card: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+  },
+  cardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  cardContent: {
+    flex: 1,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  cardDescription: {
+    fontSize: 13,
   },
 });

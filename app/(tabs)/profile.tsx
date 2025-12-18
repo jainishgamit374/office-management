@@ -1,176 +1,213 @@
+import { useTabBar } from '@/constants/TabBarContext';
+import { signOut } from '@/lib/appwrite';
 import Feather from '@expo/vector-icons/Feather';
 import { router } from 'expo-router';
 import React from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Profile = () => {
-    const userName = 'Jainish Gamit';
-    const userEmail = 'jainish@example.com';
-    const userPhone = '+91 98765 43210';
-    const userLocation = 'Ahmedabad, Gujarat';
 
-    const handleBackPress = () => {
-        router.back();
+    const user = {
+        name: 'Jainish Gamit',
+        email: 'jainish@example.com',
+        phone: '+91 98765 43210',
+        department: 'Development',
+        designation: 'MERN Developer',
+        employeeId: 'EMP001',
     };
 
-    const handleLogout = () => {
-        Alert.alert(
-            'Logout',
-            'Are you sure you want to logout?',
-            [
-                {
-                    text: 'Cancel',
-                    style: 'cancel'
-                },
-                {
-                    text: 'Logout',
-                    style: 'destructive',
-                    onPress: () => {
-                        // Add logout logic here
-                        console.log('Logging out...');
+    // Get tab bar context for scroll animation
+    const { scrollY, lastScrollY, tabBarTranslateY } = useTabBar();
+
+    // Handle scroll for tab bar animation
+    const handleScroll = Animated.event(
+        [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+        {
+            useNativeDriver: false,
+            listener: (event: any) => {
+                const currentScrollY = event.nativeEvent.contentOffset.y;
+                const diff = currentScrollY - lastScrollY.current;
+
+                if (diff > 0 && currentScrollY > 50) {
+                    // Scrolling down - hide tab bar
+                    Animated.spring(tabBarTranslateY, {
+                        toValue: 150,
+                        useNativeDriver: true,
+                        friction: 8,
+                        tension: 40,
+                    }).start();
+                } else if (diff < 0) {
+                    // Scrolling up - show tab bar
+                    Animated.spring(tabBarTranslateY, {
+                        toValue: 0,
+                        useNativeDriver: true,
+                        friction: 8,
+                        tension: 40,
+                    }).start();
+                }
+
+                lastScrollY.current = currentScrollY;
+            },
+        }
+    );
+
+    const handleLogout = async () => {
+        Alert.alert('Logout', 'Are you sure you want to logout?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Logout',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await signOut();
+                        router.replace('/(auth)/sign-in');
+                    } catch (error: any) {
+                        console.error('Logout error:', error);
+                        Alert.alert('Error', error.message || 'Failed to logout');
                     }
                 }
-            ]
-        );
+            },
+        ]);
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView
+            <Animated.ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
             >
-                {/* Header Section */}
+                {/* Header */}
                 <View style={styles.header}>
-                    <View style={styles.headerTop}>
-                        <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
-                            <Feather name="arrow-left" size={24} color="#fff" />
-                        </TouchableOpacity>
-                        <Text style={styles.headerTitle}>User Profile</Text>
-                        <View style={styles.placeholder} />
-                    </View>
+                    <View style={{ width: 24 }} />
+                    <Text style={styles.headerTitle}>Profile</Text>
+                    <TouchableOpacity>
+                        <Feather name="edit-2" size={20} color="#4A90FF" />
+                    </TouchableOpacity>
+                </View>
 
-                    {/* User Avatar and Info */}
-                    <View style={styles.userInfoContainer}>
-                        <View style={styles.avatarContainer}>
-                            <View style={styles.avatar}>
-                                <Feather name="user" size={40} color="#4289f4ff" />
-                            </View>
-                        </View>
-                        <Text style={styles.userName}>{userName}</Text>
-                        <Text style={styles.userEmail}>{userEmail}</Text>
+                {/* Profile Card */}
+                <View style={styles.profileCard}>
+                    <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>JG</Text>
+                    </View>
+                    <Text style={styles.name}>{user.name}</Text>
+                    <Text style={styles.designation}>{user.designation}</Text>
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{user.department}</Text>
                     </View>
                 </View>
 
-                {/* Stats Cards */}
-                <View style={styles.statsContainer}>
-                    <View style={styles.statsCard}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>12</Text>
-                            <Text style={styles.statLabel}>Total Tasks</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>8</Text>
-                            <Text style={styles.statLabel}>Completed</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>4</Text>
-                            <Text style={styles.statLabel}>Pending</Text>
-                        </View>
+                {/* Stats */}
+                <View style={styles.statsRow}>
+                    <View style={styles.statBox}>
+                        <Text style={styles.statNumber}>24</Text>
+                        <Text style={styles.statLabel}>Present</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                        <Text style={styles.statNumber}>2</Text>
+                        <Text style={styles.statLabel}>Absent</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                        <Text style={styles.statNumber}>5</Text>
+                        <Text style={styles.statLabel}>Leaves</Text>
                     </View>
                 </View>
 
-                {/* Account Details Section */}
+                {/* Info Section */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Account Details</Text>
+                    <Text style={styles.sectionTitle}>Information</Text>
 
-                    {/* Email Field */}
-                    <View style={styles.detailCard}>
-                        <View style={styles.iconContainer}>
-                            <Feather name="mail" size={20} color="#4289f4ff" />
-                        </View>
-                        <View style={styles.detailContent}>
-                            <Text style={styles.detailLabel}>Email</Text>
-                            <Text style={styles.detailValue}>{userEmail}</Text>
+                    <View style={styles.infoRow}>
+                        <Feather name="mail" size={20} color="#666" />
+                        <View style={styles.infoContent}>
+                            <Text style={styles.infoLabel}>Email</Text>
+                            <Text style={styles.infoValue}>{user.email}</Text>
                         </View>
                     </View>
 
-                    {/* Phone Field */}
-                    <View style={styles.detailCard}>
-                        <View style={styles.iconContainer}>
-                            <Feather name="phone" size={20} color="#4289f4ff" />
-                        </View>
-                        <View style={styles.detailContent}>
-                            <Text style={styles.detailLabel}>Phone</Text>
-                            <Text style={styles.detailValue}>{userPhone}</Text>
+                    <View style={styles.infoRow}>
+                        <Feather name="phone" size={20} color="#666" />
+                        <View style={styles.infoContent}>
+                            <Text style={styles.infoLabel}>Phone</Text>
+                            <Text style={styles.infoValue}>{user.phone}</Text>
                         </View>
                     </View>
 
-                    {/* Location Field */}
-                    <View style={styles.detailCard}>
-                        <View style={styles.iconContainer}>
-                            <Feather name="map-pin" size={20} color="#4289f4ff" />
-                        </View>
-                        <View style={styles.detailContent}>
-                            <Text style={styles.detailLabel}>Location</Text>
-                            <Text style={styles.detailValue}>{userLocation}</Text>
+                    <View style={styles.infoRow}>
+                        <Feather name="credit-card" size={20} color="#666" />
+                        <View style={styles.infoContent}>
+                            <Text style={styles.infoLabel}>Employee ID</Text>
+                            <Text style={styles.infoValue}>{user.employeeId}</Text>
                         </View>
                     </View>
                 </View>
 
-                {/* Quick Actions Section */}
+                {/* Menu Section */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Quick Actions</Text>
+                    <Text style={styles.sectionTitle}>Menu</Text>
 
-                    {/* Attendance History */}
-                    <TouchableOpacity style={styles.actionCard} activeOpacity={0.7}>
-                        <View style={styles.actionLeft}>
-                            <View style={styles.iconContainer}>
-                                <Feather name="clock" size={20} color="#4289f4ff" />
+                    <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/Attendance/AttendenceList')}>
+                        <View style={styles.menuLeft}>
+                            <View style={[styles.menuIcon, { backgroundColor: '#E3F2FD' }]}>
+                                <Feather name="clock" size={18} color="#2196F3" />
                             </View>
-                            <Text style={styles.actionText}>Attendance History</Text>
+                            <Text style={styles.menuText}>Attendance</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#666" />
+                        <Feather name="chevron-right" size={20} color="#CCC" />
                     </TouchableOpacity>
 
-                    {/* Leave Requests */}
-                    <TouchableOpacity style={styles.actionCard} activeOpacity={0.7}>
-                        <View style={styles.actionLeft}>
-                            <View style={styles.iconContainer}>
-                                <Feather name="calendar" size={20} color="#4289f4ff" />
+                    <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/Requests/Leaveapplyreq')}>
+                        <View style={styles.menuLeft}>
+                            <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
+                                <Feather name="calendar" size={18} color="#4CAF50" />
                             </View>
-                            <Text style={styles.actionText}>Leave Requests</Text>
+                            <Text style={styles.menuText}>Leave Requests</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#666" />
+                        <Feather name="chevron-right" size={20} color="#CCC" />
                     </TouchableOpacity>
 
-                    {/* Settings */}
-                    <TouchableOpacity style={styles.actionCard} activeOpacity={0.7}>
-                        <View style={styles.actionLeft}>
-                            <View style={styles.iconContainer}>
-                                <Feather name="settings" size={20} color="#4289f4ff" />
+                    <TouchableOpacity style={styles.menuRow}>
+                        <View style={styles.menuLeft}>
+                            <View style={[styles.menuIcon, { backgroundColor: '#FFF3E0' }]}>
+                                <Feather name="file-text" size={18} color="#FF9800" />
                             </View>
-                            <Text style={styles.actionText}>Settings</Text>
+                            <Text style={styles.menuText}>Documents</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#666" />
+                        <Feather name="chevron-right" size={20} color="#CCC" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow}>
+                        <View style={styles.menuLeft}>
+                            <View style={[styles.menuIcon, { backgroundColor: '#F3E5F5' }]}>
+                                <Feather name="settings" size={18} color="#9C27B0" />
+                            </View>
+                            <Text style={styles.menuText}>Settings</Text>
+                        </View>
+                        <Feather name="chevron-right" size={20} color="#CCC" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.menuRow}>
+                        <View style={styles.menuLeft}>
+                            <View style={[styles.menuIcon, { backgroundColor: '#E0F7FA' }]}>
+                                <Feather name="help-circle" size={18} color="#00BCD4" />
+                            </View>
+                            <Text style={styles.menuText}>Help & Support</Text>
+                        </View>
+                        <Feather name="chevron-right" size={20} color="#CCC" />
                     </TouchableOpacity>
                 </View>
 
-                {/* Logout Button */}
-                <View style={styles.logoutContainer}>
-                    <TouchableOpacity
-                        style={styles.logoutButton}
-                        activeOpacity={0.7}
-                        onPress={handleLogout}
-                    >
-                        <Feather name="log-out" size={20} color="#DC2626" />
-                        <Text style={styles.logoutText}>Logout</Text>
-                    </TouchableOpacity>
-                </View>
-            </ScrollView>
+                {/* Logout */}
+                <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                    <Feather name="log-out" size={20} color="#FF5252" />
+                    <Text style={styles.logoutText}>Logout</Text>
+                </TouchableOpacity>
+
+                {/* Version */}
+                <Text style={styles.version}>Version 1.0.0</Text>
+            </Animated.ScrollView>
         </SafeAreaView>
     );
 };
@@ -178,206 +215,217 @@ const Profile = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f0f2f5',
+        backgroundColor: '#F5F5F5',
     },
-    scrollContent: {
-        paddingBottom: 40,
-    },
+
+    // Header
     header: {
-        backgroundColor: '#4289f4ff',
-        paddingTop: 20,
-        paddingBottom: 60,
-        paddingHorizontal: 20,
-    },
-    headerTop: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 30,
+        paddingHorizontal: 20,
+        paddingVertical: 15,
     },
     headerTitle: {
-        fontSize: 28,
-        fontWeight: '700',
-        color: '#fff',
-        flex: 1,
+        fontSize: 18,
+        width: '80%',
         textAlign: 'center',
+        fontWeight: '700',
+        color: '#333',
     },
-    backButton: {
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-        padding: 10,
-        borderRadius: 50,
-        width: 44,
-        height: 44,
-        justifyContent: 'center',
+
+    // Profile Card
+    profileCard: {
+        backgroundColor: '#FFF',
+        marginHorizontal: 20,
+        borderRadius: 20,
+        padding: 30,
         alignItems: 'center',
-    },
-    placeholder: {
-        width: 44,
-        height: 44,
-    },
-    userInfoContainer: {
-        alignItems: 'center',
-    },
-    avatarContainer: {
-        backgroundColor: '#fff',
-        padding: 4,
-        borderRadius: 60,
-        marginBottom: 15,
-        shadowColor: '#000',
+        marginBottom: 20,
+        shadowColor: '#4A90FF',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 8,
         },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 5,
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(74, 144, 255, 0.1)',
     },
     avatar: {
-        width: 96,
-        height: 96,
-        borderRadius: 48,
-        backgroundColor: '#f0f2f5',
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#4A90FF',
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    userName: {
-        fontSize: 24,
-        width: '50%',
-        textAlign: 'center',
-        fontWeight: '700',
-        color: '#fff',
-        marginBottom: 5,
-    },
-    userEmail: {
-        fontSize: 14,
-        color: 'rgba(255, 255, 255, 0.8)',
-    },
-    statsContainer: {
-        paddingHorizontal: 20,
-        marginTop: -40,
         marginBottom: 20,
-    },
-    statsCard: {
-        backgroundColor: '#fff',
-        borderRadius: 15,
-        padding: 20,
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        shadowColor: '#000',
+        shadowColor: '#4A90FF',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 4,
         },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+        borderWidth: 4,
+        borderColor: '#FFF',
     },
-    statItem: {
+    avatarText: {
+        fontSize: 36,
+        fontWeight: '700',
+        color: '#FFF',
+        letterSpacing: 1,
+    },
+    name: {
+        fontSize: 24,
+        width: '100%',
+        textAlign: 'center',
+        fontWeight: '700',
+        color: '#1a1a1a',
+        marginBottom: 8,
+        letterSpacing: 0.5,
+    },
+    designation: {
+        fontSize: 15,
+        width: '100%',
+        textAlign: 'center',
+        textTransform: 'uppercase',
+        color: '#666',
+        marginBottom: 15,
+        fontWeight: '500',
+    },
+    badge: {
+        backgroundColor: 'rgba(74, 144, 255, 0.1)',
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(74, 144, 255, 0.3)',
+    },
+    badgeText: {
+        fontSize: 13,
+        textAlign: 'center',
+        width: '50%',
+        color: '#4A90FF',
+        fontWeight: '600',
+        letterSpacing: 0.5,
+    },
+
+    // Stats
+    statsRow: {
+        flexDirection: 'row',
+        marginHorizontal: 20,
+        marginBottom: 20,
+        gap: 10,
+    },
+    statBox: {
+        flex: 1,
+        backgroundColor: '#FFF',
+        borderRadius: 12,
+        padding: 15,
         alignItems: 'center',
     },
-    statValue: {
-        fontSize: 24,
+    statNumber: {
+        fontSize: 22,
         fontWeight: '700',
-        color: '#4289f4ff',
+        color: '#4A90FF',
+        marginBottom: 5,
     },
     statLabel: {
         fontSize: 12,
-        color: '#666',
-        marginTop: 5,
+        color: '#888',
     },
-    statDivider: {
-        width: 1,
-        backgroundColor: '#e0e0e0',
-    },
+
+    // Section
     section: {
-        paddingHorizontal: 20,
+        backgroundColor: '#FFF',
+        marginHorizontal: 20,
+        borderRadius: 15,
+        padding: 20,
         marginBottom: 20,
     },
     sectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#000',
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#333',
         marginBottom: 15,
     },
-    detailCard: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 15,
-        marginBottom: 10,
+
+    // Info Row
+    infoRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 1,
-        },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 2,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
     },
-    iconContainer: {
-        backgroundColor: 'rgba(66, 137, 244, 0.1)',
-        padding: 12,
-        borderRadius: 50,
-        marginRight: 15,
-    },
-    detailContent: {
+    infoContent: {
+        marginLeft: 15,
         flex: 1,
     },
-    detailLabel: {
+    infoLabel: {
         fontSize: 12,
-        color: '#666',
-        marginBottom: 3,
+        color: '#888',
+        marginBottom: 2,
     },
-    detailValue: {
-        fontSize: 16,
-        color: '#000',
+    infoValue: {
+        fontSize: 14,
+        color: '#333',
         fontWeight: '500',
     },
-    actionCard: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 15,
-        marginBottom: 10,
+
+    // Menu Row
+    menuRow: {
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 1,
-        },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 2,
+        alignItems: 'center',
+        paddingVertical: 12,
     },
-    actionLeft: {
+    menuLeft: {
         flexDirection: 'row',
         alignItems: 'center',
     },
-    actionText: {
-        fontSize: 16,
-        color: '#000',
-        fontWeight: '500',
+    menuIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
     },
-    logoutContainer: {
-        paddingHorizontal: 20,
+    menuText: {
+        fontSize: 15,
+        color: '#333',
     },
-    logoutButton: {
-        backgroundColor: '#FEE2E2',
+
+    // Logout
+    logoutBtn: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginHorizontal: 20,
+        backgroundColor: '#FFF',
         borderRadius: 12,
         padding: 15,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
+        marginBottom: 20,
         borderWidth: 1,
-        borderColor: '#FCA5A5',
+        borderColor: '#FFCDD2',
     },
     logoutText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#DC2626',
+        fontSize: 15,
+        color: '#FF5252',
+        fontWeight: '600',
         marginLeft: 10,
+    },
+
+    // Version
+    version: {
+        textAlign: 'center',
+        fontSize: 12,
+        color: '#BBB',
+        marginBottom: 30,
     },
 });
 

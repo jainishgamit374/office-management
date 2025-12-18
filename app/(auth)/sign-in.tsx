@@ -1,10 +1,11 @@
 import Custominputs from '@/components/Custominputs';
-import { Link, useRouter } from 'expo-router';
+import { account, signIn, signOut } from '@/lib/appwrite';
+import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Toast from 'react-native-toast-message';
 
 const signin = () => {
-    const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [form, setForm] = useState({
@@ -15,23 +16,64 @@ const signin = () => {
     const submit = async () => {
         const { email, password } = form;
 
-        if (!form.email || !form.password) {
-            return Alert.alert('Error', 'Both email and password are required');
-
+        if (!email || !password) {
+            Toast.show({
+                type: 'error',
+                text1: 'Missing Fields',
+                text2: 'Both email and password are required',
+                position: 'top',
+                visibilityTime: 3000,
+            });
+            return;
         }
-
-        router.push('/');
-
 
         setIsSubmitting(true);
         try {
-            // Your authentication logic here
-            // Example: await signInUser(email, password);
-            Alert.alert('Success', 'Signed in successfully!');
-            // Navigate to home or dashboard
-        } catch (error) {
-            Alert.alert('Error', (error as Error).message || 'Something went wrong during sign-in');
-        } finally {
+            // Sign in the user
+            await signIn({ email, password });
+
+            // Get user details to check email verification
+            const user = await account.get();
+
+            // Check if email is verified
+            if (!(user as any).emailVerification) {
+                // Email not verified - sign out and show error
+                await signOut();
+
+                Toast.show({
+                    type: 'error',
+                    text1: 'Email Not Verified ⚠️',
+                    text2: 'Please check your inbox and verify your email',
+                    position: 'top',
+                    visibilityTime: 5000,
+                });
+
+                setIsSubmitting(false);
+                return;
+            }
+
+            // Email is verified - proceed with login
+            Toast.show({
+                type: 'success',
+                text1: 'Welcome Back! 👋',
+                text2: 'Signed in successfully',
+                position: 'top',
+                visibilityTime: 2000,
+            });
+
+            // Navigate after a short delay to let user see the toast
+            setTimeout(() => {
+                router.replace('/(tabs)');
+            }, 800);
+        } catch (error: any) {
+            console.error('Sign in error:', error);
+            Toast.show({
+                type: 'error',
+                text1: 'Sign In Failed',
+                text2: error.message || 'Invalid credentials',
+                position: 'top',
+                visibilityTime: 4000,
+            });
             setIsSubmitting(false);
         }
     };
@@ -42,9 +84,9 @@ const signin = () => {
 
     return (
         <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.Imageheader}>
+            {/* <View style={styles.Imageheader}>
                 <Image source={require('@/assets/images/image.png')} style={styles.logo} resizeMode="contain" />
-            </View>
+            </View> */}
             <View style={styles.container}>
                 <Text style={styles.title}>Welcome Back</Text>
 
@@ -97,10 +139,8 @@ export default signin
 
 const styles = StyleSheet.create({
     scrollContent: {
-        flexGrow: 1,
         justifyContent: 'center',
         paddingVertical: 20,
-        backgroundColor: '#f8f8f8', // Light background for the whole screen
     },
     Imageheader: {
         alignItems: 'center',

@@ -90,8 +90,9 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#e0e7eb',
+        // backgroundColor: '#e0e7eb',
         padding: 20,
+        marginBottom: 100,
     },
     container: {
         width: '100%',
@@ -99,7 +100,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#ffffff',
         borderRadius: 12,
         padding: 25,
-        alignItems: 'center',
         // ...Platform.select({
         //     ios: {
         //         shadowColor: '#000',

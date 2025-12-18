@@ -1,54 +1,71 @@
 import Custominputs from '@/components/Custominputs';
-import { Image } from 'expo-image';
+import { createUser } from '@/lib/appwrite';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Toast from 'react-native-toast-message';
 
 const signup = () => {
-
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [form, setForm] = useState({
         name: '',
-        username: '',
         email: '',
         phone: '',
         password: '',
     });
 
     const submit = async () => {
-        const { name, username, email, phone, password } = form;
+        const { name, email, phone, password } = form;
 
-        if (!form.name || !form.username || !form.email || !form.phone || !form.password) {
-            return Alert.alert('Error', 'All fields are required');
+        if (!name || !email || !phone || !password) {
+            Toast.show({
+                type: 'error',
+                text1: 'Missing Fields',
+                text2: 'All fields are required',
+                position: 'top',
+                visibilityTime: 3000,
+            });
+            return;
         }
 
         setIsSubmitting(true);
         try {
-            // Your user creation logic here
-            Alert.alert('Success', 'User registered successfully!', [
-                {
-                    text: 'OK',
-                    onPress: () => router.push('/sign-in')
-                }
-            ]);
-        } catch (error) {
-            Alert.alert('Error', (error as Error).message || 'Something went wrong');
-        } finally {
+            await createUser({ name, email, phone, password });
+            Toast.show({
+                type: 'success',
+                text1: 'Account Created! 🎉',
+                text2: 'Please verify your email before signing in',
+                position: 'top',
+                visibilityTime: 5000,
+            });
+
+            // Navigate to sign-in page after a short delay
+            setTimeout(() => {
+                router.replace('/(auth)/sign-in');
+            }, 1500);
+        } catch (error: any) {
+            console.error('Sign up error:', error);
+            Toast.show({
+                type: 'error',
+                text1: 'Sign Up Failed',
+                text2: error.message || 'Failed to create account',
+                position: 'top',
+                visibilityTime: 4000,
+            });
             setIsSubmitting(false);
         }
     }
 
+    const handleSignIn = () => {
+        router.push('/(auth)/sign-in');
+    }
     const handleChange = (field: string, value: string) => {
         setForm({ ...form, [field]: value });
     };
 
     return (
         <ScrollView contentContainerStyle={styles.scrollContent}>
-
-            <View style={styles.Imageheader}>
-                <Image source={require('@/assets/images/image.png')} style={styles.logo} resizeMode="contain" />
-            </View>
 
             <View style={styles.container}>
                 <Text style={styles.title}>Create Account</Text>
@@ -58,12 +75,6 @@ const signup = () => {
                     value={form.name}
                     onChangeText={(text) => handleChange('name', text)}
                     label="Full Name"
-                />
-                <Custominputs
-                    placeholder="Enter Username"
-                    value={form.username}
-                    onChangeText={(text) => handleChange('username', text)}
-                    label="Username"
                 />
                 <Custominputs
                     placeholder="Enter Email"
@@ -102,7 +113,7 @@ const signup = () => {
                         Already have an account?
                     </Text>
 
-                    <Link href="/sign-in" style={styles.footerLink}>
+                    <Link onPress={handleSignIn} href="/sign-in" style={styles.footerLink}>
                         Sign In
                     </Link>
                 </View>
@@ -117,18 +128,8 @@ export default signup
 
 const styles = StyleSheet.create({
     scrollContent: {
-        flexGrow: 1,
         justifyContent: 'center',
         paddingVertical: 20,
-        backgroundColor: '#f8f8f8',
-    },
-    Imageheader: {
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    logo: {
-        width: 150,
-        height: 150,
     },
     container: {
         width: '90%',

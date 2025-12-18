@@ -5,6 +5,7 @@ import React from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 export default function Navbar() {
+
     const handleProfilePress = () => {
         router.push('/(tabs)/profile');
     };
@@ -16,7 +17,7 @@ export default function Navbar() {
                     <Image source={require('@/assets/images/Logo.jpg')} style={styles.logoImage} />
                 </Pressable>
                 <View style={styles.companyNameContainer}>
-                    <Text style={styles.companyName}>Infinite 3 Technology</Text>
+                    <Text style={styles.companyName}>Infinite Soft Tech</Text>
                 </View>
             </View>
 
@@ -87,5 +88,13 @@ const styles = StyleSheet.create({
         backgroundColor: '#E0E8FF',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    logoutButton: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 8,
+        backgroundColor: '#fff',
     },
 })

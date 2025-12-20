@@ -175,13 +175,13 @@ export default function ExploreScreen() {
             icon="file-plus"
             title="Leave Requests"
             description="View all leave applications"
-            route="/Requests/Leaveapplyreq"
+            route="/ViewAllRequest/LeaveApplication"
           />
           <ExploreCard
             icon="log-out"
             title="Early Checkout Requests/Late CheckIn Requests"
             description="View all early checkout requests or late checkIn requests"
-            route="/Requests/Earlycheckoutreq"
+            route="/ViewAllRequest/EarlyCheckout"
           />
           <ExploreCard
             icon="home"

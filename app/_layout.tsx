@@ -1,4 +1,3 @@
-import { RequestsProvider } from '@/contexts/RequestsContext';
 import { account } from '@/lib/appwrite';
 import { Stack } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -33,14 +32,12 @@ export default function RootLayout() {
   }
 
   return (
-    <RequestsProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        ) : (
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        )}
-      </Stack>
-    </RequestsProvider>
+    <Stack screenOptions={{ headerShown: false }}>
+      {!isAuthenticated ? (
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      ) : (
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      )}
+    </Stack>
   );
 }

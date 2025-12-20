@@ -1,4 +1,3 @@
-import { RequestStatus, TimeOffType, useRequests } from '@/contexts/RequestsContext';
 import Feather from '@expo/vector-icons/Feather';
 import React, { useState } from 'react';
 import {
@@ -9,18 +8,104 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+// Types
+type RequestType = 'Early Check-Out' | 'Late Check-In';
+type RequestStatus = 'Pending' | 'Approved' | 'Rejected';
+
+interface Request {
+    id: string;
+    employeeName: string;
+    employeeId: string;
+    type: RequestType;
+    date: string;
+    time: string;
+    reason: string;
+    status: RequestStatus;
+    submittedOn: string;
+}
+
+// Mock request data
+const requestsData: Request[] = [
+    {
+        id: '1',
+        employeeName: 'John Doe',
+        employeeId: 'EMP001',
+        type: 'Early Check-Out',
+        date: '2025-12-18',
+        time: '17:30',
+        reason: 'Doctor appointment scheduled at 6:00 PM',
+        status: 'Pending',
+        submittedOn: '2025-12-17',
+    },
+    {
+        id: '2',
+        employeeName: 'Jane Smith',
+        employeeId: 'EMP002',
+        type: 'Late Check-In',
+        date: '2025-12-19',
+        time: '10:30',
+        reason: 'Car breakdown on the way to office',
+        status: 'Approved',
+        submittedOn: '2025-12-17',
+    },
+    {
+        id: '3',
+        employeeName: 'Mike Johnson',
+        employeeId: 'EMP003',
+        type: 'Early Check-Out',
+        date: '2025-12-18',
+        time: '16:00',
+        reason: 'Family emergency - need to pick up kids from school',
+        status: 'Approved',
+        submittedOn: '2025-12-16',
+    },
+    {
+        id: '4',
+        employeeName: 'Sarah Williams',
+        employeeId: 'EMP004',
+        type: 'Late Check-In',
+        date: '2025-12-18',
+        time: '11:00',
+        reason: 'Medical test scheduled in the morning',
+        status: 'Pending',
+        submittedOn: '2025-12-17',
+    },
+    {
+        id: '5',
+        employeeName: 'David Brown',
+        employeeId: 'EMP005',
+        type: 'Early Check-Out',
+        date: '2025-12-20',
+        time: '15:30',
+        reason: 'Personal work - bank visit',
+        status: 'Rejected',
+        submittedOn: '2025-12-17',
+    },
+    {
+        id: '6',
+        employeeName: 'Emily Davis',
+        employeeId: 'EMP006',
+        type: 'Late Check-In',
+        date: '2025-12-19',
+        time: '09:45',
+        reason: 'Flight delay from business trip',
+        status: 'Approved',
+        submittedOn: '2025-12-16',
+    },
+];
 
 type FilterType = 'all' | 'earlyCheckout' | 'lateCheckin';
 
 const EarlyCheckoutt = () => {
-    const { timeOffRequests, updateTimeOffStatus } = useRequests();
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
+    const [requests, setRequests] = useState<Request[]>(requestsData);
 
     // Filter requests based on selected filter
-    const filteredRequests = timeOffRequests.filter((request) => {
+    const filteredRequests = requests.filter((request) => {
         if (selectedFilter === 'all') return true;
         if (selectedFilter === 'earlyCheckout') return request.type === 'Early Check-Out';
         if (selectedFilter === 'lateCheckin') return request.type === 'Late Check-In';
@@ -70,11 +155,11 @@ const EarlyCheckoutt = () => {
         }
     };
 
-    const getRequestTypeColor = (type: TimeOffType) => {
+    const getRequestTypeColor = (type: RequestType) => {
         return type === 'Early Check-Out' ? '#FF9800' : '#4A90FF';
     };
 
-    const getRequestTypeIcon = (type: TimeOffType) => {
+    const getRequestTypeIcon = (type: RequestType) => {
         return type === 'Early Check-Out' ? 'log-out' : 'log-in';
     };
 
@@ -87,7 +172,11 @@ const EarlyCheckoutt = () => {
                 {
                     text: 'Approve',
                     onPress: () => {
-                        updateTimeOffStatus(requestId, 'Approved');
+                        setRequests((prev) =>
+                            prev.map((req) =>
+                                req.id === requestId ? { ...req, status: 'Approved' } : req
+                            )
+                        );
                         Alert.alert('Success', 'Request approved successfully!');
                     },
                 },
@@ -105,7 +194,11 @@ const EarlyCheckoutt = () => {
                     text: 'Reject',
                     style: 'destructive',
                     onPress: () => {
-                        updateTimeOffStatus(requestId, 'Rejected');
+                        setRequests((prev) =>
+                            prev.map((req) =>
+                                req.id === requestId ? { ...req, status: 'Rejected' } : req
+                            )
+                        );
                         Alert.alert('Success', 'Request rejected successfully!');
                     },
                 },

@@ -1,4 +1,3 @@
-import { LeaveRequest, LeaveType, RequestStatus, useRequests } from '@/contexts/RequestsContext';
 import Feather from '@expo/vector-icons/Feather';
 import React, { useState } from 'react';
 import {
@@ -13,14 +12,107 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Types
+type LeaveType = 'Casual Leave' | 'Sick Leave' | 'Privilege Leave' | 'Leave Without Pay';
+type RequestStatus = 'Pending' | 'Approved' | 'Rejected';
+
+interface LeaveRequest {
+    id: string;
+    employeeName: string;
+    employeeId: string;
+    leaveType: LeaveType;
+    startDate: string;
+    endDate: string;
+    days: number;
+    reason: string;
+    status: RequestStatus;
+    submittedOn: string;
+}
+
+// Mock leave request data
+const leaveRequestsData: LeaveRequest[] = [
+    {
+        id: '1',
+        employeeName: 'John Doe',
+        employeeId: 'EMP001',
+        leaveType: 'Sick Leave',
+        startDate: '2025-12-20',
+        endDate: '2025-12-22',
+        days: 3,
+        reason: 'Suffering from viral fever and need rest',
+        status: 'Pending',
+        submittedOn: '2025-12-18',
+    },
+    {
+        id: '2',
+        employeeName: 'Jane Smith',
+        employeeId: 'EMP002',
+        leaveType: 'Casual Leave',
+        startDate: '2025-12-25',
+        endDate: '2025-12-27',
+        days: 3,
+        reason: 'Family function - cousin\'s wedding',
+        status: 'Approved',
+        submittedOn: '2025-12-17',
+    },
+    {
+        id: '3',
+        employeeName: 'Mike Johnson',
+        employeeId: 'EMP003',
+        leaveType: 'Privilege Leave',
+        startDate: '2025-12-23',
+        endDate: '2025-12-30',
+        days: 8,
+        reason: 'Planned vacation with family to Goa',
+        status: 'Approved',
+        submittedOn: '2025-12-15',
+    },
+    {
+        id: '4',
+        employeeName: 'Sarah Williams',
+        employeeId: 'EMP004',
+        leaveType: 'Sick Leave',
+        startDate: '2025-12-19',
+        endDate: '2025-12-19',
+        days: 1,
+        reason: 'Doctor appointment for regular checkup',
+        status: 'Pending',
+        submittedOn: '2025-12-18',
+    },
+    {
+        id: '5',
+        employeeName: 'David Brown',
+        employeeId: 'EMP005',
+        leaveType: 'Leave Without Pay',
+        startDate: '2025-12-28',
+        endDate: '2026-01-05',
+        days: 9,
+        reason: 'Personal work - house renovation',
+        status: 'Rejected',
+        submittedOn: '2025-12-16',
+    },
+    {
+        id: '6',
+        employeeName: 'Emily Davis',
+        employeeId: 'EMP006',
+        leaveType: 'Casual Leave',
+        startDate: '2025-12-21',
+        endDate: '2025-12-21',
+        days: 1,
+        reason: 'Attending parent-teacher meeting at school',
+        status: 'Approved',
+        submittedOn: '2025-12-17',
+    },
+];
+
 type FilterType = 'all' | 'casualLeave' | 'sickLeave' | 'privilegeLeave' | 'lwp';
 
 const LeaveApplication = () => {
-    const { leaveRequests, updateLeaveStatus } = useRequests();
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
+    const [requests, setRequests] = useState<LeaveRequest[]>(leaveRequestsData);
 
     // Filter requests based on selected filter
-    const filteredRequests = leaveRequests.filter((request) => {
+    const filteredRequests = requests.filter((request) => {
         if (selectedFilter === 'all') return true;
         if (selectedFilter === 'casualLeave') return request.leaveType === 'Casual Leave';
         if (selectedFilter === 'sickLeave') return request.leaveType === 'Sick Leave';
@@ -118,7 +210,11 @@ const LeaveApplication = () => {
                 {
                     text: 'Approve',
                     onPress: () => {
-                        updateLeaveStatus(requestId, 'Approved');
+                        setRequests((prev) =>
+                            prev.map((req) =>
+                                req.id === requestId ? { ...req, status: 'Approved' } : req
+                            )
+                        );
                         Alert.alert('Success', 'Leave request approved successfully!');
                     },
                 },
@@ -136,7 +232,11 @@ const LeaveApplication = () => {
                     text: 'Reject',
                     style: 'destructive',
                     onPress: () => {
-                        updateLeaveStatus(requestId, 'Rejected');
+                        setRequests((prev) =>
+                            prev.map((req) =>
+                                req.id === requestId ? { ...req, status: 'Rejected' } : req
+                            )
+                        );
                         Alert.alert('Success', 'Leave request rejected successfully!');
                     },
                 },

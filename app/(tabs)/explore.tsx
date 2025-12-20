@@ -187,13 +187,13 @@ export default function ExploreScreen() {
             icon="home"
             title="WFH Requests"
             description="View all WFH requests"
-            route="/Requests/Wfhapplyreq"
+            route="/ViewAllRequest/Wfhrequest"
           />
           <ExploreCard
             icon="alert-circle"
             title="View Miss Punch Requests"
             description="View all miss punch requests"
-            route="/Requests/Misspunchreq"
+            route="/ViewAllRequest/ViewAllMisspunch"
           />
         </ThemedView>
 
@@ -207,11 +207,13 @@ export default function ExploreScreen() {
             icon="file-text"
             title="HR Policies"
             description="Company rules and guidelines"
+            route="/Resources/HrPolicies"
           />
           <ExploreCard
             icon="users"
             title="Team Directory"
             description="Find teammates and contacts"
+            route="/Resources/TeamDirectory"
           />
         </ThemedView>
 
@@ -225,11 +227,13 @@ export default function ExploreScreen() {
             icon="help-circle"
             title="Help & FAQ"
             description="Get answers to common questions"
+            route="/Support/Helpandfaq"
           />
           <ExploreCard
             icon="info"
             title="About"
             description="App version and info"
+            route="/Support/About"
           />
         </ThemedView>
       </Animated.ScrollView>

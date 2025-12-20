@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -20,6 +21,9 @@ const LeaveBalanceSection: React.FC<LeaveBalanceSectionProps> = ({
         absent: 0,
     },
 }) => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -63,20 +67,18 @@ const LeaveBalanceSection: React.FC<LeaveBalanceSectionProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         marginHorizontal: 20,
         marginTop: 10,
         borderRadius: 15,
         padding: 15,
         borderWidth: 1,
-        backgroundColor: '#FFF',
-        borderColor: '#fbfbfbff',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.15,
         shadowRadius: 16,
         elevation: 4,
@@ -87,7 +89,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#1976d2',
+        color: colors.primary,
         textAlign: 'center',
     },
     grid: {
@@ -108,12 +110,10 @@ const styles = StyleSheet.create({
         borderRadius: 25,
         justifyContent: 'center',
         alignItems: 'center',
-        // Shadow for iOS
-        shadowColor: '#000',
+        shadowColor: colors.shadow,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 3,
-        // Shadow for Android
         elevation: 3,
     },
     badgeText: {
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     count: {
         fontSize: 24,
         fontWeight: '700',
-        color: '#000',
+        color: colors.text,
         width: '50%',
         textAlign: 'center',
     },

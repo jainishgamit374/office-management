@@ -1,3 +1,4 @@
+import { useTheme } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, PanResponder, Platform, StyleSheet, Text, UIManager, View } from 'react-native';
@@ -15,6 +16,7 @@ interface CheckInCardProps {
 }
 
 const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
+  const { colors, theme } = useTheme();
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [hasCheckedOut, setHasCheckedOut] = useState(false);
   const [hasEverCheckedIn, setHasEverCheckedIn] = useState(false);
@@ -193,9 +195,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
 
       {/* Status indicator when checked out */}
       {hasCheckedOut && (
-        <View style={styles.checkedOutStatus}>
+        <View style={[styles.checkedOutStatus, { backgroundColor: theme === 'dark' ? '#1B3A2A' : '#e8f5e9' }]}>
           <Feather name="check-circle" size={24} color="#12df34ff" />
-          <Text style={styles.checkedOutText}>You have completed your check-in/check-out for today</Text>
+          <Text style={[styles.checkedOutText, { color: theme === 'dark' ? '#66BB6A' : '#2e7d32' }]}>You have completed your check-in/check-out for today</Text>
         </View>
       )}
     </View>

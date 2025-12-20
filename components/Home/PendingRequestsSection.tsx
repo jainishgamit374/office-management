@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -24,6 +25,9 @@ interface PendingRequestsSectionProps {
 const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({
     requests = defaultRequests,
 }) => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -46,7 +50,7 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         marginHorizontal: 20,
         marginTop: 10,
@@ -54,9 +58,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 20,
         borderWidth: 1,
-        backgroundColor: '#FFF',
-        borderColor: '#fbfbfbff',
-        shadowColor: '#000',
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+        shadowColor: colors.shadow,
         shadowOffset: {
             width: 0,
             height: 8,
@@ -71,7 +75,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#1565c0',
+        color: colors.primary,
         textAlign: 'center',
     },
     grid: {
@@ -88,7 +92,7 @@ const styles = StyleSheet.create({
         gap: 10,
         padding: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#cececeff',
+        borderBottomColor: colors.divider,
     },
     cardHeader: {
         flex: 1,
@@ -103,7 +107,6 @@ const styles = StyleSheet.create({
         borderRadius: 25,
         justifyContent: 'center',
         alignItems: 'center',
-        color: '#fff',
     },
     icon: {
         fontSize: 24,
@@ -112,9 +115,10 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '600',
         width: '80%',
-        color: '#000000ff',
+        color: colors.text,
         textAlign: 'left',
     },
 });
 
 export default PendingRequestsSection;
+

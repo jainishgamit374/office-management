@@ -8,6 +8,10 @@ interface CustomInputProps {
     label?: string;
     secureTextEntry?: boolean;
     keyboardType?: KeyboardTypeOptions;
+    error?: string;
+    autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+    autoComplete?: string;
+    maxLength?: number;
 }
 
 const Custominputs = ({
@@ -16,7 +20,11 @@ const Custominputs = ({
     onChangeText,
     label,
     secureTextEntry,
-    keyboardType = "default"
+    keyboardType = "default",
+    error,
+    autoCapitalize = 'none',
+    autoComplete,
+    maxLength
 }: CustomInputProps) => {
 
     const [isFocused, setIsFocused] = useState(false);
@@ -25,7 +33,7 @@ const Custominputs = ({
         <View style={styles.container}>
             {label && <Text style={styles.label}>{label}</Text>}
             <TextInput
-                autoCapitalize='none'
+                autoCapitalize={autoCapitalize}
                 autoCorrect={false}
                 value={value}
                 onChangeText={onChangeText}
@@ -35,11 +43,14 @@ const Custominputs = ({
                 onBlur={() => setIsFocused(false)}
                 placeholder={placeholder}
                 placeholderTextColor="#888"
+                maxLength={maxLength}
                 style={[
                     styles.input,
-                    isFocused ? styles.inputFocused : styles.inputBlurred
+                    isFocused ? styles.inputFocused : styles.inputBlurred,
+                    error ? styles.inputError : null
                 ]}
             />
+            {error && <Text style={styles.errorText}>{error}</Text>}
         </View>
     )
 }
@@ -68,6 +79,14 @@ const styles = StyleSheet.create({
     },
     inputFocused: {
         borderColor: '#3B82F6',
+    },
+    inputError: {
+        borderColor: '#EF4444',
+    },
+    errorText: {
+        fontSize: 12,
+        color: '#EF4444',
+        marginTop: 4,
     }
 });
 

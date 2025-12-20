@@ -1,7 +1,11 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 const MissedPunchSection: React.FC = () => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+
     return (
         <View style={styles.container}>
             <View style={styles.mainTextContainer}>
@@ -30,19 +34,19 @@ const MissedPunchSection: React.FC = () => {
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         flexDirection: 'column',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 10,
         paddingVertical: 20,
-        backgroundColor: '#4289f4ff',
+        backgroundColor: colors.primary,
         marginHorizontal: 20,
         marginTop: 20,
         borderRadius: 15,
         gap: 15,
-       shadowColor: '#000',
+        shadowColor: colors.shadow,
         shadowOffset: {
             width: 0,
             height: 8,
@@ -77,7 +81,7 @@ const styles = StyleSheet.create({
     },
     textContainerRight: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: colors.card,
         borderRadius: 10,
         padding: 15,
         alignItems: 'center',
@@ -87,8 +91,9 @@ const styles = StyleSheet.create({
         width: '110%',
         fontSize: 16,
         fontWeight: '600',
-        color: '#4289f4ff',
+        color: colors.primary,
     },
 });
 
 export default MissedPunchSection;
+

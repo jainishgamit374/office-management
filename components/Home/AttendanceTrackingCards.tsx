@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -13,30 +14,33 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
     earlyCheckOuts = 0,
     halfDays = 0,
 }) => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+
     return (
         <View style={styles.container}>
             <View style={styles.card}>
                 <Text style={styles.label}>Late Check In</Text>
-                <Feather name="log-in" size={32} color="#4289f4ff" />
+                <Feather name="log-in" size={32} color={colors.primary} />
                 <Text style={styles.count}>{lateCheckIns}</Text>
             </View>
 
             <View style={styles.card}>
                 <Text style={styles.label}>Early Check Out</Text>
-                <Feather name="log-out" size={32} color="#4289f4ff" />
+                <Feather name="log-out" size={32} color={colors.primary} />
                 <Text style={styles.count}>{earlyCheckOuts}</Text>
             </View>
 
             <View style={styles.card}>
                 <Text style={styles.label}>Half Day</Text>
-                <Feather name="calendar" size={32} color="#4289f4ff" />
+                <Feather name="calendar" size={32} color={colors.primary} />
                 <Text style={styles.count}>{halfDays}</Text>
             </View>
         </View>
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -55,9 +59,9 @@ const styles = StyleSheet.create({
         padding: 15,
         marginBottom: 20,
         borderWidth: 1,
-        backgroundColor: '#FFF',
-        borderColor: '#fbfbfbff',
-        shadowColor: '#000',
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+        shadowColor: colors.shadow,
         shadowOffset: {
             width: 0,
             height: 8,
@@ -69,16 +73,17 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         textAlign: 'center',
         marginBottom: 10,
     },
     count: {
         fontSize: 28,
         fontWeight: '700',
-        color: '#000',
+        color: colors.text,
         marginTop: 10,
     },
 });
 
 export default AttendanceTrackingCards;
+

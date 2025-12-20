@@ -14,7 +14,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import Toast from 'react-native-toast-message';
 
 const SignIn = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,32 +26,27 @@ const SignIn = () => {
     });
 
     const [form, setForm] = useState({
-        email: '',
+        username: '',
         password: '',
     });
 
     const [errors, setErrors] = useState({
-        email: '',
+        username: '',
         password: '',
     });
 
-    const validateEmail = (email: string): boolean => {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(email);
-    };
-
     const validateForm = (): boolean => {
         const newErrors = {
-            email: '',
+            username: '',
             password: '',
         };
         let isValid = true;
 
-        if (!form.email.trim()) {
-            newErrors.email = 'Email is required';
+        if (!form.username.trim()) {
+            newErrors.username = 'Username is required';
             isValid = false;
-        } else if (!validateEmail(form.email)) {
-            newErrors.email = 'Please enter a valid email';
+        } else if (form.username.trim().length < 3) {
+            newErrors.username = 'Username must be at least 3 characters';
             isValid = false;
         }
 
@@ -67,12 +61,11 @@ const SignIn = () => {
 
     const submit = async () => {
         if (!validateForm()) {
-            Toast.show({
+            setModalConfig({
+                visible: true,
                 type: 'error',
-                text1: 'Validation Error',
-                text2: 'Please fix the errors below',
-                position: 'top',
-                visibilityTime: 3000,
+                title: 'Validation Error',
+                message: 'Please fix the errors below',
             });
             return;
         }
@@ -81,7 +74,7 @@ const SignIn = () => {
 
         try {
             const response = await login({
-                email: form.email.trim().toLowerCase(),
+                username: form.username.trim(),
                 password: form.password,
             });
 
@@ -92,35 +85,35 @@ const SignIn = () => {
                 console.log('✅ JWT Tokens received and stored');
             }
 
-            // Show success toast
-            Toast.show({
+            // Show success modal
+            setModalConfig({
+                visible: true,
                 type: 'success',
-                text1: 'Welcome Back! 👋',
-                text2: response.message || 'Login successful',
-                position: 'top',
-                visibilityTime: 1500,
+                title: 'Welcome Back! 👋',
+                message: response.message || 'Login successful',
             });
 
             // Navigate to main app
             setTimeout(() => {
-                router.replace('/'); // Adjust based on your app structure
-            }, 1000);
+                setModalConfig((prev) => ({ ...prev, visible: false }));
+                router.replace('/');
+            }, 1500);
 
         } catch (error: any) {
             console.error('❌ Sign in error:', error);
 
             // Handle specific error messages
             let errorTitle = 'Login Failed';
-            let errorMessage = error.message || 'Invalid email or password.';
+            let errorMessage = error.message || 'Invalid username or password.';
 
             if (errorMessage.toLowerCase().includes('credentials')) {
-                errorMessage = 'Invalid email or password. Please try again.';
+                errorMessage = 'Invalid username or password. Please try again.';
             } else if (errorMessage.toLowerCase().includes('network')) {
                 errorTitle = 'Connection Error';
                 errorMessage = 'Please check your internet connection and try again.';
             } else if (errorMessage.toLowerCase().includes('not found') ||
                 errorMessage.toLowerCase().includes('no active account')) {
-                errorMessage = 'No account found with this email. Please sign up first.';
+                errorMessage = 'No account found with this username. Please sign up first.';
             }
 
             setModalConfig({
@@ -163,14 +156,13 @@ const SignIn = () => {
                     {/* Form */}
                     <View style={styles.formContainer}>
                         <Custominputs
-                            placeholder="Enter your email"
-                            value={form.email}
-                            onChangeText={(text) => handleChange('email', text)}
-                            label="Email Address"
-                            keyboardType="email-address"
-                            error={errors.email}
+                            placeholder="Enter your username"
+                            value={form.username}
+                            onChangeText={(text) => handleChange('username', text)}
+                            label="Username"
+                            error={errors.username}
                             autoCapitalize="none"
-                            autoComplete="email"
+                            autoComplete="username"
                         />
 
                         <Custominputs
@@ -245,7 +237,6 @@ const SignIn = () => {
                     message={modalConfig.message}
                 />
             </ScrollView>
-            <Toast />
         </KeyboardAvoidingView>
     );
 };

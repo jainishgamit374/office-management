@@ -1,23 +1,232 @@
 import { useTabBar } from '@/constants/TabBarContext';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { signOut } from '@/lib/appwrite';
 import Feather from '@expo/vector-icons/Feather';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Alert, Animated, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const Profile = () => {
-    const { theme, toggleTheme } = useTheme();
+// Create styles function (defined before component)
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 15,
+    },
+    headerTitle: {
+        fontSize: 18,
+        width: '80%',
+        textAlign: 'center',
+        fontWeight: '700',
+        color: colors.text,
+    },
+    profileCard: {
+        backgroundColor: colors.card,
+        marginHorizontal: 20,
+        borderRadius: 20,
+        padding: 30,
+        alignItems: 'center',
+        marginBottom: 20,
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 4,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    avatar: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+        borderWidth: 4,
+        borderColor: colors.card,
+    },
+    avatarText: {
+        fontSize: 36,
+        fontWeight: '700',
+        color: '#FFF',
+        letterSpacing: 1,
+    },
+    name: {
+        fontSize: 24,
+        width: '100%',
+        textAlign: 'center',
+        fontWeight: '700',
+        color: colors.text,
+        marginBottom: 8,
+        letterSpacing: 0.5,
+    },
+    designation: {
+        fontSize: 15,
+        width: '100%',
+        textAlign: 'center',
+        textTransform: 'uppercase',
+        color: colors.textSecondary,
+        marginBottom: 15,
+        fontWeight: '500',
+    },
+    badge: {
+        backgroundColor: colors.primaryLight,
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: colors.primary,
+    },
+    badgeText: {
+        fontSize: 13,
+        textAlign: 'center',
+        width: '50%',
+        color: colors.primary,
+        fontWeight: '600',
+        letterSpacing: 0.5,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        marginHorizontal: 20,
+        marginBottom: 20,
+        gap: 10,
+    },
+    statBox: {
+        flex: 1,
+        backgroundColor: colors.card,
+        borderRadius: 12,
+        padding: 15,
+        alignItems: 'center',
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 4,
+    },
+    statNumber: {
+        fontSize: 22,
+        fontWeight: '700',
+        color: colors.primary,
+        marginBottom: 5,
+    },
+    statLabel: {
+        fontSize: 12,
+        color: colors.textTertiary,
+    },
+    section: {
+        backgroundColor: colors.card,
+        marginHorizontal: 20,
+        borderRadius: 15,
+        padding: 20,
+        marginBottom: 20,
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 4,
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: colors.text,
+        marginBottom: 15,
+    },
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.divider,
+    },
+    infoContent: {
+        marginLeft: 15,
+        flex: 1,
+    },
+    infoLabel: {
+        fontSize: 12,
+        color: colors.textTertiary,
+        marginBottom: 2,
+    },
+    infoValue: {
+        fontSize: 14,
+        color: colors.text,
+        fontWeight: '500',
+    },
+    menuRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+    },
+    menuLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    menuIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    menuText: {
+        fontSize: 15,
+        color: colors.text,
+    },
+    logoutBtn: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginHorizontal: 20,
+        backgroundColor: colors.card,
+        borderRadius: 12,
+        padding: 15,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: colors.error + '40',
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
+        elevation: 4,
+    },
+    logoutText: {
+        fontSize: 15,
+        color: colors.error,
+        fontWeight: '600',
+        marginLeft: 10,
+    },
+    version: {
+        textAlign: 'center',
+        fontSize: 12,
+        color: colors.textTertiary,
+        marginBottom: 30,
+    },
+});
 
-    const user = {
-        name: 'Jainish Gamit',
-        email: 'jainish@example.com',
-        phone: '+91 98765 43210',
-        department: 'Development',
-        designation: 'MERN Developer',
-        employeeId: 'EMP001',
-    };
+const Profile = () => {
+    const { theme, toggleTheme, colors } = useTheme();
+    const { user, refreshUser } = useAuth();
+
+    useEffect(() => {
+        // Ensure we have the latest user profile when visiting the profile tab
+        refreshUser();
+    }, []);
 
     // Get tab bar context for scroll animation
     const { scrollY, lastScrollY, tabBarTranslateY } = useTabBar();
@@ -73,6 +282,9 @@ const Profile = () => {
         ]);
     };
 
+    // Create styles with current theme colors
+    const styles = createStyles(colors);
+
     return (
         <SafeAreaView style={styles.container}>
             <Animated.ScrollView
@@ -85,7 +297,7 @@ const Profile = () => {
                     <View style={{ width: 24 }} />
                     <Text style={styles.headerTitle}>Profile</Text>
                     <TouchableOpacity>
-                        <Feather name="edit-2" size={20} color="#4A90FF" />
+                        <Feather name="edit-2" size={20} color={colors.primary} />
                     </TouchableOpacity>
                 </View>
 
@@ -94,11 +306,15 @@ const Profile = () => {
                     <View style={styles.avatar}>
                         <Text style={styles.avatarText}>JG</Text>
                     </View>
-                    <Text style={styles.name}>{user.name}</Text>
-                    <Text style={styles.designation}>{user.designation}</Text>
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{user.department}</Text>
-                    </View>
+                    <Text style={styles.name}>{user?.name || '—'}</Text>
+                    {user?.designation ? (
+                        <Text style={styles.designation}>{user?.designation}</Text>
+                    ) : null}
+                    {user?.department ? (
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{user?.department}</Text>
+                        </View>
+                    ) : null}
                 </View>
 
                 {/* Stats */}
@@ -122,26 +338,26 @@ const Profile = () => {
                     <Text style={styles.sectionTitle}>Information</Text>
 
                     <View style={styles.infoRow}>
-                        <Feather name="mail" size={20} color="#666" />
+                        <Feather name="mail" size={20} color={colors.textSecondary} />
                         <View style={styles.infoContent}>
                             <Text style={styles.infoLabel}>Email</Text>
-                            <Text style={styles.infoValue}>{user.email}</Text>
+                            <Text style={styles.infoValue}>{user?.email || '—'}</Text>
                         </View>
                     </View>
 
                     <View style={styles.infoRow}>
-                        <Feather name="phone" size={20} color="#666" />
+                        <Feather name="phone" size={20} color={colors.textSecondary} />
                         <View style={styles.infoContent}>
                             <Text style={styles.infoLabel}>Phone</Text>
-                            <Text style={styles.infoValue}>{user.phone}</Text>
+                            <Text style={styles.infoValue}>{user?.phone || '—'}</Text>
                         </View>
                     </View>
 
                     <View style={styles.infoRow}>
-                        <Feather name="credit-card" size={20} color="#666" />
+                        <Feather name="credit-card" size={20} color={colors.textSecondary} />
                         <View style={styles.infoContent}>
                             <Text style={styles.infoLabel}>Employee ID</Text>
-                            <Text style={styles.infoValue}>{user.employeeId}</Text>
+                            <Text style={styles.infoValue}>{user?.employeeId || '—'}</Text>
                         </View>
                     </View>
                 </View>
@@ -152,42 +368,42 @@ const Profile = () => {
 
                     <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/Attendance/AttendenceList')}>
                         <View style={styles.menuLeft}>
-                            <View style={[styles.menuIcon, { backgroundColor: '#E3F2FD' }]}>
-                                <Feather name="clock" size={18} color="#2196F3" />
+                            <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#1E3A5F' : '#E3F2FD' }]}>
+                                <Feather name="clock" size={18} color={colors.info} />
                             </View>
                             <Text style={styles.menuText}>Attendance</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#CCC" />
+                        <Feather name="chevron-right" size={20} color={colors.border} />
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.menuRow} onPress={() => router.push('/Requests/Leaveapplyreq')}>
                         <View style={styles.menuLeft}>
-                            <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
-                                <Feather name="calendar" size={18} color="#4CAF50" />
+                            <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#1B3A2A' : '#E8F5E9' }]}>
+                                <Feather name="calendar" size={18} color={colors.success} />
                             </View>
                             <Text style={styles.menuText}>Leave Requests</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#CCC" />
+                        <Feather name="chevron-right" size={20} color={colors.border} />
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.menuRow}>
                         <View style={styles.menuLeft}>
-                            <View style={[styles.menuIcon, { backgroundColor: '#FFF3E0' }]}>
-                                <Feather name="file-text" size={18} color="#FF9800" />
+                            <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#3A2A1A' : '#FFF3E0' }]}>
+                                <Feather name="file-text" size={18} color={colors.warning} />
                             </View>
                             <Text style={styles.menuText}>Documents</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#CCC" />
+                        <Feather name="chevron-right" size={20} color={colors.border} />
                     </TouchableOpacity>
 
                     <View style={styles.menuRow}>
                         <View style={styles.menuLeft}>
-                            <View style={[styles.menuIcon, { backgroundColor: '#F3E5F5' }]}>
+                            <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#2A1A3A' : '#F3E5F5' }]}>
                                 <Feather name="settings" size={18} color="#9C27B0" />
                             </View>
                             <Text style={styles.menuText}>Settings</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#CCC" />
+                        <Feather name="chevron-right" size={20} color={colors.border} />
                     </View>
 
                     {/* Theme Toggle */}
@@ -201,25 +417,25 @@ const Profile = () => {
                         <Switch
                             value={theme === 'dark'}
                             onValueChange={toggleTheme}
-                            trackColor={{ false: '#E0E0E0', true: '#4A90FF' }}
+                            trackColor={{ false: colors.border, true: colors.primary }}
                             thumbColor={theme === 'dark' ? '#FFF' : '#F4F3F4'}
                         />
                     </View>
 
                     <TouchableOpacity style={styles.menuRow}>
                         <View style={styles.menuLeft}>
-                            <View style={[styles.menuIcon, { backgroundColor: '#E0F7FA' }]}>
+                            <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#1A2A3A' : '#E0F7FA' }]}>
                                 <Feather name="help-circle" size={18} color="#00BCD4" />
                             </View>
                             <Text style={styles.menuText}>Help & Support</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#CCC" />
+                        <Feather name="chevron-right" size={20} color={colors.border} />
                     </TouchableOpacity>
                 </View>
 
                 {/* Logout */}
                 <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-                    <Feather name="log-out" size={20} color="#FF5252" />
+                    <Feather name="log-out" size={20} color={colors.error} />
                     <Text style={styles.logoutText}>Logout</Text>
                 </TouchableOpacity>
 
@@ -230,245 +446,5 @@ const Profile = () => {
     );
 };
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F5F5F5',
-    },
-
-    // Header
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 15,
-    },
-    headerTitle: {
-        fontSize: 18,
-        width: '80%',
-        textAlign: 'center',
-        fontWeight: '700',
-        color: '#333',
-    },
-
-    // Profile Card
-    profileCard: {
-        backgroundColor: '#FFF',
-        marginHorizontal: 20,
-        borderRadius: 20,
-        padding: 30,
-        alignItems: 'center',
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 4,
-        borderWidth: 1,
-        borderColor: 'rgba(74, 144, 255, 0.1)',
-    },
-    avatar: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: '#4A90FF',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 4,
-        },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 4,
-        borderWidth: 4,
-        borderColor: '#FFF',
-    },
-    avatarText: {
-        fontSize: 36,
-        fontWeight: '700',
-        color: '#FFF',
-        letterSpacing: 1,
-    },
-    name: {
-        fontSize: 24,
-        width: '100%',
-        textAlign: 'center',
-        fontWeight: '700',
-        color: '#1a1a1a',
-        marginBottom: 8,
-        letterSpacing: 0.5,
-    },
-    designation: {
-        fontSize: 15,
-        width: '100%',
-        textAlign: 'center',
-        textTransform: 'uppercase',
-        color: '#666',
-        marginBottom: 15,
-        fontWeight: '500',
-    },
-    badge: {
-        backgroundColor: 'rgba(74, 144, 255, 0.1)',
-        paddingHorizontal: 20,
-        paddingVertical: 8,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(74, 144, 255, 0.3)',
-    },
-    badgeText: {
-        fontSize: 13,
-        textAlign: 'center',
-        width: '50%',
-        color: '#4A90FF',
-        fontWeight: '600',
-        letterSpacing: 0.5,
-    },
-
-    // Stats
-    statsRow: {
-        flexDirection: 'row',
-        marginHorizontal: 20,
-        marginBottom: 20,
-        gap: 10,
-    },
-    statBox: {
-        flex: 1,
-        backgroundColor: '#FFF',
-        borderRadius: 12,
-        padding: 15,
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 4,
-    },
-    statNumber: {
-        fontSize: 22,
-        fontWeight: '700',
-        color: '#4A90FF',
-        marginBottom: 5,
-    },
-    statLabel: {
-        fontSize: 12,
-        color: '#888',
-    },
-
-    // Section
-    section: {
-        backgroundColor: '#FFF',
-        marginHorizontal: 20,
-        borderRadius: 15,
-        padding: 20,
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 4,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 15,
-    },
-
-    // Info Row
-    infoRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
-    },
-    infoContent: {
-        marginLeft: 15,
-        flex: 1,
-    },
-    infoLabel: {
-        fontSize: 12,
-        color: '#888',
-        marginBottom: 2,
-    },
-    infoValue: {
-        fontSize: 14,
-        color: '#333',
-        fontWeight: '500',
-    },
-
-    // Menu Row
-    menuRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 12,
-    },
-    menuLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    menuIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    menuText: {
-        fontSize: 15,
-        color: '#333',
-    },
-
-    // Logout
-    logoutBtn: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginHorizontal: 20,
-        backgroundColor: '#FFF',
-        borderRadius: 12,
-        padding: 15,
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: '#FFCDD2',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 4,
-    },
-    logoutText: {
-        fontSize: 15,
-        color: '#FF5252',
-        fontWeight: '600',
-        marginLeft: 10,
-    },
-
-    // Version
-    version: {
-        textAlign: 'center',
-        fontSize: 12,
-        color: '#BBB',
-        marginBottom: 30,
-    },
-});
-
 export default Profile;
+

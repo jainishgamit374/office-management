@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -11,6 +12,9 @@ const InfoSection: React.FC<InfoSectionProps> = ({
     title,
     emptyMessage = 'No record available',
 }) => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -20,7 +24,7 @@ const InfoSection: React.FC<InfoSectionProps> = ({
             <View style={styles.grid}>
                 <View style={styles.card}>
                     <View style={styles.iconContainer}>
-                        <Feather style={styles.icon} name="user" size={24} color="#4169E1" />
+                        <Feather style={styles.icon} name="user" size={24} color={colors.primary} />
                     </View>
                     <View style={styles.cardHeader}>
                         <Text style={styles.cardTitle}>{emptyMessage}</Text>
@@ -31,7 +35,7 @@ const InfoSection: React.FC<InfoSectionProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         marginHorizontal: 20,
         marginTop: 10,
@@ -39,9 +43,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 20,
         borderWidth: 1,
-        backgroundColor: '#FFF',
-        borderColor: '#fbfbfbff',
-        shadowColor: '#000',
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+        shadowColor: colors.shadow,
         shadowOffset: {
             width: 0,
             height: 8,
@@ -56,7 +60,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#1565c0',
+        color: colors.primary,
         textAlign: 'center',
     },
     grid: {
@@ -73,7 +77,7 @@ const styles = StyleSheet.create({
         gap: 10,
         padding: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#cececeff',
+        borderBottomColor: colors.divider,
     },
     cardHeader: {
         flex: 1,
@@ -88,7 +92,6 @@ const styles = StyleSheet.create({
         borderRadius: 25,
         justifyContent: 'center',
         alignItems: 'center',
-        color: '#fff',
     },
     icon: {
         fontSize: 24,
@@ -97,9 +100,10 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '600',
         width: '80%',
-        color: '#000000ff',
+        color: colors.textSecondary,
         textAlign: 'left',
     },
 });
 
 export default InfoSection;
+

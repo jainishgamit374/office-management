@@ -1,14 +1,11 @@
 // app/(tabs)/explore.tsx
 import { useTabBar } from '@/constants/TabBarContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import { router } from 'expo-router';
 import React from 'react';
-import { Animated, Pressable, StyleSheet, View, Platform } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Colors as ThemeColors } from '@/hooks/useThemeColor';
 
 const ExploreCard = ({
   icon,
@@ -21,8 +18,7 @@ const ExploreCard = ({
   description: string;
   route?: string;
 }) => {
-  // Force light palette regardless of global theme
-  const colors = ThemeColors.light;
+  const { colors, theme } = useTheme();
 
   const handlePress = () => {
     if (route) router.push(route);
@@ -35,28 +31,27 @@ const ExploreCard = ({
           styles.card,
           {
             backgroundColor: colors.card,
-            borderColor: colors.borderLight,
+            borderColor: colors.border,
           },
         ]}
       >
-        <View style={[styles.cardIcon, { backgroundColor: colors.profileBg }]}>
+        <View style={[styles.cardIcon, { backgroundColor: colors.primaryLight }]}>
           <Feather name={icon} size={20} color={colors.primary} />
         </View>
         <View style={styles.cardContent}>
-          <ThemedText style={[styles.cardTitle, { color: colors.text, justifyContent: 'center', alignItems: 'center' }]}>{title}</ThemedText>
-          <ThemedText style={[styles.cardDescription, { color: colors.textSecondary }]}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{title}</Text>
+          <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>
             {description}
-          </ThemedText>
+          </Text>
         </View>
-        {route && <Feather name="chevron-right" size={18} color={colors.textMuted} />}
+        {route && <Feather name="chevron-right" size={18} color={colors.textTertiary} />}
       </View>
     </Pressable>
   );
 };
 
 export default function ExploreScreen() {
-  // Force light palette regardless of global theme
-  const colors = ThemeColors.light;
+  const { colors } = useTheme();
 
   // Get tab bar context for scroll animation
   const { scrollY, lastScrollY, tabBarTranslateY } = useTabBar();
@@ -94,7 +89,7 @@ export default function ExploreScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#fff' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
@@ -103,22 +98,22 @@ export default function ExploreScreen() {
       >
         {/* Header */}
         <View style={styles.headerContainer}>
-          <Feather name="grid" size={60} color={colors.textMuted} />
+          <Feather name="grid" size={60} color={colors.textTertiary} />
         </View>
 
         {/* Title */}
-        <ThemedText type="title" style={[styles.title, { color: colors.text }]}>
+        <Text style={[styles.title, { color: colors.text }]}>
           MySpace
-        </ThemedText>
-        <ThemedText style={[styles.subtitle, { color: colors.textSecondary }]}>
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Tools and resources to manage your work.
-        </ThemedText>
+        </Text>
 
         {/* Attendance & Time */}
-        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+        <View style={[styles.section, { backgroundColor: colors.background }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Attendance & Time
-          </ThemedText>
+          </Text>
 
           <ExploreCard
             icon="clock"
@@ -139,13 +134,13 @@ export default function ExploreScreen() {
             description="Manage your WFH requests"
             route="/Attendance/Wfhlist"
           />
-        </ThemedView>
+        </View>
 
         {/* Requests */}
-        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+        <View style={[styles.section, { backgroundColor: colors.background }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Requests
-          </ThemedText>
+          </Text>
 
           <ExploreCard
             icon="file-plus"
@@ -171,13 +166,13 @@ export default function ExploreScreen() {
             description="Apply for work from home"
             route="/Requests/Wfhapplyreq"
           />
-        </ThemedView>
+        </View>
 
         {/* View All Requests */}
-        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+        <View style={[styles.section, { backgroundColor: colors.background }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             View All  Requests
-          </ThemedText>
+          </Text>
 
           <ExploreCard
             icon="file-plus"
@@ -203,13 +198,13 @@ export default function ExploreScreen() {
             description="View all miss punch requests"
             route="/ViewAllRequest/ViewAllMisspunch"
           />
-        </ThemedView>
+        </View>
 
         {/* Resources */}
-        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+        <View style={[styles.section, { backgroundColor: colors.background }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Resources
-          </ThemedText>
+          </Text>
 
           <ExploreCard
             icon="file-text"
@@ -223,13 +218,13 @@ export default function ExploreScreen() {
             description="Find teammates and contacts"
             route="/Resources/TeamDirectory"
           />
-        </ThemedView>
+        </View>
 
         {/* Support */}
-        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+        <View style={[styles.section, { backgroundColor: colors.background }]}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Support
-          </ThemedText>
+          </Text>
 
           <ExploreCard
             icon="help-circle"
@@ -243,7 +238,7 @@ export default function ExploreScreen() {
             description="App version and info"
             route="/Support/About"
           />
-        </ThemedView>
+        </View>
       </Animated.ScrollView>
     </SafeAreaView>
   );

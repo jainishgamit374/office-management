@@ -12,16 +12,18 @@ import {
 // ==================== TYPES ====================
 
 export interface RegisterData {
-    name: string;
+    first_name: string;
+    last_name: string;
+    username: string;
     email: string;
-    phone?: string;
     password: string;
-    password2?: string; // Confirm password (required by API)
-    username?: string; // Generated automatically if not provided
+    password2?: string; // Confirm password (optional, will default to password)
+    phone?: string;
+    designation?: string;
 }
 
 export interface LoginData {
-    email: string; // Will be used as username for login
+    username: string;
     password: string;
 }
 
@@ -31,6 +33,9 @@ export interface User {
     username?: string;
     email: string;
     phone?: string;
+    department?: string;
+    designation?: string;
+    employeeId?: string;
     first_name?: string;
     last_name?: string;
 }
@@ -66,6 +71,49 @@ export interface LoginResponse {
     message?: string;
 }
 
+// ==================== HELPER FUNCTIONS ====================
+
+/**
+ * Generate a unique Employee ID from JWT token
+ * Format: EMP-YYYYMM-XXXXX (e.g., EMP-202412-00042)
+ */
+export const generateEmployeeId = (token: string): string => {
+    try {
+        // Decode the JWT token to get payload
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+            atob(base64)
+                .split('')
+                .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
+        );
+        const payload = JSON.parse(jsonPayload);
+
+        // Extract user_id from payload (Django JWT typically uses 'user_id')
+        const userId = payload.user_id || payload.sub || payload.id || Date.now();
+
+        // Get current date for the Employee ID
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+
+        // Create padded user ID (5 digits)
+        const paddedId = String(userId).padStart(5, '0');
+
+        // Generate Employee ID: EMP-YYYYMM-XXXXX
+        return `EMP-${year}${month}-${paddedId}`;
+    } catch (error) {
+        console.error('Error generating Employee ID:', error);
+        // Fallback: Generate based on timestamp
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const randomId = String(Math.floor(Math.random() * 99999)).padStart(5, '0');
+        return `EMP-${year}${month}-${randomId}`;
+    }
+};
+
 // ==================== AUTH FUNCTIONS ====================
 
 /**
@@ -75,12 +123,14 @@ export const register = async (userData: RegisterData): Promise<RegisterResponse
     try {
         // Create form data for application/x-www-form-urlencoded
         const formData = new URLSearchParams({
-            name: userData.name,
-            username: userData.email.split('@')[0], // Generate username from email
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            username: userData.username,
             email: userData.email,
-            phone: userData.phone || '',
             password: userData.password,
             password2: userData.password2 || userData.password,
+            ...(userData.phone && { phone: userData.phone }),
+            ...(userData.designation && { designation: userData.designation }),
         });
 
         const response = await fetch('https://karmyog.pythonanywhere.com/register/', {
@@ -107,9 +157,49 @@ export const register = async (userData: RegisterData): Promise<RegisterResponse
             throw new Error(errorMessage);
         }
 
+
         // Store tokens if registration is successful
         if (data.status && data.token) {
             await storeTokens(data.token.access, data.token.refresh);
+
+            // Generate unique Employee ID from JWT token
+            const employeeId = generateEmployeeId(data.token.access);
+
+            // Extract and store user data
+            const userDataToStore = {
+                id: data.user?.id || data.id,
+                first_name: userData.first_name,
+                last_name: userData.last_name,
+                username: userData.username,
+                email: userData.email,
+                name: `${userData.first_name} ${userData.last_name}`,
+                phone: userData.phone,
+                designation: userData.designation,
+                employeeId: employeeId,
+            };
+            await AsyncStorage.setItem(USER_KEY, JSON.stringify(userDataToStore));
+            console.log('✅ Employee ID generated:', employeeId);
+
+            // Try to sync Employee ID and profile data to the server
+            try {
+                await fetch('https://karmyog.pythonanywhere.com/api/profile/', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${data.token.access}`,
+                    },
+                    body: JSON.stringify({
+                        employee_id: employeeId,
+                        phone: userData.phone,
+                        designation: userData.designation,
+                    }),
+                });
+                console.log('✅ Profile data synced to server');
+            } catch (syncError) {
+                // Profile sync is optional, don't fail registration if it fails
+                console.log('⚠️ Profile sync to server failed (optional):', syncError);
+            }
         }
 
         return {
@@ -129,18 +219,14 @@ export const register = async (userData: RegisterData): Promise<RegisterResponse
  */
 export const login = async (credentials: LoginData): Promise<LoginResponse> => {
     try {
-        // Extract username from email (same as registration)
-        const username = credentials.email.split('@')[0];
-
         // Create form data for application/x-www-form-urlencoded
         const formData = new URLSearchParams({
-            username: username, // Use extracted username, not full email
+            username: credentials.username,
             password: credentials.password,
         });
 
         console.log('🔐 Login attempt with:', {
-            email: credentials.email,
-            extractedUsername: username
+            username: credentials.username
         });
 
         const response = await fetch('https://karmyog.pythonanywhere.com/', {
@@ -198,9 +284,40 @@ export const login = async (credentials: LoginData): Promise<LoginResponse> => {
             await storeTokens(data.token.access, data.token.refresh);
             console.log('✅ JWT tokens stored successfully');
 
+            // Get existing user data from storage (may have been set during registration)
+            const existingUserData = await AsyncStorage.getItem(USER_KEY);
+            const existingUser = existingUserData ? JSON.parse(existingUserData) : {};
+
+            // Generate Employee ID if not present (for users who registered before this feature)
+            const employeeId = data.user?.employeeId ||
+                data.user?.employee_id ||
+                existingUser.employeeId ||
+                generateEmployeeId(data.token.access);
+
+            // Extract and store user data from response - merge with existing data
+            const userDataToStore = {
+                id: data.user?.id || data.id || existingUser.id,
+                username: data.user?.username || credentials.username || existingUser.username,
+                email: data.user?.email || existingUser.email,
+                first_name: data.user?.first_name || existingUser.first_name,
+                last_name: data.user?.last_name || existingUser.last_name,
+                name: data.user?.name ||
+                    (data.user?.first_name && data.user?.last_name ? `${data.user.first_name} ${data.user.last_name}` : null) ||
+                    existingUser.name ||
+                    (existingUser.first_name && existingUser.last_name ? `${existingUser.first_name} ${existingUser.last_name}` : null) ||
+                    credentials.username,
+                phone: data.user?.phone || existingUser.phone,
+                department: data.user?.department || existingUser.department,
+                designation: data.user?.designation || existingUser.designation,
+                employeeId: employeeId,
+            };
+            await AsyncStorage.setItem(USER_KEY, JSON.stringify(userDataToStore));
+            console.log('✅ User data stored successfully with Employee ID:', employeeId);
+
             return {
                 access: data.token.access,
                 refresh: data.token.refresh,
+                user: userDataToStore,
                 message: data.message,
             };
         } else {
@@ -222,7 +339,7 @@ export const loginWithJWT = async (credentials: LoginData): Promise<LoginRespons
         const response = await publicApiRequest<{ access: string; refresh: string }>('/api/token/', {
             method: 'POST',
             body: JSON.stringify({
-                email: credentials.email,
+                username: credentials.username,
                 password: credentials.password,
             }),
         });
@@ -273,10 +390,24 @@ export const getUserProfile = async (): Promise<User | null> => {
             method: 'GET',
         });
 
-        // Store updated user data
-        await AsyncStorage.setItem(USER_KEY, JSON.stringify(response));
+        // Normalize some fields if backend uses different keys
+        const normalized: User = {
+            id: (response as any).id ?? (response as any).pk ?? (response as any).user_id,
+            name: (response as any).name ?? (response as any).full_name ?? (response as any).first_name,
+            username: (response as any).username,
+            email: (response as any).email,
+            phone: (response as any).phone ?? (response as any).mobile,
+            department: (response as any).department,
+            designation: (response as any).designation,
+            employeeId: (response as any).employeeId ?? (response as any).employee_id,
+            first_name: (response as any).first_name,
+            last_name: (response as any).last_name,
+        };
 
-        return response;
+        // Store updated user data
+        await AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized));
+
+        return normalized;
     } catch (error) {
         console.error('Get profile error:', error);
         return null;
@@ -342,10 +473,23 @@ export const updateProfile = async (profileData: Partial<User>): Promise<User> =
             body: JSON.stringify(profileData),
         });
 
-        // Update stored user data
-        await AsyncStorage.setItem(USER_KEY, JSON.stringify(response));
+        // Normalize and update stored user data
+        const normalized: User = {
+            id: (response as any).id ?? (response as any).pk ?? (response as any).user_id,
+            name: (response as any).name ?? (response as any).full_name ?? (response as any).first_name,
+            username: (response as any).username,
+            email: (response as any).email,
+            phone: (response as any).phone ?? (response as any).mobile,
+            department: (response as any).department,
+            designation: (response as any).designation,
+            employeeId: (response as any).employeeId ?? (response as any).employee_id,
+            first_name: (response as any).first_name,
+            last_name: (response as any).last_name,
+        };
 
-        return response;
+        await AsyncStorage.setItem(USER_KEY, JSON.stringify(normalized));
+
+        return normalized;
     } catch (error: any) {
         console.error('Update profile error:', error);
         throw new Error(error.message || 'Failed to update profile');

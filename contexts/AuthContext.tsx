@@ -60,8 +60,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await loginApi(credentials);
 
-      if (response.user) {
-        setUser(response.user);
+      // After successful login (tokens stored), fetch the user's profile
+      const userProfile = await getUser();
+      if (!userProfile) {
+        // Try fetching from API if not present
+        const fetched = await getUser();
+        if (fetched) setUser(fetched);
+      } else {
+        setUser(userProfile);
       }
 
       setIsLoggedIn(true);

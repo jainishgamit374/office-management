@@ -14,7 +14,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import Toast from 'react-native-toast-message';
 
 const SignUp = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,19 +26,23 @@ const SignUp = () => {
     });
 
     const [form, setForm] = useState({
-        name: '',
+        first_name: '',
+        last_name: '',
+        username: '',
         email: '',
-        phone: '',
         password: '',
-        confirmPassword: '',
+        phone: '',
+        designation: '',
     });
 
     const [errors, setErrors] = useState({
-        name: '',
+        first_name: '',
+        last_name: '',
+        username: '',
         email: '',
-        phone: '',
         password: '',
-        confirmPassword: '',
+        phone: '',
+        designation: '',
     });
 
     // Validation functions
@@ -71,20 +74,43 @@ const SignUp = () => {
 
     const validateForm = (): boolean => {
         const newErrors = {
-            name: '',
+            first_name: '',
+            last_name: '',
+            username: '',
             email: '',
-            phone: '',
             password: '',
-            confirmPassword: '',
+            phone: '',
+            designation: '',
         };
         let isValid = true;
 
-        // Name validation
-        if (!form.name.trim()) {
-            newErrors.name = 'Full name is required';
+        // First name validation
+        if (!form.first_name.trim()) {
+            newErrors.first_name = 'First name is required';
             isValid = false;
-        } else if (form.name.trim().length < 2) {
-            newErrors.name = 'Name must be at least 2 characters';
+        } else if (form.first_name.trim().length < 2) {
+            newErrors.first_name = 'First name must be at least 2 characters';
+            isValid = false;
+        }
+
+        // Last name validation
+        if (!form.last_name.trim()) {
+            newErrors.last_name = 'Last name is required';
+            isValid = false;
+        } else if (form.last_name.trim().length < 2) {
+            newErrors.last_name = 'Last name must be at least 2 characters';
+            isValid = false;
+        }
+
+        // Username validation
+        if (!form.username.trim()) {
+            newErrors.username = 'Username is required';
+            isValid = false;
+        } else if (form.username.trim().length < 3) {
+            newErrors.username = 'Username must be at least 3 characters';
+            isValid = false;
+        } else if (!/^[a-zA-Z0-9_]+$/.test(form.username)) {
+            newErrors.username = 'Username can only contain letters, numbers, and underscores';
             isValid = false;
         }
 
@@ -94,15 +120,6 @@ const SignUp = () => {
             isValid = false;
         } else if (!validateEmail(form.email)) {
             newErrors.email = 'Please enter a valid email address';
-            isValid = false;
-        }
-
-        // Phone validation
-        if (!form.phone.trim()) {
-            newErrors.phone = 'Phone number is required';
-            isValid = false;
-        } else if (!validatePhone(form.phone)) {
-            newErrors.phone = 'Please enter a valid 10-digit phone number';
             isValid = false;
         }
 
@@ -118,12 +135,9 @@ const SignUp = () => {
             }
         }
 
-        // Confirm password validation
-        if (!form.confirmPassword) {
-            newErrors.confirmPassword = 'Please confirm your password';
-            isValid = false;
-        } else if (form.password !== form.confirmPassword) {
-            newErrors.confirmPassword = 'Passwords do not match';
+        // Phone validation (optional but if provided must be valid)
+        if (form.phone.trim() && !validatePhone(form.phone)) {
+            newErrors.phone = 'Please enter a valid 10-digit phone number';
             isValid = false;
         }
 
@@ -133,12 +147,11 @@ const SignUp = () => {
 
     const submit = async () => {
         if (!validateForm()) {
-            Toast.show({
+            setModalConfig({
+                visible: true,
                 type: 'error',
-                text1: 'Validation Error',
-                text2: 'Please fix the errors below',
-                position: 'top',
-                visibilityTime: 3000,
+                title: 'Validation Error',
+                message: 'Please fix the errors in the form',
             });
             return;
         }
@@ -147,11 +160,13 @@ const SignUp = () => {
 
         try {
             const response = await register({
-                name: form.name.trim(),
+                first_name: form.first_name.trim(),
+                last_name: form.last_name.trim(),
+                username: form.username.trim(),
                 email: form.email.trim().toLowerCase(),
-                phone: form.phone.trim().replace(/\D/g, ''),
                 password: form.password,
-                password2: form.confirmPassword,
+                phone: form.phone.trim() || undefined,
+                designation: form.designation.trim() || undefined,
             });
 
             console.log('✅ Registration successful:', response);
@@ -166,11 +181,13 @@ const SignUp = () => {
 
             // Clear form
             setForm({
-                name: '',
+                first_name: '',
+                last_name: '',
+                username: '',
                 email: '',
-                phone: '',
                 password: '',
-                confirmPassword: '',
+                phone: '',
+                designation: '',
             });
 
             // Navigate to sign-in after delay
@@ -188,6 +205,8 @@ const SignUp = () => {
             // Check for common error patterns
             if (errorMessage.toLowerCase().includes('email') && errorMessage.toLowerCase().includes('exists')) {
                 errorMessage = 'An account with this email already exists. Please sign in or use a different email.';
+            } else if (errorMessage.toLowerCase().includes('username') && errorMessage.toLowerCase().includes('exists')) {
+                errorMessage = 'This username is already taken. Please choose a different username.';
             }
 
             setModalConfig({
@@ -227,13 +246,33 @@ const SignUp = () => {
                     {/* Form */}
                     <View style={styles.formContainer}>
                         <Custominputs
-                            placeholder="Enter your full name"
-                            value={form.name}
-                            onChangeText={(text) => handleChange('name', text)}
-                            label="Full Name"
-                            error={errors.name}
+                            placeholder="Enter your first name"
+                            value={form.first_name}
+                            onChangeText={(text) => handleChange('first_name', text)}
+                            label="First Name"
+                            error={errors.first_name}
                             autoCapitalize="words"
                             autoComplete="name"
+                        />
+
+                        <Custominputs
+                            placeholder="Enter your last name"
+                            value={form.last_name}
+                            onChangeText={(text) => handleChange('last_name', text)}
+                            label="Last Name"
+                            error={errors.last_name}
+                            autoCapitalize="words"
+                            autoComplete="name"
+                        />
+
+                        <Custominputs
+                            placeholder="Choose a username"
+                            value={form.username}
+                            onChangeText={(text) => handleChange('username', text)}
+                            label="Username"
+                            error={errors.username}
+                            autoCapitalize="none"
+                            autoComplete="username"
                         />
 
                         <Custominputs
@@ -251,10 +290,18 @@ const SignUp = () => {
                             placeholder="Enter your phone number"
                             value={form.phone}
                             onChangeText={(text) => handleChange('phone', text)}
-                            label="Phone Number"
+                            label="Phone Number (Optional)"
                             keyboardType="phone-pad"
                             error={errors.phone}
-                            maxLength={10}
+                        />
+
+                        <Custominputs
+                            placeholder="e.g. React Native Developer"
+                            value={form.designation}
+                            onChangeText={(text) => handleChange('designation', text)}
+                            label="Designation (Optional)"
+                            error={errors.designation}
+                            autoCapitalize="words"
                         />
 
                         <Custominputs
@@ -264,15 +311,6 @@ const SignUp = () => {
                             label="Password"
                             secureTextEntry
                             error={errors.password}
-                        />
-
-                        <Custominputs
-                            placeholder="Confirm your password"
-                            value={form.confirmPassword}
-                            onChangeText={(text) => handleChange('confirmPassword', text)}
-                            label="Confirm Password"
-                            secureTextEntry
-                            error={errors.confirmPassword}
                         />
 
                         {/* Password Requirements */}
@@ -345,7 +383,6 @@ const SignUp = () => {
                     message={modalConfig.message}
                 />
             </ScrollView>
-            <Toast />
         </KeyboardAvoidingView>
     );
 };
@@ -357,7 +394,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         justifyContent: 'center',
         paddingVertical: 40,
-        backgroundColor: '#f8f9fa',
+        backgroundColor: '#ffffff',
     },
     container: {
         width: '92%',

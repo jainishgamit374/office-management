@@ -1,5 +1,6 @@
 import Navbar from '@/components/Navigation/Navbar';
 import { useTabBar } from '@/constants/TabBarContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import React, { useRef, useState } from 'react';
 import { Animated, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ import UpcomingLeaves from './UpcomingLeaves';
 import UpcomingWFHs from './UpcomingWFHs';
 
 const HomeScreen: React.FC = () => {
+  const { colors } = useTheme();
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [hasCheckedOut, setHasCheckedOut] = useState(false);
   const [hasEverCheckedIn, setHasEverCheckedIn] = useState(false);
@@ -103,9 +105,9 @@ const HomeScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
-        style={styles.mainContainer}
+        style={[styles.mainContainer, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         onScroll={handleScroll}
@@ -201,12 +203,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: '100%',
-    backgroundColor: '#fff', // Changed from #f0f2f5 to white for better shadow visibility
   },
   mainContainer: {
     flex: 1,
     width: '100%',
-    backgroundColor: '#fff', // Changed from #f0f2f5 to white for better shadow visibility
   },
   scrollContent: {
     paddingBottom: 120, // Extra padding for tab bar

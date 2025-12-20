@@ -1,134 +1,129 @@
-import { account, createUser, signIn, signOut } from '@/lib/appwrite';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// context/AuthContext.tsx
+import {
+  getUser,
+  isAuthenticated,
+  login as loginApi,
+  LoginData,
+  logout as logoutApi,
+  register as registerApi,
+  RegisterData,
+  User,
+} from '@/lib/auth';
 import { router } from 'expo-router';
-import React, { createContext, useContext, useEffect, useState } from 'react';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-}
-
+import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  isLoggedIn: boolean;
+  login: (credentials: LoginData) => Promise<void>;
+  register: (userData: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
-  signup: (name: string, email: string, password: string, phone: string) => Promise<boolean>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  // Check authentication status on mount
   useEffect(() => {
-    checkAuthState();
+    checkAuthStatus();
   }, []);
 
-  const getCurrentUser = async () => {
+  const checkAuthStatus = async () => {
     try {
-      const currentAccount = await account.get();
-      if (currentAccount) {
-        return {
-          id: currentAccount.$id,
-          name: currentAccount.name,
-          email: currentAccount.email,
-          phone: currentAccount.phone,
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting current user:', error);
-      return null;
-    }
-  };
+      setIsLoading(true);
+      const authenticated = await isAuthenticated();
 
-  const checkAuthState = async () => {
-    try {
-      const currentUser = await getCurrentUser();
-      if (currentUser) {
-        setUser(currentUser);
-        await AsyncStorage.setItem('user', JSON.stringify(currentUser));
+      if (authenticated) {
+        const userData = await getUser();
+        setUser(userData);
+        setIsLoggedIn(true);
       } else {
-        await AsyncStorage.removeItem('user');
+        setUser(null);
+        setIsLoggedIn(false);
       }
     } catch (error) {
-      console.error('Error checking auth state:', error);
-      await AsyncStorage.removeItem('user');
+      console.error('Auth check error:', error);
+      setUser(null);
+      setIsLoggedIn(false);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (credentials: LoginData) => {
     try {
-      await signIn({ email, password });
-      const currentUser = await getCurrentUser();
+      const response = await loginApi(credentials);
 
-      if (currentUser) {
-        setUser(currentUser);
-        await AsyncStorage.setItem('user', JSON.stringify(currentUser));
-        router.replace('/(tabs)');
-        return true;
+      if (response.user) {
+        setUser(response.user);
       }
-      return false;
+
+      setIsLoggedIn(true);
     } catch (error) {
-      console.error('Login error:', error);
       throw error;
     }
   };
 
-  const signup = async (name: string, email: string, password: string, phone: string): Promise<boolean> => {
+  const register = async (userData: RegisterData) => {
     try {
-      await createUser({ name, email, phone, password });
-      const currentUser = await getCurrentUser();
-
-      if (currentUser) {
-        setUser(currentUser);
-        await AsyncStorage.setItem('user', JSON.stringify(currentUser));
-        router.replace('/(tabs)');
-        return true;
-      }
-      return false;
+      await registerApi(userData);
+      // Don't auto-login after registration
+      // User needs to verify email or manually login
     } catch (error) {
-      console.error('Signup error:', error);
       throw error;
     }
   };
 
   const logout = async () => {
     try {
-      await signOut();
-      await AsyncStorage.removeItem('user');
+      await logoutApi();
       setUser(null);
+      setIsLoggedIn(false);
       router.replace('/(auth)/sign-in');
     } catch (error) {
       console.error('Logout error:', error);
-      throw error;
+      // Still clear state even if API fails
+      setUser(null);
+      setIsLoggedIn(false);
     }
   };
 
-  const value: AuthContextType = {
-    user,
-    isLoading,
-    isAuthenticated: !!user,
-    login,
-    logout,
-    signup,
+  const refreshUser = async () => {
+    try {
+      const userData = await getUser();
+      setUser(userData);
+    } catch (error) {
+      console.error('Refresh user error:', error);
+    }
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isLoggedIn,
+        login,
+        register,
+        logout,
+        refreshUser,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };

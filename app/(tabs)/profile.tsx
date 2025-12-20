@@ -1,12 +1,14 @@
 import { useTabBar } from '@/constants/TabBarContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { signOut } from '@/lib/appwrite';
 import Feather from '@expo/vector-icons/Feather';
 import { router } from 'expo-router';
 import React from 'react';
-import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Profile = () => {
+    const { theme, toggleTheme } = useTheme();
 
     const user = {
         name: 'Jainish Gamit',
@@ -178,7 +180,7 @@ const Profile = () => {
                         <Feather name="chevron-right" size={20} color="#CCC" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.menuRow}>
+                    <View style={styles.menuRow}>
                         <View style={styles.menuLeft}>
                             <View style={[styles.menuIcon, { backgroundColor: '#F3E5F5' }]}>
                                 <Feather name="settings" size={18} color="#9C27B0" />
@@ -186,7 +188,23 @@ const Profile = () => {
                             <Text style={styles.menuText}>Settings</Text>
                         </View>
                         <Feather name="chevron-right" size={20} color="#CCC" />
-                    </TouchableOpacity>
+                    </View>
+
+                    {/* Theme Toggle */}
+                    <View style={styles.menuRow}>
+                        <View style={styles.menuLeft}>
+                            <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#2a2a2a' : '#FFF9C4' }]}>
+                                <Feather name={theme === 'dark' ? 'moon' : 'sun'} size={18} color={theme === 'dark' ? '#FFD700' : '#FFA000'} />
+                            </View>
+                            <Text style={styles.menuText}>Dark Mode</Text>
+                        </View>
+                        <Switch
+                            value={theme === 'dark'}
+                            onValueChange={toggleTheme}
+                            trackColor={{ false: '#E0E0E0', true: '#4A90FF' }}
+                            thumbColor={theme === 'dark' ? '#FFF' : '#F4F3F4'}
+                        />
+                    </View>
 
                     <TouchableOpacity style={styles.menuRow}>
                         <View style={styles.menuLeft}>

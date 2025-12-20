@@ -8,7 +8,6 @@ import AttendanceTrackingCards from './AttendanceTrackingCards';
 import CheckInCard from './CheckInCard';
 import EmployeesOnLeaveToday from './EmployeesOnLeaveToday';
 import EmployeesWFHToday from './EmployeesWFHToday';
-import GreetingSection from './GreetingSection';
 import InfoSection from './InfoSection';
 import LeaveBalanceSection from './LeaveBalanceSection';
 import MissedPunchSection from './MissedPunchSection';
@@ -202,12 +201,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: '100%',
-    backgroundColor: '#f0f2f5',
+    backgroundColor: '#fff', // Changed from #f0f2f5 to white for better shadow visibility
   },
   mainContainer: {
     flex: 1,
     width: '100%',
-    backgroundColor: '#f0f2f5',
+    backgroundColor: '#fff', // Changed from #f0f2f5 to white for better shadow visibility
   },
   scrollContent: {
     paddingBottom: 120, // Extra padding for tab bar

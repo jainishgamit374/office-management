@@ -42,6 +42,12 @@ const styles = StyleSheet.create({
         backgroundColor: '#f0f2f5',
         borderBottomWidth: 1,
         borderBottomColor: '#e0e0e0',
+        // subtle shadow
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+        elevation: 3,
     },
     headerLeft: {
         flexDirection: 'row',

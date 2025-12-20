@@ -48,14 +48,15 @@ const styles = StyleSheet.create({
     },
     card: {
         flex: 1,
-        backgroundColor: '#f0f7ff',
-        borderRadius: 15,
-        padding: 10,
         alignItems: 'center',
         justifyContent: 'space-between',
         height: 150,
+        borderRadius: 12,
+        padding: 15,
+        marginBottom: 20,
         borderWidth: 1,
-        borderColor: '#d6e9ff',
+        backgroundColor: '#FFF',
+        borderColor: '#fbfbfbff',
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
@@ -63,7 +64,7 @@ const styles = StyleSheet.create({
         },
         shadowOpacity: 0.15,
         shadowRadius: 16,
-        elevation: 8,
+        elevation: 4,
     },
     label: {
         fontSize: 14,

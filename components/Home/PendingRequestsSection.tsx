@@ -48,20 +48,21 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: '#fafcff',
         marginHorizontal: 20,
         marginTop: 10,
         borderRadius: 15,
         paddingHorizontal: 12,
         paddingVertical: 20,
         borderWidth: 1,
-        borderColor: '#e3f2fd',
-        // Shadow for iOS
+        backgroundColor: '#FFF',
+        borderColor: '#fbfbfbff',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.12,
-        shadowRadius: 5,
-        // Shadow for Android
+        shadowOffset: {
+            width: 0,
+            height: 8,
+        },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
         elevation: 4,
     },
     header: {

@@ -121,6 +121,15 @@ export function useThemeColor(
 
 // Helper hook to get multiple colors at once
 export function useThemeColors() {
-    const theme = useColorScheme() ?? 'light';
-    return Colors[theme];
+    // Import useTheme dynamically to avoid circular dependency
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { useTheme } = require('@/contexts/ThemeContext');
+        const { theme } = useTheme();
+        return Colors[theme as 'light' | 'dark'];
+    } catch {
+        // Fallback to system theme if ThemeContext is not available
+        const theme = useColorScheme() ?? 'light';
+        return Colors[theme];
+    }
 }

@@ -65,19 +65,20 @@ const LeaveBalanceSection: React.FC<LeaveBalanceSectionProps> = ({
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: '#f0f7ff',
         marginHorizontal: 20,
         marginTop: 10,
         borderRadius: 15,
         padding: 15,
         borderWidth: 1,
-        borderColor: '#d6e9ff',
-        // Shadow for iOS
+        backgroundColor: '#FFF',
+        borderColor: '#fbfbfbff',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
+        shadowOffset: {
+            width: 0,
+            height: 8,
+        },
         shadowOpacity: 0.15,
-        shadowRadius: 6,
-        // Shadow for Android
+        shadowRadius: 16,
         elevation: 4,
     },
     header: {

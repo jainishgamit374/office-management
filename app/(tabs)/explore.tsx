@@ -3,12 +3,12 @@ import { useTabBar } from '@/constants/TabBarContext';
 import Feather from '@expo/vector-icons/Feather';
 import { router } from 'expo-router';
 import React from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useThemeColors } from '@/hooks/useThemeColor';
+import { Colors as ThemeColors } from '@/hooks/useThemeColor';
 
 const ExploreCard = ({
   icon,
@@ -21,7 +21,8 @@ const ExploreCard = ({
   description: string;
   route?: string;
 }) => {
-  const colors = useThemeColors();
+  // Force light palette regardless of global theme
+  const colors = ThemeColors.light;
 
   const handlePress = () => {
     if (route) router.push(route);
@@ -29,7 +30,15 @@ const ExploreCard = ({
 
   return (
     <Pressable onPress={handlePress} disabled={!route}>
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.borderLight }]}>
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.borderLight,
+          },
+        ]}
+      >
         <View style={[styles.cardIcon, { backgroundColor: colors.profileBg }]}>
           <Feather name={icon} size={20} color={colors.primary} />
         </View>
@@ -39,16 +48,15 @@ const ExploreCard = ({
             {description}
           </ThemedText>
         </View>
-        {route && (
-          <Feather name="chevron-right" size={18} color={colors.textMuted} />
-        )}
+        {route && <Feather name="chevron-right" size={18} color={colors.textMuted} />}
       </View>
     </Pressable>
   );
 };
 
 export default function ExploreScreen() {
-  const colors = useThemeColors();
+  // Force light palette regardless of global theme
+  const colors = ThemeColors.light;
 
   // Get tab bar context for scroll animation
   const { scrollY, lastScrollY, tabBarTranslateY } = useTabBar();
@@ -86,7 +94,7 @@ export default function ExploreScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: '#fff' }]}>
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
@@ -107,7 +115,7 @@ export default function ExploreScreen() {
         </ThemedText>
 
         {/* Attendance & Time */}
-        <ThemedView style={styles.section}>
+        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Attendance & Time
           </ThemedText>
@@ -134,7 +142,7 @@ export default function ExploreScreen() {
         </ThemedView>
 
         {/* Requests */}
-        <ThemedView style={styles.section}>
+        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Requests
           </ThemedText>
@@ -166,7 +174,7 @@ export default function ExploreScreen() {
         </ThemedView>
 
         {/* View All Requests */}
-        <ThemedView style={styles.section}>
+        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             View All  Requests
           </ThemedText>
@@ -198,7 +206,7 @@ export default function ExploreScreen() {
         </ThemedView>
 
         {/* Resources */}
-        <ThemedView style={styles.section}>
+        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Resources
           </ThemedText>
@@ -218,7 +226,7 @@ export default function ExploreScreen() {
         </ThemedView>
 
         {/* Support */}
-        <ThemedView style={styles.section}>
+        <ThemedView lightColor="#fff" darkColor="#fff" style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             Support
           </ThemedText>
@@ -280,6 +288,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
     borderWidth: 1,
+    // soft shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    ...Platform.select({ android: { elevation: 3 } }),
   },
   cardIcon: {
     width: 40,

@@ -5,6 +5,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -196,6 +197,9 @@ const Helpandfaq = () => {
                         <Text style={styles.contactText}>
                             Feel free to reach out to our support team for any additional queries
                         </Text>
+                        <TouchableOpacity style={styles.contactButtonContainer}>
+                            <Text style={styles.contactButton}>Contact Us</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </ScrollView>
@@ -387,12 +391,15 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
     contactCard: {
+        // backgroundColor: '#0d6baeff',
         backgroundColor: '#E3F2FD',
         borderRadius: 16,
         padding: 24,
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#BBDEFB',
+        width: '100%',
+        overflow: 'hidden',
     },
     contactTitle: {
         fontSize: 18,
@@ -400,13 +407,34 @@ const styles = StyleSheet.create({
         color: '#333',
         marginTop: 12,
         marginBottom: 6,
+        width: '100%',
+        textAlign: 'center',
     },
     contactText: {
         fontSize: 14,
         color: '#666',
         textAlign: 'center',
         lineHeight: 20,
+        marginBottom: 16,
+        width: '100%',
     },
+    contactButtonContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+    },
+    contactButton: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#FFF',
+        backgroundColor: '#4A90FF',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 8,
+        width: '50%',
+        textAlign: 'center',
+    },
+
 });
 
 export default Helpandfaq;

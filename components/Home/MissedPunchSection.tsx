@@ -42,13 +42,14 @@ const styles = StyleSheet.create({
         marginTop: 20,
         borderRadius: 15,
         gap: 15,
-        // Shadow for iOS
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+       shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 8,
+        },
         shadowOpacity: 0.15,
-        shadowRadius: 5,
-        // Shadow for Android
-        elevation: 4,
+        shadowRadius: 16,
+        elevation: 8,
     },
     mainTextContainer: {
         width: '100%',

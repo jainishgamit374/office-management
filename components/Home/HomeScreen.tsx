@@ -116,7 +116,7 @@ const HomeScreen: React.FC = () => {
         <Navbar />
 
         {/* Main content */}
-        <GreetingSection />
+        {/* <GreetingSection /> */}
 
         <CheckInCard onCheckInChange={handleCheckInChange} />
 

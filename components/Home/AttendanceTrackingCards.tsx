@@ -56,13 +56,14 @@ const styles = StyleSheet.create({
         height: 150,
         borderWidth: 1,
         borderColor: '#d6e9ff',
-        // Shadow for iOS
-        shadowColor: '#2196f3',
-        shadowOffset: { width: 0, height: 3 },
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 8,
+        },
         shadowOpacity: 0.15,
-        shadowRadius: 5,
-        // Shadow for Android
-        elevation: 4,
+        shadowRadius: 16,
+        elevation: 8,
     },
     label: {
         fontSize: 14,

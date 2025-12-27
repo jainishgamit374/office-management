@@ -1,30 +1,32 @@
-import Feather from '@expo/vector-icons/Feather'
-import { Image } from 'expo-image'
-import { router } from 'expo-router'
-import React from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useTheme } from '@/contexts/ThemeContext';
+import Feather from '@expo/vector-icons/Feather';
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function Navbar() {
+    const { colors } = useTheme();
 
     const handleProfilePress = () => {
         router.push('/(tabs)/profile');
     };
 
     return (
-        <View style={styles.header}>
+        <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
             <View style={styles.headerLeft}>
                 <Pressable style={styles.menuButton}>
                     <Image source={require('@/assets/images/Logo.jpg')} style={styles.logoImage} />
                 </Pressable>
                 <View style={styles.companyNameContainer}>
-                    <Text style={styles.companyName}>Infinite Soft Tech</Text>
+                    <Text style={[styles.companyName, { color: colors.text }]}>Infinite Soft Tech</Text>
                 </View>
             </View>
 
             <View style={styles.headerRight}>
                 <Pressable style={styles.profileButton} onPress={handleProfilePress}>
-                    <View style={styles.profileImage}>
-                        <Feather name="user" size={24} color="#4169E1" />
+                    <View style={[styles.profileImage, { backgroundColor: colors.primaryLight }]}>
+                        <Feather name="user" size={24} color={colors.primary} />
                     </View>
                 </Pressable>
             </View>
@@ -39,9 +41,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 20,
         paddingVertical: 15,
-        backgroundColor: '#f0f2f5',
         borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
         // subtle shadow
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -76,7 +76,6 @@ const styles = StyleSheet.create({
     companyName: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#000',
     },
     headerRight: {
         flexDirection: 'row',
@@ -91,7 +90,6 @@ const styles = StyleSheet.create({
         width: 45,
         height: 45,
         borderRadius: 22.5,
-        backgroundColor: '#E0E8FF',
         justifyContent: 'center',
         alignItems: 'center',
     },

@@ -386,6 +386,22 @@ const Profile = () => {
                         <Feather name="chevron-right" size={20} color={colors.border} />
                     </TouchableOpacity>
 
+                    {/* Admin Dashboard - Only show for admin users */}
+                    {user?.is_admin && (
+                        <TouchableOpacity
+                            style={styles.menuRow}
+                            onPress={() => router.push('/Dashboard/AdminDashboard')}
+                        >
+                            <View style={styles.menuLeft}>
+                                <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#1E3A5F' : '#E3F2FD' }]}>
+                                    <Feather name="bar-chart-2" size={18} color="#007bff" />
+                                </View>
+                                <Text style={styles.menuText}>Admin Dashboard</Text>
+                            </View>
+                            <Feather name="chevron-right" size={20} color={colors.border} />
+                        </TouchableOpacity>
+                    )}
+
                     <TouchableOpacity style={styles.menuRow}>
                         <View style={styles.menuLeft}>
                             <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#3A2A1A' : '#FFF3E0' }]}>
@@ -421,6 +437,41 @@ const Profile = () => {
                             thumbColor={theme === 'dark' ? '#FFF' : '#F4F3F4'}
                         />
                     </View>
+
+                    {/* Reset Attendance Toggle (Testing) */}
+                    <TouchableOpacity
+                        style={styles.menuRow}
+                        onPress={async () => {
+                            Alert.alert(
+                                'Reset Attendance',
+                                'This will clear today\'s punch IN/OUT records. Use for testing only.',
+                                [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    {
+                                        text: 'Reset',
+                                        style: 'destructive',
+                                        onPress: async () => {
+                                            try {
+                                                const { clearTodayAttendance } = await import('@/lib/localAttendance');
+                                                await clearTodayAttendance();
+                                                Alert.alert('Success', 'Today\'s attendance has been reset. You can now punch in again.');
+                                            } catch (error: any) {
+                                                Alert.alert('Error', error.message || 'Failed to reset attendance');
+                                            }
+                                        }
+                                    }
+                                ]
+                            );
+                        }}
+                    >
+                        <View style={styles.menuLeft}>
+                            <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#3A1A1A' : '#FFEBEE' }]}>
+                                <Feather name="refresh-cw" size={18} color={colors.error} />
+                            </View>
+                            <Text style={styles.menuText}>Reset Attendance (Test)</Text>
+                        </View>
+                        <Feather name="chevron-right" size={20} color={colors.border} />
+                    </TouchableOpacity>
 
                     <TouchableOpacity style={styles.menuRow}>
                         <View style={styles.menuLeft}>

@@ -120,6 +120,7 @@ export default function ExploreScreen() {
             title="Attendance History"
             description="View your check-in and check-out records"
             route="/Attendance/AttendenceList"
+
           />
           <ExploreCard
             icon="calendar"

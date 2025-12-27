@@ -59,7 +59,7 @@ export const clearAuthData = async (): Promise<void> => {
 export const refreshAccessToken = async (): Promise<string | null> => {
     try {
         const refreshToken = await getRefreshToken();
-        
+
         if (!refreshToken) {
             return null;
         }
@@ -78,7 +78,7 @@ export const refreshAccessToken = async (): Promise<string | null> => {
         }
 
         const data = await response.json();
-        
+
         if (data.access) {
             await AsyncStorage.setItem(TOKEN_KEY, data.access);
             return data.access;
@@ -133,38 +133,46 @@ export const apiRequest = async <T>(
         // Handle 401 Unauthorized - Try to refresh token
         if (response.status === 401 && requiresAuth) {
             console.log('🔄 Token expired, attempting refresh...');
-            
+
             const newAccessToken = await refreshAccessToken();
-            
+
             if (newAccessToken) {
                 // Retry request with new token
                 config.headers = {
                     ...config.headers,
                     'Authorization': `Bearer ${newAccessToken}`,
                 };
-                
+
                 response = await fetch(url, config);
             } else {
                 throw new Error('Session expired. Please login again.');
             }
         }
 
-        const data = await response.json();
+        // Try to parse JSON response
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            console.error('❌ Failed to parse JSON response');
+            console.error('JSON Parse Error:', jsonError);
+            throw new Error('Server returned invalid response. Please check the API endpoint.');
+        }
 
         console.log('📥 Response Status:', response.status);
         console.log('📥 Response Data:', data);
 
         if (!response.ok) {
             // Handle different error formats from Django
-            const errorMessage = 
-                data.detail || 
-                data.message || 
-                data.error || 
+            const errorMessage =
+                data.detail ||
+                data.message ||
+                data.error ||
                 (data.email && data.email[0]) ||
                 (data.password && data.password[0]) ||
                 (data.non_field_errors && data.non_field_errors[0]) ||
                 `Request failed with status ${response.status}`;
-            
+
             throw new Error(errorMessage);
         }
 

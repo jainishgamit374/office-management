@@ -26,27 +26,25 @@ const SignIn = () => {
     });
 
     const [form, setForm] = useState({
-        username: '',
+        emailOrUsername: '',
         password: '',
     });
 
     const [errors, setErrors] = useState({
-        username: '',
+        emailOrUsername: '',
         password: '',
     });
 
     const validateForm = (): boolean => {
         const newErrors = {
-            username: '',
+            emailOrUsername: '',
             password: '',
         };
         let isValid = true;
 
-        if (!form.username.trim()) {
-            newErrors.username = 'Username is required';
-            isValid = false;
-        } else if (form.username.trim().length < 3) {
-            newErrors.username = 'Username must be at least 3 characters';
+        // Email or Username validation
+        if (!form.emailOrUsername.trim()) {
+            newErrors.emailOrUsername = 'Email or username is required';
             isValid = false;
         }
 
@@ -73,8 +71,29 @@ const SignIn = () => {
         setIsSubmitting(true);
 
         try {
+            // Check for admin credentials first
+            if (form.emailOrUsername.trim() === 'admin' && form.password === '123456') {
+                console.log('✅ Admin login detected');
+
+                // Show success modal for admin
+                setModalConfig({
+                    visible: true,
+                    type: 'success',
+                    title: 'Welcome Admin! 👑',
+                    message: 'Redirecting to admin dashboard...',
+                });
+
+                // Navigate to admin dashboard
+                setTimeout(() => {
+                    setModalConfig((prev) => ({ ...prev, visible: false }));
+                    router.replace('/(Admin)/dashboard');
+                }, 1500);
+                return;
+            }
+
+            // Regular user login via API
             const response = await login({
-                username: form.username.trim(),
+                username: form.emailOrUsername.trim(),
                 password: form.password,
             });
 
@@ -93,7 +112,7 @@ const SignIn = () => {
                 message: response.message || 'Login successful',
             });
 
-            // Navigate to main app
+            // Navigate to home screen
             setTimeout(() => {
                 setModalConfig((prev) => ({ ...prev, visible: false }));
                 router.replace('/');
@@ -131,7 +150,7 @@ const SignIn = () => {
         setModalConfig((prev) => ({ ...prev, visible: false }));
     };
 
-    const handleChange = (field: string, value: string) => {
+    const handleChange = (field: string, value: string | boolean) => {
         setForm((prev) => ({ ...prev, [field]: value }));
         if (errors[field as keyof typeof errors]) {
             setErrors((prev) => ({ ...prev, [field]: '' }));
@@ -156,13 +175,12 @@ const SignIn = () => {
                     {/* Form */}
                     <View style={styles.formContainer}>
                         <Custominputs
-                            placeholder="Enter your username"
-                            value={form.username}
-                            onChangeText={(text) => handleChange('username', text)}
-                            label="Username"
-                            error={errors.username}
+                            placeholder="Enter your email or username"
+                            value={form.emailOrUsername}
+                            onChangeText={(text) => handleChange('emailOrUsername', text)}
+                            label="Email or Username"
+                            error={errors.emailOrUsername}
                             autoCapitalize="none"
-                            autoComplete="username"
                         />
 
                         <Custominputs
@@ -373,5 +391,50 @@ const styles = StyleSheet.create({
         width: '20%',
         color: '#007bff',
         fontWeight: '600',
+    },
+    adminToggleContainer: {
+        marginVertical: 12,
+        backgroundColor: '#f8f9fa',
+        borderRadius: 12,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
+    },
+    adminToggleContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    adminToggleText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1a1a2e',
+        textAlign: 'left',
+        width: '80%',
+    },
+    toggleSwitch: {
+        width: 50,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#e5e5e5',
+        padding: 2,
+        justifyContent: 'center',
+    },
+    toggleSwitchActive: {
+        backgroundColor: '#007bff',
+    },
+    toggleThumb: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    toggleThumbActive: {
+        transform: [{ translateX: 22 }],
     },
 });

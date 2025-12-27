@@ -1,7 +1,8 @@
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
+import { recordEarlyLatePunch } from '@/lib/earlyLatePunch';
 import Feather from '@expo/vector-icons/Feather';
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface AttendanceTrackingCardsProps {
     lateCheckIns?: number;
@@ -16,42 +17,192 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
 }) => {
     const { colors } = useTheme();
     const styles = createStyles(colors);
+    const [showModal, setShowModal] = useState(false);
+    const [selectedType, setSelectedType] = useState<'Early' | 'Late'>('Early');
+    const [reason, setReason] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmit = async () => {
+        if (!reason.trim()) {
+            Alert.alert('Error', 'Please enter a reason');
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+
+            // Get current date/time in ISO format
+            const now = new Date();
+            const dateTime = now.toISOString().slice(0, 19); // Remove milliseconds and Z
+
+            await recordEarlyLatePunch(dateTime, selectedType, reason.trim());
+
+            Alert.alert(
+                'Success',
+                `${selectedType === 'Early' ? 'Early checkout' : 'Late arrival'} recorded successfully!`,
+                [{
+                    text: 'OK', onPress: () => {
+                        setShowModal(false);
+                        setReason('');
+                    }
+                }]
+            );
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to record punch');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.card}>
-                <Text style={styles.label}>Late Check In</Text>
-                <Feather name="log-in" size={32} color={colors.primary} />
-                <Text style={styles.count}>{lateCheckIns}</Text>
+        <>
+            <View style={styles.wrapper}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.container}
+                >
+                    <TouchableOpacity
+                        style={styles.card}
+                        onPress={() => setShowModal(true)}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={styles.label}>Early / Late Punch</Text>
+                        <Feather name="clock" size={32} color={colors.warning} />
+                        <Text style={styles.actionText}>Tap to Record</Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.card}>
+                        <Text style={styles.label}>Late Check In</Text>
+                        <Feather name="log-in" size={32} color={colors.primary} />
+                        <Text style={styles.count}>{lateCheckIns}</Text>
+                    </View>
+
+                    <View style={styles.card}>
+                        <Text style={styles.label}>Early Check Out</Text>
+                        <Feather name="log-out" size={32} color={colors.primary} />
+                        <Text style={styles.count}>{earlyCheckOuts}</Text>
+                    </View>
+
+                    <View style={styles.card}>
+                        <Text style={styles.label}>Half Day</Text>
+                        <Feather name="calendar" size={32} color={colors.primary} />
+                        <Text style={styles.count}>{halfDays}</Text>
+                    </View>
+                </ScrollView>
             </View>
 
-            <View style={styles.card}>
-                <Text style={styles.label}>Early Check Out</Text>
-                <Feather name="log-out" size={32} color={colors.primary} />
-                <Text style={styles.count}>{earlyCheckOuts}</Text>
-            </View>
+            {/* Early/Late Punch Modal */}
+            <Modal
+                visible={showModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Record Early/Late Punch</Text>
+                            <TouchableOpacity onPress={() => setShowModal(false)}>
+                                <Feather name="x" size={24} color={colors.text} />
+                            </TouchableOpacity>
+                        </View>
 
-            <View style={styles.card}>
-                <Text style={styles.label}>Half Day</Text>
-                <Feather name="calendar" size={32} color={colors.primary} />
-                <Text style={styles.count}>{halfDays}</Text>
-            </View>
-        </View>
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {/* Type Selection */}
+                            <Text style={styles.sectionLabel}>Type</Text>
+                            <View style={styles.typeContainer}>
+                                <Pressable
+                                    style={[
+                                        styles.typeButton,
+                                        selectedType === 'Early' && styles.typeButtonActive,
+                                    ]}
+                                    onPress={() => setSelectedType('Early')}
+                                >
+                                    <Feather
+                                        name="log-out"
+                                        size={20}
+                                        color={selectedType === 'Early' ? '#fff' : colors.text}
+                                    />
+                                    <Text style={[
+                                        styles.typeButtonText,
+                                        selectedType === 'Early' && styles.typeButtonTextActive,
+                                    ]}>
+                                        Early Checkout
+                                    </Text>
+                                </Pressable>
+
+                                <Pressable
+                                    style={[
+                                        styles.typeButton,
+                                        selectedType === 'Late' && styles.typeButtonActive,
+                                    ]}
+                                    onPress={() => setSelectedType('Late')}
+                                >
+                                    <Feather
+                                        name="log-in"
+                                        size={20}
+                                        color={selectedType === 'Late' ? '#fff' : colors.text}
+                                    />
+                                    <Text style={[
+                                        styles.typeButtonText,
+                                        selectedType === 'Late' && styles.typeButtonTextActive,
+                                    ]}>
+                                        Late Arrival
+                                    </Text>
+                                </Pressable>
+                            </View>
+
+                            {/* Reason Input */}
+                            <Text style={styles.sectionLabel}>Reason *</Text>
+                            <TextInput
+                                style={styles.textInput}
+                                placeholder="Enter reason (e.g., Personal work, Medical appointment)"
+                                placeholderTextColor={colors.textTertiary}
+                                value={reason}
+                                onChangeText={setReason}
+                                multiline
+                                numberOfLines={4}
+                                textAlignVertical="top"
+                            />
+
+                            {/* Submit Button */}
+                            <TouchableOpacity
+                                style={[
+                                    styles.submitButton,
+                                    isSubmitting && styles.submitButtonDisabled,
+                                ]}
+                                onPress={handleSubmit}
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? (
+                                    <ActivityIndicator color="#fff" />
+                                ) : (
+                                    <>
+                                        <Feather name="check" size={20} color="#fff" />
+                                        <Text style={styles.submitButtonText}>Submit</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+        </>
     );
 };
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
+    wrapper: {
+        marginTop: 10,
+    },
     container: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         paddingHorizontal: 20,
         paddingVertical: 10,
-        marginTop: 10,
-        gap: 10,
+        gap: 12,
     },
     card: {
-        flex: 1,
+        width: 140,
         alignItems: 'center',
         justifyContent: 'space-between',
         height: 150,
@@ -83,7 +234,108 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         color: colors.text,
         marginTop: 10,
     },
+    actionText: {
+        fontSize: 12,
+        fontWeight: '500',
+        color: colors.warning,
+        marginTop: 10,
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        backgroundColor: colors.card,
+        borderRadius: 20,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        maxHeight: '80%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 8,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.text,
+    },
+    sectionLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.text,
+        marginBottom: 12,
+        marginTop: 16,
+    },
+    typeContainer: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    typeButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: colors.border,
+        backgroundColor: colors.background,
+    },
+    typeButtonActive: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    typeButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.text,
+    },
+    typeButtonTextActive: {
+        color: '#fff',
+    },
+    textInput: {
+        backgroundColor: colors.background,
+        borderRadius: 12,
+        padding: 12,
+        fontSize: 14,
+        color: colors.text,
+        borderWidth: 1,
+        borderColor: colors.border,
+        minHeight: 100,
+    },
+    submitButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: colors.primary,
+        borderRadius: 12,
+        padding: 16,
+        marginTop: 24,
+    },
+    submitButtonDisabled: {
+        opacity: 0.6,
+    },
+    submitButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#fff',
+    },
 });
 
 export default AttendanceTrackingCards;
-

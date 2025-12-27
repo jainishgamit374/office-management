@@ -1,6 +1,8 @@
+import { getLocalAttendanceRecords, LocalPunchRecord } from '@/lib/localAttendance';
 import Feather from '@expo/vector-icons/Feather';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     FlatList,
     Modal,
     Pressable,
@@ -8,101 +10,9 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-// Mock attendance data
-const attendanceData = [
-    {
-        id: '1',
-        date: '2025-12-17',
-        day: '17',
-        month: 'Dec',
-        dayName: 'Tuesday',
-        punchIn: '09:15 AM',
-        punchOut: '06:30 PM',
-        workingHours: '9h 15m',
-        status: 'present',
-    },
-    {
-        id: '2',
-        date: '2025-12-16',
-        day: '16',
-        month: 'Dec',
-        dayName: 'Monday',
-        punchIn: '09:00 AM',
-        punchOut: '06:00 PM',
-        workingHours: '9h 00m',
-        status: 'present',
-    },
-    {
-        id: '3',
-        date: '2025-12-15',
-        day: '15',
-        month: 'Dec',
-        dayName: 'Sunday',
-        punchIn: '-',
-        punchOut: '-',
-        workingHours: '-',
-        status: 'weekend',
-    },
-    {
-        id: '4',
-        date: '2025-12-14',
-        day: '14',
-        month: 'Dec',
-        dayName: 'Saturday',
-        punchIn: '-',
-        punchOut: '-',
-        workingHours: '-',
-        status: 'weekend',
-    },
-    {
-        id: '5',
-        date: '2025-12-13',
-        day: '13',
-        month: 'Dec',
-        dayName: 'Friday',
-        punchIn: '09:30 AM',
-        punchOut: '06:45 PM',
-        workingHours: '9h 15m',
-        status: 'present',
-    },
-    {
-        id: '6',
-        date: '2025-12-12',
-        day: '12',
-        month: 'Dec',
-        dayName: 'Thursday',
-        punchIn: '09:10 AM',
-        punchOut: '06:20 PM',
-        workingHours: '9h 10m',
-        status: 'present',
-    },
-    {
-        id: '7',
-        date: '2025-12-11',
-        day: '11',
-        month: 'Dec',
-        dayName: 'Wednesday',
-        punchIn: '-',
-        punchOut: '-',
-        workingHours: '-',
-        status: 'absent',
-    },
-    {
-        id: '8',
-        date: '2025-12-10',
-        day: '10',
-        month: 'Dec',
-        dayName: 'Tuesday',
-        punchIn: '09:05 AM',
-        punchOut: '06:15 PM',
-        workingHours: '9h 10m',
-        status: 'present',
-    },
-];
 
 type FilterType = 'all' | 'today' | 'tomorrow' | 'calendar';
 
@@ -112,6 +22,61 @@ const AttendenceList = () => {
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
     const [showCalendar, setShowCalendar] = useState(false);
     const [calendarType, setCalendarType] = useState<'start' | 'end'>('start');
+
+    // Local storage state
+    const [attendanceData, setAttendanceData] = useState<LocalPunchRecord[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [stats, setStats] = useState({
+        totalCount: 0,
+        presentDays: 0,
+        absentDays: 0,
+        totalHours: '0h 0m',
+    });
+
+    // Fetch attendance data from local storage
+    const fetchAttendanceData = async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
+
+            console.log('📅 Loading local attendance records...');
+            const records = await getLocalAttendanceRecords();
+
+            // Calculate stats
+            const presentRecords = records.filter(r => r.status === 'present');
+            const totalHoursMinutes = presentRecords.reduce((acc, r) => {
+                if (r.workingHours !== '--') {
+                    const [hours, minutes] = r.workingHours.match(/\d+/g) || ['0', '0'];
+                    return acc + parseInt(hours) * 60 + parseInt(minutes);
+                }
+                return acc;
+            }, 0);
+
+            const hours = Math.floor(totalHoursMinutes / 60);
+            const minutes = totalHoursMinutes % 60;
+
+            setAttendanceData(records);
+            setStats({
+                totalCount: records.length,
+                presentDays: presentRecords.length,
+                absentDays: records.filter(r => r.status === 'absent').length,
+                totalHours: `${hours}h ${minutes}m`,
+            });
+            console.log('✅ Loaded', records.length, 'local attendance records');
+        } catch (err: any) {
+            console.error('❌ Error loading local attendance:', err);
+            setError(err.message || 'Failed to load attendance data');
+            setAttendanceData([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Fetch data on mount and when date range changes
+    useEffect(() => {
+        fetchAttendanceData();
+    }, [startDate, endDate]);
 
     const handleFilterPress = (filter: FilterType) => {
         setSelectedFilter(filter);
@@ -127,6 +92,13 @@ const AttendenceList = () => {
             const tomorrowStr = tomorrow.toISOString().split('T')[0];
             setStartDate(tomorrowStr);
             setEndDate(tomorrowStr);
+        } else if (filter === 'all') {
+            // Set to current month
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            setStartDate(firstDay.toISOString().split('T')[0]);
+            setEndDate(lastDay.toISOString().split('T')[0]);
         }
     };
 
@@ -380,17 +352,54 @@ const AttendenceList = () => {
                 <View style={styles.historyContainer}>
                     <View style={styles.historyHeader}>
                         <Text style={styles.sectionTitle}>Attendance History</Text>
-                        <Text style={styles.recordCount}>{attendanceData.length} records</Text>
+                        <Text style={styles.recordCount}>{stats.totalCount} records</Text>
                     </View>
 
-                    <FlatList
-                        data={attendanceData}
-                        renderItem={renderAttendanceItem}
-                        keyExtractor={(item) => item.id}
-                        scrollEnabled={false}
-                        contentContainerStyle={styles.listContent}
-                        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-                    />
+                    {/* Loading State */}
+                    {isLoading && (
+                        <View style={styles.centerContainer}>
+                            <ActivityIndicator size="large" color="#4A90FF" />
+                            <Text style={styles.loadingText}>Loading attendance data...</Text>
+                        </View>
+                    )}
+
+                    {/* Error State */}
+                    {!isLoading && error && (
+                        <View style={styles.errorContainer}>
+                            <Feather name="alert-circle" size={48} color="#FF5252" />
+                            <Text style={styles.errorText}>{error}</Text>
+                            <TouchableOpacity
+                                style={styles.retryButton}
+                                onPress={fetchAttendanceData}
+                            >
+                                <Feather name="refresh-cw" size={16} color="#FFF" />
+                                <Text style={styles.retryButtonText}>Retry</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* Empty State */}
+                    {!isLoading && !error && attendanceData.length === 0 && (
+                        <View style={styles.emptyContainer}>
+                            <Feather name="calendar" size={48} color="#999" />
+                            <Text style={styles.emptyText}>No attendance records found</Text>
+                            <Text style={styles.emptySubtext}>
+                                Try selecting a different date range
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* Data List */}
+                    {!isLoading && !error && attendanceData.length > 0 && (
+                        <FlatList
+                            data={attendanceData}
+                            renderItem={renderAttendanceItem}
+                            keyExtractor={(item) => item.id}
+                            scrollEnabled={false}
+                            contentContainerStyle={styles.listContent}
+                            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+                        />
+                    )}
                 </View>
             </ScrollView>
 
@@ -724,6 +733,64 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         fontWeight: '600',
         color: '#FFF',
+    },
+
+    // Loading, Error, and Empty States
+    centerContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+        gap: 16,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: '#666',
+        marginTop: 8,
+    },
+    errorContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+        gap: 16,
+    },
+    errorText: {
+        fontSize: 15,
+        color: '#FF5252',
+        textAlign: 'center',
+        paddingHorizontal: 20,
+        fontWeight: '500',
+    },
+    retryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#4A90FF',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 8,
+        marginTop: 8,
+    },
+    retryButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#FFF',
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+        gap: 12,
+    },
+    emptyText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#666',
+        marginTop: 8,
+    },
+    emptySubtext: {
+        fontSize: 13,
+        color: '#999',
+        textAlign: 'center',
     },
 });
 

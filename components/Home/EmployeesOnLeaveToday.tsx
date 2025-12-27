@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -21,6 +22,9 @@ const defaultEmployees: Employee[] = [
 const EmployeesOnLeaveToday: React.FC<EmployeesOnLeaveTodayProps> = ({
     employees = defaultEmployees,
 }) => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -31,14 +35,14 @@ const EmployeesOnLeaveToday: React.FC<EmployeesOnLeaveTodayProps> = ({
                 {employees.map((employee) => (
                     <View key={employee.id} style={styles.card}>
                         <View style={styles.profileImage}>
-                            <Feather name="user" size={24} color="#4169E1" />
+                            <Feather name="user" size={24} color={colors.primary} />
                         </View>
                         <View style={styles.cardContent}>
                             <Text style={styles.cardTitle}>{employee.name}</Text>
                             <Text style={styles.cardSubtitle}>{employee.leaveType}</Text>
                         </View>
                         <View style={styles.statusIcon}>
-                            <Feather name="check-circle" size={24} color="#12df34ff" />
+                            <Feather name="check-circle" size={24} color={colors.success} />
                         </View>
                     </View>
                 ))}
@@ -47,7 +51,7 @@ const EmployeesOnLeaveToday: React.FC<EmployeesOnLeaveTodayProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         marginHorizontal: 20,
         marginTop: 10,
@@ -55,9 +59,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 20,
         borderWidth: 1,
-        backgroundColor: '#FFF',
-        borderColor: '#fbfbfbff',
-        shadowColor: '#000',
+        backgroundColor: colors.card,
+        borderColor: colors.border,
+        shadowColor: colors.shadow,
         shadowOffset: {
             width: 0,
             height: 8,
@@ -72,7 +76,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#1565c0',
+        color: colors.primary,
         textAlign: 'center',
     },
     grid: {
@@ -85,13 +89,13 @@ const styles = StyleSheet.create({
         gap: 10,
         padding: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#cececeff',
+        borderBottomColor: colors.divider,
     },
     profileImage: {
         width: 45,
         height: 45,
         borderRadius: 22.5,
-        backgroundColor: '#E0E8FF',
+        backgroundColor: colors.primaryLight,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -102,11 +106,11 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#000',
+        color: colors.text,
     },
     cardSubtitle: {
         fontSize: 14,
-        color: '#a0a0a0ff',
+        color: colors.textSecondary,
     },
     statusIcon: {
         width: 40,

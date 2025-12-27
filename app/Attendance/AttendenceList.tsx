@@ -1,4 +1,5 @@
-import { getLocalAttendanceRecords, LocalPunchRecord } from '@/lib/localAttendance';
+import { AttendanceRecord, getAttendanceHistory } from '@/lib/attendance';
+import { formatISTTime } from '@/lib/timezone';
 import Feather from '@expo/vector-icons/Feather';
 import React, { useEffect, useState } from 'react';
 import {
@@ -18,13 +19,13 @@ type FilterType = 'all' | 'today' | 'tomorrow' | 'calendar';
 
 const AttendenceList = () => {
     const [startDate, setStartDate] = useState('2025-12-01');
-    const [endDate, setEndDate] = useState('2025-12-17');
+    const [endDate, setEndDate] = useState('2025-12-31');
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
     const [showCalendar, setShowCalendar] = useState(false);
     const [calendarType, setCalendarType] = useState<'start' | 'end'>('start');
 
-    // Local storage state
-    const [attendanceData, setAttendanceData] = useState<LocalPunchRecord[]>([]);
+    // API state
+    const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [stats, setStats] = useState({
@@ -34,38 +35,53 @@ const AttendenceList = () => {
         totalHours: '0h 0m',
     });
 
-    // Fetch attendance data from local storage
+    // Fetch attendance data from API
     const fetchAttendanceData = async () => {
         try {
             setIsLoading(true);
             setError(null);
 
-            console.log('📅 Loading local attendance records...');
-            const records = await getLocalAttendanceRecords();
+            console.log('📅 Fetching attendance from API...');
+            const response = await getAttendanceHistory(startDate, endDate);
 
-            // Calculate stats
-            const presentRecords = records.filter(r => r.status === 'present');
-            const totalHoursMinutes = presentRecords.reduce((acc, r) => {
-                if (r.workingHours !== '--') {
-                    const [hours, minutes] = r.workingHours.match(/\d+/g) || ['0', '0'];
-                    return acc + parseInt(hours) * 60 + parseInt(minutes);
+            console.log('📊 Full API Response:', JSON.stringify(response, null, 2));
+
+            if (response.success && response.data) {
+                console.log('📊 Raw records from API:', response.data.records?.length || 0);
+
+                // Deduplicate records by date (keep the latest one)
+                const uniqueRecords = response.data.records?.reduce((acc: AttendanceRecord[], current) => {
+                    const existing = acc.find(record => record.date === current.date);
+                    if (!existing) {
+                        acc.push(current);
+                    }
+                    return acc;
+                }, []) || [];
+
+                console.log('📊 After deduplication:', uniqueRecords.length, 'records');
+                if (uniqueRecords.length > 0) {
+                    console.log('📊 First record:', uniqueRecords[0]);
                 }
-                return acc;
-            }, 0);
 
-            const hours = Math.floor(totalHoursMinutes / 60);
-            const minutes = totalHoursMinutes % 60;
-
-            setAttendanceData(records);
-            setStats({
-                totalCount: records.length,
-                presentDays: presentRecords.length,
-                absentDays: records.filter(r => r.status === 'absent').length,
-                totalHours: `${hours}h ${minutes}m`,
-            });
-            console.log('✅ Loaded', records.length, 'local attendance records');
+                setAttendanceData(uniqueRecords);
+                setStats({
+                    totalCount: response.data.total_count || 0,
+                    presentDays: response.data.present_days || 0,
+                    absentDays: response.data.absent_days || 0,
+                    totalHours: response.data.total_hours || '0h 0m',
+                });
+                console.log('✅ Attendance data loaded:', uniqueRecords.length, 'unique records (deduplicated)');
+            } else {
+                setAttendanceData([]);
+                setStats({
+                    totalCount: 0,
+                    presentDays: 0,
+                    absentDays: 0,
+                    totalHours: '0h 0m',
+                });
+            }
         } catch (err: any) {
-            console.error('❌ Error loading local attendance:', err);
+            console.error('❌ Error fetching attendance:', err);
             setError(err.message || 'Failed to load attendance data');
             setAttendanceData([]);
         } finally {
@@ -168,7 +184,11 @@ const AttendenceList = () => {
                     <View style={styles.timeItem}>
                         <Feather name="log-in" size={14} color="#666" />
                         <Text style={styles.timeLabel}>Punch In</Text>
-                        <Text style={styles.timeValue}>{item.punchIn}</Text>
+                        <Text style={styles.timeValue}>
+                            {item.punchIn && item.punchIn !== '--' && (item.punchIn.includes('T') || item.punchIn.includes('Z'))
+                                ? formatISTTime(item.punchIn)
+                                : item.punchIn}
+                        </Text>
                     </View>
 
                     <View style={styles.timeDivider} />
@@ -176,7 +196,11 @@ const AttendenceList = () => {
                     <View style={styles.timeItem}>
                         <Feather name="log-out" size={14} color="#666" />
                         <Text style={styles.timeLabel}>Punch Out</Text>
-                        <Text style={styles.timeValue}>{item.punchOut}</Text>
+                        <Text style={styles.timeValue}>
+                            {item.punchOut && item.punchOut !== '--' && (item.punchOut.includes('T') || item.punchOut.includes('Z'))
+                                ? formatISTTime(item.punchOut)
+                                : item.punchOut}
+                        </Text>
                     </View>
 
                     <View style={styles.timeDivider} />

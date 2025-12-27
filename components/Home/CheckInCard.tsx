@@ -1,6 +1,5 @@
 import { useTheme } from '@/contexts/ThemeContext';
-import { getCurrentLocation, hasLocationPermission, requestLocationPermission } from '@/lib/attendance';
-import { getTodayPunchStatus, savePunchInLocally, savePunchOutLocally } from '@/lib/localAttendance';
+import { getCurrentLocation, getPunchStatus, hasLocationPermission, recordPunch, requestLocationPermission } from '@/lib/attendance';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -29,6 +28,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
   // Track current check-in state for pan responder
   const isCheckedInRef = useRef(false);
   const hasCheckedOutRef = useRef(false);
+  const isPunchingRef = useRef(false); // Prevent duplicate API calls
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -46,30 +46,41 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
   // Load punch status function
   const loadPunchStatus = useCallback(async () => {
     try {
-      const status = await getTodayPunchStatus();
-      console.log('📊 Initial punch status:', status);
+      console.log('📊 Loading punch status from API...');
+      const response = await getPunchStatus();
+      console.log('📊 API Punch status:', response);
 
-      if (status.isPunchedIn && !status.isPunchedOut) {
+      // PunchType: 0 = Not In/Out, 1 = IN, 2 = OUT
+      if (response.data.PunchType === 1) {
         // User is currently punched IN
+        console.log('✅ User is punched IN');
         setIsCheckedIn(true);
         setHasEverCheckedIn(true);
+        setHasCheckedOut(false);
         // Animate to checked-in position
         pan.setValue(SCREEN_WIDTH - 115);
-      } else if (status.isPunchedOut) {
+      } else if (response.data.PunchType === 2) {
         // User has punched OUT for the day
+        console.log('✅ User is punched OUT');
         setIsCheckedIn(false);
         setHasCheckedOut(true);
         setHasEverCheckedIn(true);
+        pan.setValue(0);
       } else {
-        // Reset to initial state
+        // Not punched in yet (PunchType === 0)
+        console.log('✅ User not punched in yet');
         setIsCheckedIn(false);
         setHasCheckedOut(false);
         setHasEverCheckedIn(false);
         pan.setValue(0);
       }
     } catch (error) {
-      console.error('Failed to load punch status:', error);
+      console.error('❌ Failed to load punch status:', error);
       // Continue with default state if loading fails
+      setIsCheckedIn(false);
+      setHasCheckedOut(false);
+      setHasEverCheckedIn(false);
+      pan.setValue(0);
     }
   }, [pan]);
 
@@ -88,6 +99,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
   // Function to handle punch in API call
   const handlePunchIn = async () => {
     try {
+      // Prevent duplicate calls
+      if (isPunchingRef.current) {
+        console.log('⚠️ Punch IN already in progress, skipping duplicate call');
+        return false;
+      }
+
+      isPunchingRef.current = true;
       setIsLoading(true);
 
       // Check location permission
@@ -117,10 +135,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
         throw new Error('Unable to get location. Please enable location services.');
       }
 
-      // Save punch IN locally
-      console.log('� Saving Punch IN locally...');
-      await savePunchInLocally(location.latitude, location.longitude, false);
-      console.log('✅ Punch IN saved successfully');
+      // Record punch IN via API
+      console.log('📝 Recording Punch IN via API...');
+      await recordPunch('IN', false, true);
+      // Success log is already in recordPunch function
 
       Alert.alert(
         'Checked In Successfully! ✅',
@@ -154,6 +172,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
 
       return false;
     } finally {
+      isPunchingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -161,6 +180,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
   // Function to handle punch out API call
   const handlePunchOut = async () => {
     try {
+      // Prevent duplicate calls
+      if (isPunchingRef.current) {
+        console.log('⚠️ Punch OUT already in progress, skipping duplicate call');
+        return false;
+      }
+
+      isPunchingRef.current = true;
       setIsLoading(true);
 
       // Check location permission
@@ -192,8 +218,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
 
       // Save punch OUT locally
       console.log('� Saving Punch OUT locally...');
-      await savePunchOutLocally(location.latitude, location.longitude, false);
-      console.log('✅ Punch OUT saved successfully');
+      await recordPunch('OUT', false, true);
+      console.log('✅ Punch OUT recorded via API successfully');
 
       Alert.alert(
         'Checked Out Successfully! 🏁',
@@ -220,6 +246,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
 
       return false;
     } finally {
+      isPunchingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -252,8 +279,15 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
         }
       },
       onPanResponderRelease: async (_, gestureState) => {
-        // Don't allow any action if checked out or loading
-        if (hasCheckedOutRef.current || isLoading) return;
+        // Don't allow any action if checked out, loading, or already punching
+        if (hasCheckedOutRef.current || isLoading || isPunchingRef.current) {
+          console.log('⚠️ Pan responder blocked:', {
+            hasCheckedOut: hasCheckedOutRef.current,
+            isLoading,
+            isPunching: isPunchingRef.current
+          });
+          return;
+        }
 
         if (!isCheckedInRef.current) {
           // Check-in flow (swipe right)

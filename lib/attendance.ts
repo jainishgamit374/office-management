@@ -128,30 +128,36 @@ export const recordPunch = async (
             deviceInfo = await getDeviceInfo();
         }
 
-        // Prepare request body with correct field names for API
+        // Prepare request body with correct format for API
+        // PunchType: 0 = Not In/Not Out, 1 = IN, 2 = OUT
+        // Latitude/Longitude: as strings
         const requestBody = {
-            punch_type: punchType,  // API expects snake_case
-            latitude: location.latitude,
-            longitude: location.longitude,
-            is_remote: isRemote,
-            ...(deviceInfo && { device_info: deviceInfo }),
+            PunchType: punchType === 'IN' ? 1 : 2,
+            Latitude: location.latitude.toString(),
+            Longitude: location.longitude.toString(),
+            IsAway: isRemote,
         };
 
+        console.log('📤 Full request body:', JSON.stringify(requestBody, null, 2));
         console.log('📤 Punch request:', {
-            punch_type: punchType,
-            is_remote: isRemote,
+            PunchType: punchType === 'IN' ? 1 : 2,
+            IsAway: isRemote,
             location: `${location.latitude}, ${location.longitude}`,
         });
 
 
+
         // Make API request
-        const response = await fetch('http://karmyog.pythonanywhere.com/emp-punch/', {
+        const bodyString = JSON.stringify(requestBody);
+        console.log('📤 Stringified body being sent:', bodyString);
+
+        const response = await fetch('https://karmyog.pythonanywhere.com/emp-punch/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${accessToken}`,
             },
-            body: JSON.stringify(requestBody),
+            body: bodyString,
         });
 
         console.log('📡 Response status:', response.status);
@@ -391,9 +397,9 @@ export const getAttendanceHistory = async (
             throw new Error('No access token found. Please login again.');
         }
 
-        // Make API request
+        // Make API request to fetch punch records
         const response = await fetch(
-            `http://karmyog.pythonanywhere.com/attendance-history/?start_date=${startDate}&end_date=${endDate}`,
+            `https://karmyog.pythonanywhere.com/emp-punch/?start_date=${startDate}&end_date=${endDate}`,
             {
                 method: 'GET',
                 headers: {

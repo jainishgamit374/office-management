@@ -13,7 +13,6 @@ import InfoSection from './InfoSection';
 import LeaveBalanceSection from './LeaveBalanceSection';
 import MissedPunchSection from './MissedPunchSection';
 import PendingRequestsSection from './PendingRequestsSection';
-import TaskSection from './TaskSection';
 import UpcomingLeaves from './UpcomingLeaves';
 import UpcomingWFHs from './UpcomingWFHs';
 
@@ -120,14 +119,6 @@ const HomeScreen: React.FC = () => {
         {/* <GreetingSection /> */}
 
         <CheckInCard onCheckInChange={handleCheckInChange} />
-
-        {/* Task Section - Hidden initially, shows after first check-in */}
-        <TaskSection
-          hasEverCheckedIn={hasEverCheckedIn}
-          isCheckedIn={isCheckedIn}
-          totalTasks={totalTasks}
-          tasksToComplete={tasksToComplete}
-        />
 
         {/* Missed Punch Section */}
         <MissedPunchSection />

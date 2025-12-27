@@ -5,6 +5,36 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const ATTENDANCE_STORAGE_PREFIX = '@attendance_records_';
 const USER_EMAIL_KEY = '@user_email';
 
+/**
+ * Convert UTC time to IST (Indian Standard Time)
+ * IST = UTC + 5 hours 30 minutes
+ */
+export const convertToIST = (date: Date = new Date()): Date => {
+    // Get UTC time in milliseconds
+    const utcTime = date.getTime();
+
+    // IST offset is +5:30 (5 hours 30 minutes = 330 minutes = 19800000 milliseconds)
+    const istOffset = 5.5 * 60 * 60 * 1000; // 19800000 ms
+
+    // Create IST date
+    const istTime = new Date(utcTime + istOffset);
+
+    return istTime;
+};
+
+/**
+ * Get current time in IST formatted as HH:MM AM/PM
+ */
+export const getCurrentISTTime = (): string => {
+    const istDate = convertToIST();
+    return istDate.toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Kolkata'
+    });
+};
+
 export interface LocalPunchRecord {
     id: string;
     date: string;
@@ -65,7 +95,7 @@ export const savePunchInLocally = async (latitude: number, longitude: number, is
     try {
         const now = new Date();
         const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        const timeStr = getCurrentISTTime(); // Use IST time
 
         // Get user-specific storage key
         const storageKey = await getUserStorageKey();

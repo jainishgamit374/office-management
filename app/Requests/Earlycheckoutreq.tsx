@@ -1,6 +1,9 @@
+import { submitEarlyCheckoutRequest, submitLateCheckinRequest } from '@/lib/earlyLatePunch';
 import Feather from '@expo/vector-icons/Feather';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Animated,
     ScrollView,
@@ -114,12 +117,14 @@ const Dropdown: React.FC<DropdownProps> = ({ label, value, options, onSelect, ic
 
 const Earlycheckoutreq = () => {
     const [requestType, setRequestType] = useState<RequestType>('Early Check-Out');
-    const [selectedDate, setSelectedDate] = useState('2025-12-18');
-    const [selectedTime, setSelectedTime] = useState('17:30');
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [selectedTime, setSelectedTime] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false);
     const [reason, setReason] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
+    const formatDate = (date: Date) => {
         return date.toLocaleDateString('en-US', {
             day: '2-digit',
             month: 'short',
@@ -127,12 +132,26 @@ const Earlycheckoutreq = () => {
         });
     };
 
-    const formatTime = (timeString: string) => {
-        const [hours, minutes] = timeString.split(':');
-        const hour = parseInt(hours);
-        const ampm = hour >= 12 ? 'PM' : 'AM';
-        const displayHour = hour % 12 || 12;
-        return `${displayHour}:${minutes} ${ampm}`;
+    const formatTime = (date: Date) => {
+        return date.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+        });
+    };
+
+    const onDateChange = (event: any, date?: Date) => {
+        setShowDatePicker(false);
+        if (date) {
+            setSelectedDate(date);
+        }
+    };
+
+    const onTimeChange = (event: any, date?: Date) => {
+        setShowTimePicker(false);
+        if (date) {
+            setSelectedTime(date);
+        }
     };
 
     const getRequestTypeColor = () => {
@@ -143,24 +162,85 @@ const Earlycheckoutreq = () => {
         return requestType === 'Early Check-Out' ? 'log-out' : 'log-in';
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (!reason.trim()) {
             Alert.alert('Error', 'Please provide a reason for your request');
             return;
         }
 
-        Alert.alert(
-            'Success',
-            `${requestType} request submitted successfully!\n\nDate: ${formatDate(selectedDate)}\nTime: ${formatTime(selectedTime)}`,
-            [
-                {
-                    text: 'OK',
-                    onPress: () => {
-                        setReason('');
+        if (reason.trim().length < 10) {
+            Alert.alert('Error', 'Reason must be at least 10 characters');
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+
+            // Combine date and time into ISO format
+            const dateTime = new Date(selectedDate);
+            dateTime.setHours(selectedTime.getHours());
+            dateTime.setMinutes(selectedTime.getMinutes());
+            const isoDateTime = dateTime.toISOString();
+
+            // Call the appropriate API based on request type
+            if (requestType === 'Late Check-In') {
+                await submitLateCheckinRequest(isoDateTime, reason.trim());
+            } else {
+                await submitEarlyCheckoutRequest(isoDateTime, reason.trim());
+            }
+
+            Alert.alert(
+                'Success',
+                `${requestType} request submitted successfully!\n\nDate: ${formatDate(selectedDate)}\nTime: ${formatTime(selectedTime)}`,
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            setReason('');
+                            setSelectedDate(new Date());
+                            setSelectedTime(new Date());
+                        },
                     },
-                },
-            ]
-        );
+                ]
+            );
+        } catch (error: any) {
+            // Enhanced error handling with specific messages
+            const errorMessage = error.message || 'Failed to submit request';
+
+            // Check for workflow configuration error
+            if (errorMessage.includes('workflow not configured') || errorMessage.includes('contact HR')) {
+                Alert.alert(
+                    'Workflow Not Configured',
+                    `The ${requestType} approval workflow has not been set up yet.\n\n` +
+                    'Please contact your HR department to configure the approval workflow for this request type.\n\n' +
+                    'Your request cannot be processed until the workflow is configured.',
+                    [{ text: 'OK', style: 'default' }]
+                );
+            }
+            // Check for duplicate request error
+            else if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+                Alert.alert(
+                    'Duplicate Request',
+                    `A ${requestType.toLowerCase()} request already exists for the selected date.\n\n` +
+                    'Please check your pending requests or select a different date.',
+                    [{ text: 'OK', style: 'default' }]
+                );
+            }
+            // Check for session expired error
+            else if (errorMessage.includes('session') || errorMessage.includes('expired') || errorMessage.includes('login')) {
+                Alert.alert(
+                    'Session Expired',
+                    'Your session has expired. Please log in again to continue.',
+                    [{ text: 'OK', style: 'default' }]
+                );
+            }
+            // Generic error
+            else {
+                Alert.alert('Error', errorMessage);
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -284,7 +364,10 @@ const Earlycheckoutreq = () => {
 
                     <View style={styles.dateTimeContainer}>
                         {/* Date */}
-                        <TouchableOpacity style={styles.dateTimeBox}>
+                        <TouchableOpacity
+                            style={styles.dateTimeBox}
+                            onPress={() => setShowDatePicker(true)}
+                        >
                             <View style={styles.dateTimeIconContainer}>
                                 <Feather name="calendar" size={20} color="#4A90FF" />
                             </View>
@@ -295,7 +378,10 @@ const Earlycheckoutreq = () => {
                         </TouchableOpacity>
 
                         {/* Time */}
-                        <TouchableOpacity style={styles.dateTimeBox}>
+                        <TouchableOpacity
+                            style={styles.dateTimeBox}
+                            onPress={() => setShowTimePicker(true)}
+                        >
                             <View style={styles.dateTimeIconContainer}>
                                 <Feather name="clock" size={20} color="#4A90FF" />
                             </View>
@@ -305,6 +391,26 @@ const Earlycheckoutreq = () => {
                             </View>
                         </TouchableOpacity>
                     </View>
+
+                    {/* Date Picker */}
+                    {showDatePicker && (
+                        <DateTimePicker
+                            value={selectedDate}
+                            mode="date"
+                            display="default"
+                            onChange={onDateChange}
+                        />
+                    )}
+
+                    {/* Time Picker */}
+                    {showTimePicker && (
+                        <DateTimePicker
+                            value={selectedTime}
+                            mode="time"
+                            display="default"
+                            onChange={onTimeChange}
+                        />
+                    )}
                 </View>
 
                 {/* Reason Section */}
@@ -328,14 +434,22 @@ const Earlycheckoutreq = () => {
                     style={[
                         styles.submitButton,
                         { backgroundColor: getRequestTypeColor() },
+                        isSubmitting && styles.submitButtonDisabled,
                     ]}
                     onPress={handleSubmit}
                     activeOpacity={0.8}
+                    disabled={isSubmitting}
                 >
-                    <Feather name="send" size={20} color="#FFF" />
-                    <Text style={styles.submitButtonText}>
-                        Submit {requestType} Request
-                    </Text>
+                    {isSubmitting ? (
+                        <ActivityIndicator color="#FFF" />
+                    ) : (
+                        <>
+                            <Feather name="send" size={20} color="#FFF" />
+                            <Text style={styles.submitButtonText}>
+                                Submit {requestType} Request
+                            </Text>
+                        </>
+                    )}
                 </TouchableOpacity>
 
                 {/* Info Card */}
@@ -614,6 +728,9 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#FFF',
         letterSpacing: 0.5,
+    },
+    submitButtonDisabled: {
+        opacity: 0.6,
     },
 
     // Info Card

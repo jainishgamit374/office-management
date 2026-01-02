@@ -12,6 +12,7 @@ import EmployeesWFHToday from './EmployeesWFHToday';
 import InfoSection from './InfoSection';
 import LeaveBalanceSection from './LeaveBalanceSection';
 import MissedPunchSection from './MissedPunchSection';
+import NotificationBanner from './NotificationBanner';
 import PendingRequestsSection from './PendingRequestsSection';
 import UpcomingLeaves from './UpcomingLeaves';
 import UpcomingWFHs from './UpcomingWFHs';
@@ -115,10 +116,14 @@ const HomeScreen: React.FC = () => {
         {/* Header */}
         <Navbar />
 
+        {/* Office Notifications */}
+        <NotificationBanner />
+
         {/* Main content */}
         {/* <GreetingSection /> */}
 
-        <CheckInCard onCheckInChange={handleCheckInChange} />
+        {/* Leave Balance Sheet */}
+        <LeaveBalanceSection />
 
         {/* Missed Punch Section */}
         <MissedPunchSection />
@@ -126,8 +131,8 @@ const HomeScreen: React.FC = () => {
         {/* Attendance Tracking Cards */}
         <AttendanceTrackingCards />
 
-        {/* Leave Balance Sheet */}
-        <LeaveBalanceSection />
+        {/* Check In Card */}
+        <CheckInCard onCheckInChange={handleCheckInChange} />
 
         {/* My pending requests */}
         <PendingRequestsSection />

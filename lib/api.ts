@@ -9,12 +9,32 @@ export const REFRESH_TOKEN_KEY = 'refresh_token';
 export const USER_KEY = 'user_data';
 
 export interface ApiResponse<T = any> {
-    success?: boolean;
+    status: 'Success' | 'Error';
+    statusCode: number;
+    message: string;
     data?: T;
-    message?: string;
-    error?: string;
-    detail?: string;
+    pagination?: {
+        currentPage: number;
+        totalPages: number;
+        totalRecords: number;
+        perPage: number;
+        hasNext: boolean;
+        hasPrevious: boolean;
+    };
+    errors?: Array<{
+        field: string;
+        code: string;
+        message: string;
+    }>;
+    requestId?: string;
+    timestamp: string;
+    path?: string;
 }
+
+// Generate unique request ID for tracing
+export const generateRequestId = (): string => {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
 
 // Get stored access token
 export const getAccessToken = async (): Promise<string | null> => {
@@ -101,6 +121,7 @@ export const apiRequest = async <T>(
 
     const defaultHeaders: HeadersInit = {
         'Content-Type': 'application/json',
+        'X-Request-ID': generateRequestId(),
     };
 
     // Add Authorization header if required

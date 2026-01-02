@@ -270,9 +270,13 @@ export const getTodayPunchStatus = async (): Promise<{ isPunchedIn: boolean; isP
 
 /**
  * Clear today's attendance (for testing purposes)
+ * This clears both local records AND punch state
  */
-export const clearTodayAttendance = async (): Promise<void> => {
+export const clearTodayAttendance = async (force: boolean = false): Promise<void> => {
     try {
+        console.log('🧹 Clearing today\'s attendance for testing...');
+
+        // 1. Clear local attendance records
         const storageKey = await getUserStorageKey();
         const existingData = await AsyncStorage.getItem(storageKey);
         const records: LocalPunchRecord[] = existingData ? JSON.parse(existingData) : [];
@@ -281,11 +285,31 @@ export const clearTodayAttendance = async (): Promise<void> => {
 
         // Remove today's records
         const filteredRecords = records.filter(r => r.date !== today);
-
         await AsyncStorage.setItem(storageKey, JSON.stringify(filteredRecords));
-        console.log('✅ Today\'s attendance cleared for testing');
+        console.log('✅ Local attendance records cleared');
+
+        // 2. Clear punch state keys (used by CheckInCard)
+        const keysToRemove = [
+            'lastAttendanceDate',           // Date tracking for reset
+            'lastAttendanceStatsDate',      // Stats date tracking
+            'punchStatus',                  // Current punch status
+            'isCheckedIn',                  // Check-in state
+            'hasCheckedOut',                // Check-out state
+            'hasEverCheckedIn',             // Ever checked in flag
+        ];
+
+        await AsyncStorage.multiRemove(keysToRemove);
+        console.log('✅ Punch state keys cleared');
+
+        // 3. If force mode, set a flag to ignore backend status
+        if (force) {
+            await AsyncStorage.setItem('forceResetMode', 'true');
+            console.log('✅ Force reset mode enabled - will ignore backend status');
+        }
+
+        console.log('🎉 Today\'s attendance fully reset - you can now punch in again!');
     } catch (error: any) {
         console.error('❌ Error clearing attendance:', error);
-        throw error;
+        throw new Error('Failed to reset attendance: ' + error.message);
     }
 };

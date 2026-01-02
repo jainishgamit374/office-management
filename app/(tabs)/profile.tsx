@@ -444,17 +444,30 @@ const Profile = () => {
                         onPress={async () => {
                             Alert.alert(
                                 'Reset Attendance',
-                                'This will clear today\'s punch IN/OUT records. Use for testing only.',
+                                'This will clear local punch records only.\n\n⚠️ Note: Backend server records are NOT deleted. If you see "Already Checked Out", the backend still has your punch data.\n\nUse for testing local state only.',
                                 [
                                     { text: 'Cancel', style: 'cancel' },
                                     {
-                                        text: 'Reset',
+                                        text: 'Reset Local Data',
                                         style: 'destructive',
                                         onPress: async () => {
                                             try {
                                                 const { clearTodayAttendance } = await import('@/lib/localAttendance');
-                                                await clearTodayAttendance();
-                                                Alert.alert('Success', 'Today\'s attendance has been reset. You can now punch in again.');
+                                                await clearTodayAttendance(true); // Pass true for force mode
+                                                Alert.alert(
+                                                    'Success! 🎉',
+                                                    'Local data cleared and force reset enabled.\n\nNavigate to Home to punch in fresh (backend status will be ignored).',
+                                                    [
+                                                        {
+                                                            text: 'Go to Home',
+                                                            onPress: () => router.push('/')
+                                                        },
+                                                        {
+                                                            text: 'OK',
+                                                            style: 'cancel'
+                                                        }
+                                                    ]
+                                                );
                                             } catch (error: any) {
                                                 Alert.alert('Error', error.message || 'Failed to reset attendance');
                                             }

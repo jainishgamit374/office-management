@@ -1,51 +1,98 @@
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
+import { getPunchStatus } from '@/lib/attendance';
 import Feather from '@expo/vector-icons/Feather';
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 interface RequestItem {
     id: string;
     title: string;
     icon: keyof typeof Feather.glyphMap;
     color: string;
+    count: number;
 }
 
-const defaultRequests: RequestItem[] = [
-    { id: '1', title: 'Leave Approvals', icon: 'check-circle', color: '#12df34ff' },
-    { id: '2', title: 'Miss Punch Approvals', icon: 'clock', color: '#f45742ff' },
-    { id: '3', title: 'Half Day Approvals', icon: 'calendar', color: '#2cb1f4ff' },
-    { id: '4', title: 'Early Check-Out Approvals', icon: 'log-out', color: '#2d58e4ff' },
-    { id: '5', title: 'WFH Approval', icon: 'home', color: '#f45742ff' },
-];
-
-interface PendingRequestsSectionProps {
-    requests?: RequestItem[];
-}
-
-const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({
-    requests = defaultRequests,
-}) => {
+const PendingRequestsSection: React.FC = () => {
     const { colors } = useTheme();
     const styles = createStyles(colors);
+    const [isLoading, setIsLoading] = useState(true);
+    const [totalPending, setTotalPending] = useState(0);
+    const [leaveRequests, setLeaveRequests] = useState(0);
+    const [lateCheckinRequests, setLateCheckinRequests] = useState(0);
+    const [earlyCheckoutRequests, setEarlyCheckoutRequests] = useState(0);
+
+    const fetchPendingRequests = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            const response = await getPunchStatus();
+
+            if (response.data?.pendingRequests) {
+                setTotalPending(response.data.pendingRequests.total || 0);
+                setLeaveRequests(response.data.pendingRequests.leaveRequests || 0);
+                setLateCheckinRequests(response.data.pendingRequests.lateCheckinRequests || 0);
+                setEarlyCheckoutRequests(response.data.pendingRequests.earlyCheckoutRequests || 0);
+                console.log('✅ Pending requests loaded from API');
+            }
+        } catch (error) {
+            console.error('Failed to fetch pending requests:', error);
+            // Keep default values on error
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    // Fetch data on mount and when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchPendingRequests();
+        }, [fetchPendingRequests])
+    );
+
+    const requests: RequestItem[] = [
+        { id: '1', title: 'Leave Requests', icon: 'check-circle', color: '#12df34ff', count: leaveRequests },
+        { id: '2', title: 'Late Check-in Requests', icon: 'clock', color: '#f45742ff', count: lateCheckinRequests },
+        { id: '3', title: 'Early Check-out Requests', icon: 'log-out', color: '#2d58e4ff', count: earlyCheckoutRequests },
+    ];
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.title}>My Pending Requests</Text>
+                {!isLoading && totalPending > 0 && (
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{totalPending}</Text>
+                    </View>
+                )}
             </View>
 
-            <View style={styles.grid}>
-                {requests.map((request) => (
-                    <View key={request.id} style={styles.card}>
-                        <View style={styles.iconContainer}>
-                            <Feather style={styles.icon} name={request.icon} size={24} color={request.color} />
-                        </View>
-                        <View style={styles.cardHeader}>
-                            <Text style={styles.cardTitle}>{request.title}</Text>
-                        </View>
-                    </View>
-                ))}
-            </View>
+            {isLoading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+            ) : totalPending === 0 ? (
+                <View style={styles.emptyContainer}>
+                    <Feather name="check-circle" size={40} color={colors.success} />
+                    <Text style={styles.emptyText}>No pending requests</Text>
+                    <Text style={styles.emptySubtext}>All your requests are up to date!</Text>
+                </View>
+            ) : (
+                <View style={styles.grid}>
+                    {requests.map((request) => (
+                        request.count > 0 && (
+                            <View key={request.id} style={styles.card}>
+                                <View style={styles.iconContainer}>
+                                    <Feather style={styles.icon} name={request.icon} size={24} color={request.color} />
+                                </View>
+                                <View style={styles.cardHeader}>
+                                    <Text style={styles.cardTitle}>{request.title}</Text>
+                                    <Text style={styles.countText}>{request.count} pending</Text>
+                                </View>
+                            </View>
+                        )
+                    ))}
+                </View>
+            )}
         </View>
     );
 };
@@ -71,12 +118,53 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     },
     header: {
         marginBottom: 20,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 10,
     },
     title: {
         fontSize: 20,
         fontWeight: '700',
         color: colors.primary,
+        width: '100%',
         textAlign: 'center',
+
+    },
+    badge: {
+        backgroundColor: colors.error,
+        borderRadius: 12,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        minWidth: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    badgeText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    loadingContainer: {
+        paddingVertical: 20,
+        alignItems: 'center',
+    },
+    emptyContainer: {
+        paddingVertical: 30,
+        alignItems: 'center',
+        gap: 10,
+    },
+    emptyText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: colors.text,
+        marginTop: 10,
+        textAlign: 'center',
+        width: '100%',
+    },
+    emptySubtext: {
+        fontSize: 13,
+        color: colors.textSecondary,
     },
     grid: {
         flexDirection: 'column',
@@ -98,7 +186,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         flex: 1,
         alignItems: 'flex-start',
         justifyContent: 'center',
-        gap: 10,
+        gap: 4,
         padding: 10,
     },
     iconContainer: {
@@ -112,11 +200,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         fontSize: 24,
     },
     cardTitle: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '600',
-        width: '80%',
         color: colors.text,
         textAlign: 'left',
+    },
+    countText: {
+        fontSize: 13,
+        color: colors.textSecondary,
     },
 });
 

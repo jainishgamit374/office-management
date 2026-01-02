@@ -23,20 +23,35 @@ export interface PunchRequest {
 }
 
 export interface PunchResponse {
-    success: boolean;
-    status_code: number;
+    status: string;
+    statusCode: number;
     message: string;
     data: {
-        punch_id: number;
-        punch_type: PunchType;
-        punch_time: string;
-        location: {
-            latitude: number;
-            longitude: number;
+        PunchID: number;
+        PunchType: 1 | 2;
+        PunchTypeName: 'IN' | 'OUT';
+        PunchTime: string; // Formatted time: "2025-12-24 11:49:46 AM"
+        PunchTimeISO: string; // ISO 8601: "2025-12-24T11:49:46Z"
+        Location: {
+            Latitude: string;
+            Longitude: string;
+            Address?: string;
+            Accuracy?: number;
         };
-        is_remote: boolean;
+        IsAway: boolean;
+        IsLate: boolean;
+        LateByMinutes: number;
+        IsEarly: boolean;
+        EarlyByMinutes: number;
+        ExpectedTime: string;
+        ShiftDetails?: {
+            ShiftName: string;
+            StartTime: string;
+            EndTime: string;
+        };
     } | null;
     timestamp: string;
+    requestId?: string;
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -44,35 +59,26 @@ export interface PunchResponse {
 /**
  * Get device information for security tracking
  */
-export const getDeviceInfo = async (): Promise<DeviceInfo> => {
+export const getDeviceInfo = async (): Promise<string> => {
     try {
         const deviceName = Device.deviceName || Device.modelName || 'Unknown Device';
         const osVersion = Platform.OS === 'ios'
             ? `iOS ${Device.osVersion}`
             : `Android ${Device.osVersion}`;
 
-        // Generate a unique device ID (you might want to use a more persistent method)
-        const deviceId = Device.osBuildId || `${Platform.OS}-${Date.now()}`;
-
-        return {
-            device_id: deviceId,
-            device_name: deviceName,
-            os_version: osVersion,
-        };
+        // Format: "Device Name | OS Version"
+        // Example: "Samsung S24 | Android 14"
+        return `${deviceName} | ${osVersion}`;
     } catch (error) {
         console.error('Error getting device info:', error);
-        return {
-            device_id: `${Platform.OS}-unknown`,
-            device_name: 'Unknown Device',
-            os_version: `${Platform.OS} Unknown`,
-        };
+        return `Unknown Device | ${Platform.OS} Unknown`;
     }
 };
 
 /**
  * Request location permissions and get current location
  */
-export const getCurrentLocation = async (): Promise<{ latitude: number; longitude: number } | null> => {
+export const getCurrentLocation = async (): Promise<{ latitude: number; longitude: number; accuracy: number } | null> => {
     try {
         // Request location permissions
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -90,6 +96,7 @@ export const getCurrentLocation = async (): Promise<{ latitude: number; longitud
         return {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
+            accuracy: location.coords.accuracy || 0,
         };
     } catch (error) {
         console.error('Error getting location:', error);
@@ -122,27 +129,36 @@ export const recordPunch = async (
             throw new Error('Unable to get location. Please enable location services.');
         }
 
-        // Get device info if requested
-        let deviceInfo: DeviceInfo | undefined;
-        if (includeDeviceInfo) {
-            deviceInfo = await getDeviceInfo();
-        }
+        // Get device info
+        const deviceInfo = includeDeviceInfo ? await getDeviceInfo() : undefined;
 
         // Prepare request body with correct format for API
-        // PunchType: 0 = Not In/Not Out, 1 = IN, 2 = OUT
+        // PunchType: 1 = IN, 2 = OUT
         // Latitude/Longitude: as strings
-        const requestBody = {
+        const requestBody: any = {
             PunchType: punchType === 'IN' ? 1 : 2,
             Latitude: location.latitude.toString(),
             Longitude: location.longitude.toString(),
             IsAway: isRemote,
         };
 
+        // Add optional fields
+        if (deviceInfo) {
+            requestBody.DeviceInfo = deviceInfo;
+        }
+        if (location.accuracy) {
+            requestBody.Accuracy = location.accuracy;
+        }
+        // IPAddress is optional for mobile apps
+        requestBody.IPAddress = '';
+
         console.log('📤 Full request body:', JSON.stringify(requestBody, null, 2));
         console.log('📤 Punch request:', {
             PunchType: punchType === 'IN' ? 1 : 2,
             IsAway: isRemote,
             location: `${location.latitude}, ${location.longitude}`,
+            accuracy: location.accuracy,
+            deviceInfo,
         });
 
 
@@ -166,19 +182,52 @@ export const recordPunch = async (
         console.log('📊 Response data:', data);
 
         if (!response.ok) {
-            // Extract error message, handling various response formats
+            // Extract error message based on status code
             let errorMessage = `Punch ${punchType} failed`;
 
-            if (typeof data.message === 'string') {
-                errorMessage = data.message;
-            } else if (typeof data.error === 'string') {
-                errorMessage = data.error;
-            } else if (data.message && typeof data.message === 'object') {
-                errorMessage = JSON.stringify(data.message);
-            } else if (data.error && typeof data.error === 'object') {
-                errorMessage = JSON.stringify(data.error);
-            } else if (typeof data === 'string') {
-                errorMessage = data;
+            // Handle specific status codes
+            if (response.status === 400) {
+                // Already punched or invalid request
+                if (data.errors && data.errors.length > 0) {
+                    const error = data.errors[0];
+                    if (error.code === 'ALREADY_PUNCHED') {
+                        errorMessage = error.message || 'Already punched in for today';
+                        if (data.data?.lastPunch) {
+                            errorMessage += `\nLast punch: ${data.data.lastPunch.PunchTime}`;
+                        }
+                    } else {
+                        errorMessage = error.message || data.message;
+                    }
+                } else {
+                    errorMessage = data.message || 'Invalid punch request';
+                }
+            } else if (response.status === 403) {
+                // Location not allowed
+                if (data.errors && data.errors.length > 0) {
+                    const error = data.errors[0];
+                    if (error.code === 'OUT_OF_RANGE') {
+                        errorMessage = error.message || 'You are outside the allowed punch location';
+                        if (data.data?.distanceFromOffice && data.data?.allowedRadius) {
+                            errorMessage += `\n\nDistance: ${data.data.distanceFromOffice}m (Allowed: ${data.data.allowedRadius}m)`;
+                        }
+                    } else {
+                        errorMessage = error.message || data.message;
+                    }
+                } else {
+                    errorMessage = data.message || 'Punch not allowed from this location';
+                }
+            } else if (response.status === 401) {
+                // Unauthorized - token expired
+                errorMessage = 'Your session has expired. Please login again.';
+            } else {
+                // Generic error handling
+                if (typeof data.message === 'string') {
+                    errorMessage = data.message;
+                } else if (typeof data.error === 'string') {
+                    errorMessage = data.error;
+                } else if (data.errors && data.errors.length > 0) {
+                    errorMessage = data.errors[0].message || data.message;
+                }
             }
 
             console.log('Extracted error message:', errorMessage);
@@ -364,6 +413,9 @@ export interface AttendanceRecord {
     punchOut: string;
     workingHours: string;
     status: 'present' | 'absent' | 'weekend' | 'holiday';
+    isLateCheckIn?: boolean;
+    isEarlyCheckOut?: boolean;
+    isLocal?: boolean; // Flag to indicate if record is from local storage
 }
 
 export interface AttendanceHistoryResponse {
@@ -465,10 +517,100 @@ export const getAttendanceHistory = async (
 export interface PunchStatusResponse {
     status: string;
     statusCode: number;
+    message: string;
     data: {
-        PunchType: 0 | 1 | 2;  // 0 = Not In/Out, 1 = IN, 2 = OUT
-        PunchDateTime: string;
+        employee: {
+            EmployeeID: number;
+            FullName: string;
+            Email: string;
+            Department: string;
+            Designation: string;
+            ProfileImage: string | null;
+        };
+        punch: {
+            PunchType: 0 | 1 | 2;  // 0 = Not In/Out, 1 = IN, 2 = OUT
+            PunchTypeName: string;
+            PunchDateTime: string;
+            PunchDateTimeISO: string;
+            WorkingHours?: string;
+            WorkingMinutes?: number;
+            ExpectedCheckout?: string;
+            OvertimeHours?: string;
+            OvertimeMinutes?: number;
+            BreaksTaken?: number;
+            TotalBreakTime?: string;
+        };
+        today: {
+            date: string;
+            dateFormatted: string;
+            dayName: string;
+            isHoliday: boolean;
+            isWeekend: boolean;
+            holidayName: string | null;
+            isOptionalHoliday: boolean;
+            shift: {
+                ShiftID: number;
+                ShiftName: string;
+                StartTime: string;
+                EndTime: string;
+                BreakDuration: string;
+                TotalWorkingHours: string;
+            };
+        };
+        attendance: {
+            thisWeek: {
+                present: number;
+                absent: number;
+                leaves: number;
+                workFromHome: number;
+            };
+            thisMonth: {
+                present: number;
+                absent: number;
+                leaves: number;
+                holidays: number;
+                weekends: number;
+                workFromHome: number;
+                totalWorkingDays: number;
+                attendancePercentage: number;
+            };
+        };
+        lateEarly: {
+            lateCheckins: number;
+            earlyCheckouts: number;
+            allowedLateCheckins: number;
+            remainingLateCheckins: number;
+        };
+        pendingRequests: {
+            total: number;
+            leaveRequests: number;
+            lateCheckinRequests: number;
+            earlyCheckoutRequests: number;
+        };
+        leaveBalance: {
+            [key: string]: {
+                name: string;
+                total: number;
+                used: number;
+                pending: number;
+                available: number;
+            };
+        };
+        upcomingHolidays: Array<{
+            date: string;
+            name: string;
+            isOptional: boolean;
+        }>;
+        announcements: Array<{
+            id: number;
+            title: string;
+            message: string;
+            date: string;
+            priority: string;
+        }>;
     };
+    timestamp: string;
+    requestId?: string;
 }
 
 /**

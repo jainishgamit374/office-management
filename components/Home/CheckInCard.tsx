@@ -1,9 +1,12 @@
 import { useTheme } from '@/contexts/ThemeContext';
 import { getCurrentLocation, getPunchStatus, hasLocationPermission, recordPunch, requestLocationPermission } from '@/lib/attendance';
+import { saveAttendanceRecord } from '@/lib/attendanceStorage';
 import Feather from '@expo/vector-icons/Feather';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Dimensions, PanResponder, Platform, StyleSheet, Text, UIManager, View } from 'react-native';
+import Checkoutdets from './Checkoutdets';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.3; // 30% of container width for easier swiping
@@ -23,7 +26,16 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
   const [hasCheckedOut, setHasCheckedOut] = useState(false);
   const [hasEverCheckedIn, setHasEverCheckedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [punchInTime, setPunchInTime] = useState<string | null>(null);
+  const [punchOutTime, setPunchOutTime] = useState<string | null>(null);
+  const [workingHours, setWorkingHours] = useState<string | null>(null);
+  const [expectedCheckout, setExpectedCheckout] = useState<string | null>(null);
+  const [overtimeHours, setOvertimeHours] = useState<string | null>(null);
+  const [tasksCompleted, setTasksCompleted] = useState<number>(0);
   const pan = useRef(new Animated.Value(0)).current;
+
+  // Animated color value for smooth transitions
+  const colorAnim = useRef(new Animated.Value(0)).current;
 
   // Track current check-in state for pan responder
   const isCheckedInRef = useRef(false);
@@ -46,41 +58,61 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
   // Load punch status function
   const loadPunchStatus = useCallback(async () => {
     try {
-      console.log('📊 Loading punch status from API...');
-      const response = await getPunchStatus();
-      console.log('📊 API Punch status:', response);
-
-      // PunchType: 0 = Not In/Out, 1 = IN, 2 = OUT
-      if (response.data.PunchType === 1) {
-        // User is currently punched IN
-        console.log('✅ User is punched IN');
-        setIsCheckedIn(true);
-        setHasEverCheckedIn(true);
-        setHasCheckedOut(false);
-        // Animate to checked-in position
-        pan.setValue(SCREEN_WIDTH - 115);
-      } else if (response.data.PunchType === 2) {
-        // User has punched OUT for the day
-        console.log('✅ User is punched OUT');
-        setIsCheckedIn(false);
-        setHasCheckedOut(true);
-        setHasEverCheckedIn(true);
-        pan.setValue(0);
-      } else {
-        // Not punched in yet (PunchType === 0)
-        console.log('✅ User not punched in yet');
+      const forceReset = await AsyncStorage.getItem('forceResetMode');
+      if (forceReset === 'true') {
+        await AsyncStorage.removeItem('forceResetMode');
         setIsCheckedIn(false);
         setHasCheckedOut(false);
         setHasEverCheckedIn(false);
+        setPunchInTime(null);
+        setPunchOutTime(null);
+        setWorkingHours(null);
         pan.setValue(0);
+        colorAnim.setValue(0);
+        return;
+      }
+
+      const response = await getPunchStatus();
+      const punchData = response.data?.punch;
+      const punchType = punchData?.PunchType;
+      const punchDateTime = punchData?.PunchDateTime;
+
+      if (punchType === 1) {
+        setIsCheckedIn(true);
+        setHasEverCheckedIn(true);
+        setHasCheckedOut(false);
+        if (punchDateTime) setPunchInTime(punchDateTime);
+        if (punchData?.WorkingHours) setWorkingHours(punchData.WorkingHours);
+        if (punchData?.ExpectedCheckout) setExpectedCheckout(punchData.ExpectedCheckout);
+        if (punchData?.OvertimeHours) setOvertimeHours(punchData.OvertimeHours);
+        pan.setValue(SCREEN_WIDTH - 115);
+        Animated.timing(colorAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start();
+      } else if (punchType === 2) {
+        setIsCheckedIn(false);
+        setHasCheckedOut(true);
+        setHasEverCheckedIn(true);
+        if (punchDateTime) setPunchOutTime(punchDateTime);
+        if (punchData?.WorkingHours) setWorkingHours(punchData.WorkingHours);
+        if (punchData?.OvertimeHours) setOvertimeHours(punchData.OvertimeHours);
+        pan.setValue(0);
+        Animated.timing(colorAnim, { toValue: 2, duration: 800, useNativeDriver: false }).start();
+      } else {
+        setIsCheckedIn(false);
+        setHasCheckedOut(false);
+        setHasEverCheckedIn(false);
+        setPunchInTime(null);
+        setPunchOutTime(null);
+        setWorkingHours(null);
+        pan.setValue(0);
+        colorAnim.setValue(0);
       }
     } catch (error) {
       console.error('❌ Failed to load punch status:', error);
-      // Continue with default state if loading fails
       setIsCheckedIn(false);
       setHasCheckedOut(false);
       setHasEverCheckedIn(false);
       pan.setValue(0);
+      colorAnim.setValue(0);
     }
   }, [pan]);
 
@@ -95,6 +127,68 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
       loadPunchStatus();
     }, [loadPunchStatus])
   );
+
+  // Auto-reset at midnight (12 AM IST)
+  useEffect(() => {
+    const checkAndResetAtMidnight = () => {
+      const now = new Date();
+      const currentDate = now.toISOString().split('T')[0];
+
+      // Get the last reset date from AsyncStorage
+      AsyncStorage.getItem('lastResetDate').then((lastResetDate) => {
+        if (lastResetDate !== currentDate) {
+          // It's a new day - reset everything
+          console.log('🌅 New day detected! Resetting check-in/out state...');
+
+          setIsCheckedIn(false);
+          setHasCheckedOut(false);
+          setHasEverCheckedIn(false);
+          setPunchInTime(null);
+          setPunchOutTime(null);
+          setWorkingHours(null);
+          setExpectedCheckout(null);
+          setOvertimeHours(null);
+          setTasksCompleted(0);
+          pan.setValue(0);
+          colorAnim.setValue(0);
+
+          // Update the last reset date
+          AsyncStorage.setItem('lastResetDate', currentDate);
+          console.log('✅ State reset complete for new day:', currentDate);
+        }
+      });
+    };
+
+    // Calculate milliseconds until next midnight
+    const getMillisecondsUntilMidnight = () => {
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      return tomorrow.getTime() - now.getTime();
+    };
+
+    // Check immediately on mount
+    checkAndResetAtMidnight();
+
+    // Set up interval to check every minute
+    const intervalId = setInterval(checkAndResetAtMidnight, 60000); // Check every minute
+
+    // Also set a timeout for exactly midnight
+    const msUntilMidnight = getMillisecondsUntilMidnight();
+    const midnightTimeout = setTimeout(() => {
+      checkAndResetAtMidnight();
+      // After midnight reset, set up daily interval
+      const dailyInterval = setInterval(checkAndResetAtMidnight, 24 * 60 * 60 * 1000);
+      return () => clearInterval(dailyInterval);
+    }, msUntilMidnight);
+
+    // Cleanup
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(midnightTimeout);
+    };
+  }, [pan, colorAnim]);
 
   // Function to handle punch in API call
   const handlePunchIn = async () => {
@@ -137,15 +231,37 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
 
       // Record punch IN via API
       console.log('📝 Recording Punch IN via API...');
-      await recordPunch('IN', false, true);
-      // Success log is already in recordPunch function
+      const punchResponse = await recordPunch('IN', false, true);
 
-      Alert.alert(
-        'Checked In Successfully! ✅',
-        'Your attendance has been recorded.',
-        [{ text: 'OK' }]
-      );
+      // Save to local storage
+      const now = new Date();
+      const timestamp = now.toISOString();
+      const dateStr = now.toISOString().split('T')[0];
+      setPunchInTime(timestamp);
 
+      try {
+        await saveAttendanceRecord(dateStr, 'IN', timestamp, location);
+        console.log('✅ Punch IN saved to local storage');
+      } catch (storageError) {
+        console.error('⚠️ Failed to save punch IN locally:', storageError);
+      }
+
+      // Check if late
+      if (punchResponse.data?.IsLate && punchResponse.data?.LateByMinutes > 0) {
+        Alert.alert(
+          'Checked In (Late) ⚠️',
+          `You are ${punchResponse.data.LateByMinutes} minute${punchResponse.data.LateByMinutes > 1 ? 's' : ''} late.`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Checked In Successfully! ✅',
+          'Your attendance has been recorded.',
+          [{ text: 'OK' }]
+        );
+      }
+
+      Animated.timing(colorAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start();
       return true;
     } catch (error: any) {
       console.error('❌ Punch IN error:', error);
@@ -216,17 +332,48 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
         throw new Error('Unable to get location. Please enable location services.');
       }
 
-      // Save punch OUT locally
-      console.log('� Saving Punch OUT locally...');
-      await recordPunch('OUT', false, true);
+      // Record punch OUT via API
+      console.log('💾 Recording Punch OUT via API...');
+      const punchResponse = await recordPunch('OUT', false, true);
       console.log('✅ Punch OUT recorded via API successfully');
 
-      Alert.alert(
-        'Checked Out Successfully! 🏁',
-        'Your attendance has been recorded.',
-        [{ text: 'OK' }]
-      );
+      // Save to local storage
+      const now = new Date();
+      const timestamp = now.toISOString();
+      const dateStr = now.toISOString().split('T')[0];
+      setPunchOutTime(timestamp);
 
+      try {
+        await saveAttendanceRecord(dateStr, 'OUT', timestamp, location);
+        console.log('✅ Punch OUT saved to local storage');
+      } catch (storageError) {
+        console.error('⚠️ Failed to save punch OUT locally:', storageError);
+      }
+
+      // Store working hours from response
+      if (punchResponse.data?.WorkingHours) {
+        setWorkingHours(punchResponse.data.WorkingHours);
+      }
+      if (punchResponse.data?.OvertimeHours) {
+        setOvertimeHours(punchResponse.data.OvertimeHours);
+      }
+
+      // Check if early
+      if (punchResponse.data?.IsEarly && punchResponse.data?.EarlyByMinutes > 0) {
+        Alert.alert(
+          'Checked Out (Early) ⚠️',
+          `You are leaving ${punchResponse.data.EarlyByMinutes} minute${punchResponse.data.EarlyByMinutes > 1 ? 's' : ''} early.`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Checked Out Successfully! 🏁',
+          'Your attendance has been recorded.',
+          [{ text: 'OK' }]
+        );
+      }
+
+      Animated.timing(colorAnim, { toValue: 2, duration: 800, useNativeDriver: false }).start();
       return true;
     } catch (error: any) {
       console.error('❌ Punch OUT error:', error);
@@ -357,15 +504,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
     return 'Swipe Right to Check-In';
   };
 
-  // Function to get button background color
+  // Function to get button background color with animation
   const getButtonColor = () => {
-    if (hasCheckedOut) {
-      return '#999'; // Gray when disabled
-    }
-    if (isCheckedIn) {
-      return '#ffe23dff'; // Yellow when checked in
-    }
-    return '#1472d6ff'; // Blue when not checked in
+    return colorAnim.interpolate({
+      inputRange: [0, 1, 2],
+      outputRange: ['#1472d6ff', '#ffe23dff', '#999'],
+    });
   };
 
   // Function to get button icon
@@ -424,12 +568,15 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
         </Animated.View>
       </View>
 
-      {/* Status indicator when checked out */}
+      {/* Checkout Summary - Using Checkoutdets Component */}
       {hasCheckedOut && (
-        <View style={[styles.checkedOutStatus, { backgroundColor: theme === 'dark' ? '#1B3A2A' : '#e8f5e9' }]}>
-          <Feather name="check-circle" size={24} color="#12df34ff" />
-          <Text style={[styles.checkedOutText, { color: theme === 'dark' ? '#66BB6A' : '#2e7d32' }]}>You have completed your check-in/check-out for today</Text>
-        </View>
+        <Checkoutdets
+          punchInTime={punchInTime}
+          punchOutTime={punchOutTime}
+          workingHours={workingHours}
+          overtimeHours={overtimeHours}
+          tasksCompleted={tasksCompleted}
+        />
       )}
     </View>
   );
@@ -508,6 +655,66 @@ const styles = StyleSheet.create({
     color: '#2e7d32',
     fontWeight: '500',
     flex: 1,
+  },
+  // Summary Card
+  summaryCard: {
+    marginTop: 15,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  summaryTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  summaryContent: {
+    padding: 20,
+    gap: 16,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  summaryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryInfo: {
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  summaryValue: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  summaryFooter: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  summaryFooterText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

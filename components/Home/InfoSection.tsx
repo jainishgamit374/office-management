@@ -37,31 +37,23 @@ const InfoSection: React.FC<InfoSectionProps> = ({
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
-        marginHorizontal: 20,
-        marginTop: 10,
-        borderRadius: 15,
-        paddingHorizontal: 12,
-        paddingVertical: 20,
+        marginHorizontal: 16,
+        marginTop: 12,
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 16,
         borderWidth: 1,
         backgroundColor: colors.card,
         borderColor: colors.border,
-        shadowColor: colors.shadow,
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 4,
     },
     header: {
-        marginBottom: 20,
+        marginBottom: 12,
     },
     title: {
-        fontSize: 20,
-        fontWeight: '700',
+        fontSize: 16,
+        fontWeight: '600',
         color: colors.primary,
-        textAlign: 'center',
+        textAlign: 'left',
     },
     grid: {
         flexDirection: 'column',

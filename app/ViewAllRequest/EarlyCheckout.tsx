@@ -1,5 +1,7 @@
+import { getEarlyLatePunchList, type EarlyLatePunchDetails } from '@/lib/earlyLatePunch';
 import Feather from '@expo/vector-icons/Feather';
-import React, { useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import {
     Alert,
     FlatList,
@@ -13,106 +15,46 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Types
-type RequestType = 'Early Check-Out' | 'Late Check-In';
-type RequestStatus = 'Pending' | 'Approved' | 'Rejected';
-
-interface Request {
-    id: string;
-    employeeName: string;
-    employeeId: string;
-    type: RequestType;
-    date: string;
-    time: string;
-    reason: string;
-    status: RequestStatus;
-    submittedOn: string;
-}
-
-// Mock request data
-const requestsData: Request[] = [
-    {
-        id: '1',
-        employeeName: 'John Doe',
-        employeeId: 'EMP001',
-        type: 'Early Check-Out',
-        date: '2025-12-18',
-        time: '17:30',
-        reason: 'Doctor appointment scheduled at 6:00 PM',
-        status: 'Pending',
-        submittedOn: '2025-12-17',
-    },
-    {
-        id: '2',
-        employeeName: 'Jane Smith',
-        employeeId: 'EMP002',
-        type: 'Late Check-In',
-        date: '2025-12-19',
-        time: '10:30',
-        reason: 'Car breakdown on the way to office',
-        status: 'Approved',
-        submittedOn: '2025-12-17',
-    },
-    {
-        id: '3',
-        employeeName: 'Mike Johnson',
-        employeeId: 'EMP003',
-        type: 'Early Check-Out',
-        date: '2025-12-18',
-        time: '16:00',
-        reason: 'Family emergency - need to pick up kids from school',
-        status: 'Approved',
-        submittedOn: '2025-12-16',
-    },
-    {
-        id: '4',
-        employeeName: 'Sarah Williams',
-        employeeId: 'EMP004',
-        type: 'Late Check-In',
-        date: '2025-12-18',
-        time: '11:00',
-        reason: 'Medical test scheduled in the morning',
-        status: 'Pending',
-        submittedOn: '2025-12-17',
-    },
-    {
-        id: '5',
-        employeeName: 'David Brown',
-        employeeId: 'EMP005',
-        type: 'Early Check-Out',
-        date: '2025-12-20',
-        time: '15:30',
-        reason: 'Personal work - bank visit',
-        status: 'Rejected',
-        submittedOn: '2025-12-17',
-    },
-    {
-        id: '6',
-        employeeName: 'Emily Davis',
-        employeeId: 'EMP006',
-        type: 'Late Check-In',
-        date: '2025-12-19',
-        time: '09:45',
-        reason: 'Flight delay from business trip',
-        status: 'Approved',
-        submittedOn: '2025-12-16',
-    },
-];
-
-type FilterType = 'all' | 'earlyCheckout' | 'lateCheckin';
+type FilterType = 'All' | 'Early' | 'Late';
+type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Rejected';
 
 const EarlyCheckoutt = () => {
-    const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
-    const [requests, setRequests] = useState<Request[]>(requestsData);
+    const [selectedFilter, setSelectedFilter] = useState<FilterType>('All');
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+    const [requests, setRequests] = useState<EarlyLatePunchDetails[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // Filter requests based on selected filter
-    const filteredRequests = requests.filter((request) => {
-        if (selectedFilter === 'all') return true;
-        if (selectedFilter === 'earlyCheckout') return request.type === 'Early Check-Out';
-        if (selectedFilter === 'lateCheckin') return request.type === 'Late Check-In';
-        return true;
-    });
+    // Fetch requests from API
+    const fetchRequests = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
+            const response = await getEarlyLatePunchList({
+                checkoutType: selectedFilter,
+                status: statusFilter,
+                sortBy: 'CreatedDate',
+                sortOrder: 'desc',
+            });
+            setRequests(response.data);
+            console.log('✅ Fetched', response.data.length, 'requests');
+        } catch (err: any) {
+            console.error('Failed to fetch requests:', err);
+            setError(err.message || 'Failed to load requests');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [selectedFilter, statusFilter]);
+
+    // Fetch data on mount and when filters change
+    useFocusEffect(
+        useCallback(() => {
+            fetchRequests();
+        }, [fetchRequests])
+    );
 
     const formatDate = (dateString: string) => {
+        // Handle both "2025-01-10 04:00:00 PM" and ISO format
         const date = new Date(dateString);
         return date.toLocaleDateString('en-US', {
             day: '2-digit',
@@ -121,15 +63,13 @@ const EarlyCheckoutt = () => {
         });
     };
 
-    const formatTime = (timeString: string) => {
-        const [hours, minutes] = timeString.split(':');
-        const hour = parseInt(hours);
-        const ampm = hour >= 12 ? 'PM' : 'AM';
-        const displayHour = hour % 12 || 12;
-        return `${displayHour}:${minutes} ${ampm}`;
+    const formatTime = (dateTimeString: string) => {
+        // Extract time from "2025-01-10 04:00:00 PM" format
+        const timePart = dateTimeString.split(' ').slice(1).join(' ');
+        return timePart || dateTimeString;
     };
 
-    const getStatusColor = (status: RequestStatus) => {
+    const getStatusColor = (status: string) => {
         switch (status) {
             case 'Pending':
                 return '#FF9800';
@@ -142,7 +82,7 @@ const EarlyCheckoutt = () => {
         }
     };
 
-    const getStatusBgColor = (status: RequestStatus) => {
+    const getStatusBgColor = (status: string) => {
         switch (status) {
             case 'Pending':
                 return '#FFF3E0';
@@ -155,15 +95,19 @@ const EarlyCheckoutt = () => {
         }
     };
 
-    const getRequestTypeColor = (type: RequestType) => {
-        return type === 'Early Check-Out' ? '#FF9800' : '#4A90FF';
+    const getRequestTypeColor = (type: string) => {
+        return type === 'Early' ? '#FF9800' : '#4A90FF';
     };
 
-    const getRequestTypeIcon = (type: RequestType) => {
-        return type === 'Early Check-Out' ? 'log-out' : 'log-in';
+    const getRequestTypeIcon = (type: string) => {
+        return type === 'Early' ? 'log-out' : 'log-in';
     };
 
-    const handleApprove = (requestId: string) => {
+    const getRequestTypeLabel = (type: string) => {
+        return type === 'Early' ? 'Early Check-Out' : 'Late Check-In';
+    };
+
+    const handleApprove = (requestId: number) => {
         Alert.alert(
             'Approve Request',
             'Are you sure you want to approve this request?',
@@ -172,19 +116,16 @@ const EarlyCheckoutt = () => {
                 {
                     text: 'Approve',
                     onPress: () => {
-                        setRequests((prev) =>
-                            prev.map((req) =>
-                                req.id === requestId ? { ...req, status: 'Approved' } : req
-                            )
-                        );
+                        // TODO: Call API to approve request
                         Alert.alert('Success', 'Request approved successfully!');
+                        fetchRequests(); // Refresh list
                     },
                 },
             ]
         );
     };
 
-    const handleReject = (requestId: string) => {
+    const handleReject = (requestId: number) => {
         Alert.alert(
             'Reject Request',
             'Are you sure you want to reject this request?',
@@ -194,19 +135,16 @@ const EarlyCheckoutt = () => {
                     text: 'Reject',
                     style: 'destructive',
                     onPress: () => {
-                        setRequests((prev) =>
-                            prev.map((req) =>
-                                req.id === requestId ? { ...req, status: 'Rejected' } : req
-                            )
-                        );
+                        // TODO: Call API to reject request
                         Alert.alert('Success', 'Request rejected successfully!');
+                        fetchRequests(); // Refresh list
                     },
                 },
             ]
         );
     };
 
-    const renderRequestItem = ({ item }: { item: Request }) => (
+    const renderRequestItem = ({ item }: { item: EarlyLatePunchDetails }) => (
         <View style={styles.requestCard}>
             {/* Header Section */}
             <View style={styles.requestHeader}>
@@ -214,26 +152,26 @@ const EarlyCheckoutt = () => {
                     <View
                         style={[
                             styles.avatarContainer,
-                            { backgroundColor: `${getRequestTypeColor(item.type)}20` },
+                            { backgroundColor: `${getRequestTypeColor(item.CheckoutType)}20` },
                         ]}
                     >
-                        <Text style={[styles.avatarText, { color: getRequestTypeColor(item.type) }]}>
-                            {item.employeeName.split(' ').map((n) => n[0]).join('')}
+                        <Text style={[styles.avatarText, { color: getRequestTypeColor(item.CheckoutType) }]}>
+                            {item.EmployeeName.split(' ').map((n) => n[0]).join('')}
                         </Text>
                     </View>
                     <View style={styles.employeeDetails}>
-                        <Text style={styles.employeeName}>{item.employeeName}</Text>
-                        <Text style={styles.employeeId}>{item.employeeId}</Text>
+                        <Text style={styles.employeeName}>{item.EmployeeName}</Text>
+                        <Text style={styles.employeeId}>{item.EmployeeEmail}</Text>
                     </View>
                 </View>
                 <View
                     style={[
                         styles.statusBadge,
-                        { backgroundColor: getStatusBgColor(item.status) },
+                        { backgroundColor: getStatusBgColor(item.ApprovalStatus) },
                     ]}
                 >
-                    <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                        {item.status}
+                    <Text style={[styles.statusText, { color: getStatusColor(item.ApprovalStatus) }]}>
+                        {item.ApprovalStatus}
                     </Text>
                 </View>
             </View>
@@ -242,16 +180,16 @@ const EarlyCheckoutt = () => {
             <View
                 style={[
                     styles.requestTypeBadge,
-                    { backgroundColor: `${getRequestTypeColor(item.type)}15` },
+                    { backgroundColor: `${getRequestTypeColor(item.CheckoutType)}15` },
                 ]}
             >
                 <Feather
-                    name={getRequestTypeIcon(item.type) as any}
+                    name={getRequestTypeIcon(item.CheckoutType) as any}
                     size={16}
-                    color={getRequestTypeColor(item.type)}
+                    color={getRequestTypeColor(item.CheckoutType)}
                 />
-                <Text style={[styles.requestTypeText, { color: getRequestTypeColor(item.type) }]}>
-                    {item.type}
+                <Text style={[styles.requestTypeText, { color: getRequestTypeColor(item.CheckoutType) }]}>
+                    {getRequestTypeLabel(item.CheckoutType)}
                 </Text>
             </View>
 
@@ -260,35 +198,35 @@ const EarlyCheckoutt = () => {
                 <View style={styles.infoItem}>
                     <Feather name="calendar" size={16} color="#666" />
                     <Text style={styles.infoLabel}>Date:</Text>
-                    <Text style={styles.infoValue}>{formatDate(item.date)}</Text>
+                    <Text style={styles.infoValue}>{formatDate(item.DateTimeISO)}</Text>
                 </View>
                 <View style={styles.infoItem}>
                     <Feather name="clock" size={16} color="#666" />
                     <Text style={styles.infoLabel}>Time:</Text>
-                    <Text style={styles.infoValue}>{formatTime(item.time)}</Text>
+                    <Text style={styles.infoValue}>{formatTime(item.DateTime)}</Text>
                 </View>
             </View>
 
             {/* Reason */}
             <View style={styles.reasonContainer}>
                 <Text style={styles.reasonLabel}>Reason:</Text>
-                <Text style={styles.reasonText}>{item.reason}</Text>
+                <Text style={styles.reasonText}>{item.Reason}</Text>
             </View>
 
             {/* Submitted Info */}
             <View style={styles.submittedInfo}>
                 <Feather name="send" size={12} color="#999" />
                 <Text style={styles.submittedText}>
-                    Submitted on {formatDate(item.submittedOn)}
+                    Submitted on {formatDate(item.CreatedDateISO)}
                 </Text>
             </View>
 
-            {/* Action Buttons (only for pending requests) */}
-            {item.status === 'Pending' && (
+            {/* Action Buttons (only for pending requests and if user can edit) */}
+            {item.ApprovalStatus === 'Pending' && item.CanEdit && (
                 <View style={styles.actionButtons}>
                     <TouchableOpacity
                         style={[styles.actionButton, styles.approveButton]}
-                        onPress={() => handleApprove(item.id)}
+                        onPress={() => handleApprove(item.EarlyLatePunchMasterID)}
                         activeOpacity={0.7}
                     >
                         <Feather name="check-circle" size={18} color="#FFF" />
@@ -296,7 +234,7 @@ const EarlyCheckoutt = () => {
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={[styles.actionButton, styles.rejectButton]}
-                        onPress={() => handleReject(item.id)}
+                        onPress={() => handleReject(item.EarlyLatePunchMasterID)}
                         activeOpacity={0.7}
                     >
                         <Feather name="x-circle" size={18} color="#FFF" />
@@ -320,14 +258,14 @@ const EarlyCheckoutt = () => {
                         <Pressable
                             style={[
                                 styles.filterChip,
-                                selectedFilter === 'all' && styles.filterChipActive,
+                                selectedFilter === 'All' && styles.filterChipActive,
                             ]}
-                            onPress={() => setSelectedFilter('all')}
+                            onPress={() => setSelectedFilter('All')}
                         >
                             <Text
                                 style={[
                                     styles.filterChipText,
-                                    selectedFilter === 'all' && styles.filterChipTextActive,
+                                    selectedFilter === 'All' && styles.filterChipTextActive,
                                 ]}
                             >
                                 All Requests
@@ -337,21 +275,21 @@ const EarlyCheckoutt = () => {
                         <Pressable
                             style={[
                                 styles.filterChip,
-                                selectedFilter === 'earlyCheckout' && styles.filterChipActive,
-                                selectedFilter === 'earlyCheckout' && { backgroundColor: '#FF9800', borderColor: '#FF9800' },
+                                selectedFilter === 'Early' && styles.filterChipActive,
+                                selectedFilter === 'Early' && { backgroundColor: '#FF9800', borderColor: '#FF9800' },
                             ]}
-                            onPress={() => setSelectedFilter('earlyCheckout')}
+                            onPress={() => setSelectedFilter('Early')}
                         >
                             <Feather
                                 name="log-out"
                                 size={14}
-                                color={selectedFilter === 'earlyCheckout' ? '#FFF' : '#666'}
+                                color={selectedFilter === 'Early' ? '#FFF' : '#666'}
                                 style={{ marginRight: 4 }}
                             />
                             <Text
                                 style={[
                                     styles.filterChipText,
-                                    selectedFilter === 'earlyCheckout' && styles.filterChipTextActive,
+                                    selectedFilter === 'Early' && styles.filterChipTextActive,
                                 ]}
                             >
                                 Early Check-Out
@@ -361,20 +299,20 @@ const EarlyCheckoutt = () => {
                         <Pressable
                             style={[
                                 styles.filterChip,
-                                selectedFilter === 'lateCheckin' && styles.filterChipActive,
+                                selectedFilter === 'Late' && styles.filterChipActive,
                             ]}
-                            onPress={() => setSelectedFilter('lateCheckin')}
+                            onPress={() => setSelectedFilter('Late')}
                         >
                             <Feather
                                 name="log-in"
                                 size={14}
-                                color={selectedFilter === 'lateCheckin' ? '#FFF' : '#666'}
+                                color={selectedFilter === 'Late' ? '#FFF' : '#666'}
                                 style={{ marginRight: 4 }}
                             />
                             <Text
                                 style={[
                                     styles.filterChipText,
-                                    selectedFilter === 'lateCheckin' && styles.filterChipTextActive,
+                                    selectedFilter === 'Late' && styles.filterChipTextActive,
                                 ]}
                             >
                                 Late Check-In
@@ -387,14 +325,32 @@ const EarlyCheckoutt = () => {
                 <View style={styles.requestsContainer}>
                     <View style={styles.requestsHeader}>
                         <Text style={styles.sectionTitle}>Requests</Text>
-                        <Text style={styles.recordCount}>{filteredRequests.length} records</Text>
+                        <Text style={styles.recordCount}>{requests.length} records</Text>
                     </View>
 
-                    {filteredRequests.length > 0 ? (
+                    {isLoading ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color="#4A90FF" />
+                            <Text style={styles.loadingText}>Loading requests...</Text>
+                        </View>
+                    ) : error ? (
+                        <View style={styles.emptyState}>
+                            <Feather name="alert-circle" size={48} color="#FF5252" />
+                            <Text style={styles.emptyStateText}>Error loading requests</Text>
+                            <Text style={styles.emptyStateSubtext}>{error}</Text>
+                            <TouchableOpacity
+                                style={styles.retryButton}
+                                onPress={fetchRequests}
+                            >
+                                <Feather name="refresh-cw" size={16} color="#4A90FF" />
+                                <Text style={styles.retryButtonText}>Retry</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : requests.length > 0 ? (
                         <FlatList
-                            data={filteredRequests}
+                            data={requests}
                             renderItem={renderRequestItem}
-                            keyExtractor={(item) => item.id}
+                            keyExtractor={(item) => item.EarlyLatePunchMasterID.toString()}
                             scrollEnabled={false}
                             contentContainerStyle={styles.listContent}
                             ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
@@ -404,7 +360,7 @@ const EarlyCheckoutt = () => {
                             <Feather name="inbox" size={48} color="#CCC" />
                             <Text style={styles.emptyStateText}>No requests found</Text>
                             <Text style={styles.emptyStateSubtext}>
-                                There are no {selectedFilter === 'all' ? '' : selectedFilter === 'earlyCheckout' ? 'early check-out' : 'late check-in'} requests at the moment
+                                There are no {selectedFilter === 'All' ? '' : selectedFilter === 'Early' ? 'early check-out' : 'late check-in'} requests at the moment
                             </Text>
                         </View>
                     )}
@@ -695,6 +651,37 @@ const styles = StyleSheet.create({
         paddingHorizontal: 40,
         lineHeight: 22,
         fontWeight: '500',
+    },
+
+    // Loading
+    loadingContainer: {
+        alignItems: 'center',
+        paddingVertical: 60,
+        gap: 14,
+    },
+    loadingText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#999',
+    },
+
+    // Retry Button
+    retryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 16,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        backgroundColor: '#E3F2FD',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#4A90FF',
+    },
+    retryButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#4A90FF',
     },
 });
 

@@ -1,5 +1,7 @@
+import { getLeaveApplicationsList, LeaveApplicationDetails } from '@/lib/leaves';
 import Feather from '@expo/vector-icons/Feather';
-import React, { useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import {
     Alert,
     FlatList,
@@ -7,119 +9,65 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Types
-type LeaveType = 'Casual Leave' | 'Sick Leave' | 'Privilege Leave' | 'Leave Without Pay';
-type RequestStatus = 'Pending' | 'Approved' | 'Rejected';
-
-interface LeaveRequest {
-    id: string;
-    employeeName: string;
-    employeeId: string;
-    leaveType: LeaveType;
-    startDate: string;
-    endDate: string;
-    days: number;
-    reason: string;
-    status: RequestStatus;
-    submittedOn: string;
-}
-
-// Mock leave request data
-const leaveRequestsData: LeaveRequest[] = [
-    {
-        id: '1',
-        employeeName: 'John Doe',
-        employeeId: 'EMP001',
-        leaveType: 'Sick Leave',
-        startDate: '2025-12-20',
-        endDate: '2025-12-22',
-        days: 3,
-        reason: 'Suffering from viral fever and need rest',
-        status: 'Pending',
-        submittedOn: '2025-12-18',
-    },
-    {
-        id: '2',
-        employeeName: 'Jane Smith',
-        employeeId: 'EMP002',
-        leaveType: 'Casual Leave',
-        startDate: '2025-12-25',
-        endDate: '2025-12-27',
-        days: 3,
-        reason: 'Family function - cousin\'s wedding',
-        status: 'Approved',
-        submittedOn: '2025-12-17',
-    },
-    {
-        id: '3',
-        employeeName: 'Mike Johnson',
-        employeeId: 'EMP003',
-        leaveType: 'Privilege Leave',
-        startDate: '2025-12-23',
-        endDate: '2025-12-30',
-        days: 8,
-        reason: 'Planned vacation with family to Goa',
-        status: 'Approved',
-        submittedOn: '2025-12-15',
-    },
-    {
-        id: '4',
-        employeeName: 'Sarah Williams',
-        employeeId: 'EMP004',
-        leaveType: 'Sick Leave',
-        startDate: '2025-12-19',
-        endDate: '2025-12-19',
-        days: 1,
-        reason: 'Doctor appointment for regular checkup',
-        status: 'Pending',
-        submittedOn: '2025-12-18',
-    },
-    {
-        id: '5',
-        employeeName: 'David Brown',
-        employeeId: 'EMP005',
-        leaveType: 'Leave Without Pay',
-        startDate: '2025-12-28',
-        endDate: '2026-01-05',
-        days: 9,
-        reason: 'Personal work - house renovation',
-        status: 'Rejected',
-        submittedOn: '2025-12-16',
-    },
-    {
-        id: '6',
-        employeeName: 'Emily Davis',
-        employeeId: 'EMP006',
-        leaveType: 'Casual Leave',
-        startDate: '2025-12-21',
-        endDate: '2025-12-21',
-        days: 1,
-        reason: 'Attending parent-teacher meeting at school',
-        status: 'Approved',
-        submittedOn: '2025-12-17',
-    },
-];
-
-type FilterType = 'all' | 'casualLeave' | 'sickLeave' | 'privilegeLeave' | 'lwp';
+type FilterType = 'All' | 'CL' | 'SL' | 'PL';
+type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
 
 const LeaveApplication = () => {
-    const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
-    const [requests, setRequests] = useState<LeaveRequest[]>(leaveRequestsData);
+    const [selectedFilter, setSelectedFilter] = useState<FilterType>('All');
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+    const [applications, setApplications] = useState<LeaveApplicationDetails[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalRecords, setTotalRecords] = useState(0);
 
-    // Filter requests based on selected filter
-    const filteredRequests = requests.filter((request) => {
-        if (selectedFilter === 'all') return true;
-        if (selectedFilter === 'casualLeave') return request.leaveType === 'Casual Leave';
-        if (selectedFilter === 'sickLeave') return request.leaveType === 'Sick Leave';
-        if (selectedFilter === 'privilegeLeave') return request.leaveType === 'Privilege Leave';
-        if (selectedFilter === 'lwp') return request.leaveType === 'Leave Without Pay';
-        return true;
-    });
+    // Fetch leave applications from API
+    const fetchLeaveApplications = useCallback(async (refresh: boolean = false) => {
+        try {
+            if (refresh) {
+                setIsRefreshing(true);
+            } else {
+                setIsLoading(true);
+            }
+
+            const response = await getLeaveApplicationsList({
+                page: currentPage,
+                limit: 50,
+                leaveType: selectedFilter,
+                status: statusFilter,
+                sortBy: 'CreatedDate',
+                sortOrder: 'desc',
+            });
+
+            setApplications(response.data);
+            if (response.pagination) {
+                setTotalRecords(response.pagination.totalRecords);
+            }
+
+            console.log('✅ Leave applications loaded:', response.data.length);
+        } catch (error: any) {
+            console.error('Failed to fetch leave applications:', error);
+            Alert.alert('Error', error.message || 'Failed to load leave applications');
+        } finally {
+            setIsLoading(false);
+            setIsRefreshing(false);
+        }
+    }, [selectedFilter, statusFilter, currentPage]);
+
+    // Fetch data on mount and when filters change
+    useFocusEffect(
+        useCallback(() => {
+            fetchLeaveApplications();
+        }, [fetchLeaveApplications])
+    );
+
+    // Filtered applications (client-side filtering as backup)
+    const filteredRequests = applications;
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -130,121 +78,53 @@ const LeaveApplication = () => {
         });
     };
 
-    const getStatusColor = (status: RequestStatus) => {
+    const getStatusColor = (status: string) => {
         switch (status) {
             case 'Pending':
+            case 'Awaiting Approve':
                 return '#FF9800';
             case 'Approved':
                 return '#4CAF50';
             case 'Rejected':
                 return '#FF5252';
+            case 'Cancelled':
+                return '#999';
             default:
                 return '#666';
         }
     };
 
-    const getStatusBgColor = (status: RequestStatus) => {
+    const getStatusBgColor = (status: string) => {
         switch (status) {
             case 'Pending':
+            case 'Awaiting Approve':
                 return '#FFF3E0';
             case 'Approved':
                 return '#E8F5E9';
             case 'Rejected':
                 return '#FFEBEE';
+            case 'Cancelled':
+                return '#F5F5F5';
             default:
                 return '#F0F0F0';
         }
     };
 
-    const getLeaveTypeColor = (type: LeaveType) => {
-        switch (type) {
-            case 'Casual Leave':
-                return '#4A90FF';
-            case 'Sick Leave':
-                return '#FF9800';
-            case 'Privilege Leave':
-                return '#9C27B0';
-            case 'Leave Without Pay':
-                return '#F44336';
-            default:
-                return '#666';
-        }
+    const getLeaveTypeColor = (type: string) => {
+        if (type.includes('Casual')) return '#4A90FF';
+        if (type.includes('Sick')) return '#FF9800';
+        if (type.includes('Privilege')) return '#9C27B0';
+        return '#666';
     };
 
-    const getLeaveTypeIcon = (type: LeaveType) => {
-        switch (type) {
-            case 'Casual Leave':
-                return 'coffee';
-            case 'Sick Leave':
-                return 'activity';
-            case 'Privilege Leave':
-                return 'sun';
-            case 'Leave Without Pay':
-                return 'alert-circle';
-            default:
-                return 'calendar';
-        }
+    const getLeaveTypeIcon = (type: string) => {
+        if (type.includes('Casual')) return 'coffee';
+        if (type.includes('Sick')) return 'activity';
+        if (type.includes('Privilege')) return 'sun';
+        return 'calendar';
     };
 
-    const getLeaveTypeShort = (type: LeaveType) => {
-        switch (type) {
-            case 'Casual Leave':
-                return 'CL';
-            case 'Sick Leave':
-                return 'SL';
-            case 'Privilege Leave':
-                return 'PL';
-            case 'Leave Without Pay':
-                return 'LWP';
-            default:
-                return '';
-        }
-    };
-
-    const handleApprove = (requestId: string) => {
-        Alert.alert(
-            'Approve Leave Request',
-            'Are you sure you want to approve this leave request?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Approve',
-                    onPress: () => {
-                        setRequests((prev) =>
-                            prev.map((req) =>
-                                req.id === requestId ? { ...req, status: 'Approved' } : req
-                            )
-                        );
-                        Alert.alert('Success', 'Leave request approved successfully!');
-                    },
-                },
-            ]
-        );
-    };
-
-    const handleReject = (requestId: string) => {
-        Alert.alert(
-            'Reject Leave Request',
-            'Are you sure you want to reject this leave request?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Reject',
-                    style: 'destructive',
-                    onPress: () => {
-                        setRequests((prev) =>
-                            prev.map((req) =>
-                                req.id === requestId ? { ...req, status: 'Rejected' } : req
-                            )
-                        );
-                        Alert.alert('Success', 'Leave request rejected successfully!');
-                    },
-                },
-            ]
-        );
-    };
-
-    const renderLeaveRequestItem = ({ item }: { item: LeaveRequest }) => (
+    const renderLeaveRequestItem = ({ item }: { item: LeaveApplicationDetails }) => (
         <View style={styles.requestCard}>
             {/* Header Section */}
             <View style={styles.requestHeader}>
@@ -252,26 +132,26 @@ const LeaveApplication = () => {
                     <View
                         style={[
                             styles.avatarContainer,
-                            { backgroundColor: `${getLeaveTypeColor(item.leaveType)}20` },
+                            { backgroundColor: `${getLeaveTypeColor(item.LeaveType)}20` },
                         ]}
                     >
-                        <Text style={[styles.avatarText, { color: getLeaveTypeColor(item.leaveType) }]}>
-                            {getLeaveTypeShort(item.leaveType)}
+                        <Text style={[styles.avatarText, { color: getLeaveTypeColor(item.LeaveType) }]}>
+                            {item.LeaveTypeCode}
                         </Text>
                     </View>
                     <View style={styles.employeeDetails}>
-                        <Text style={styles.employeeName}>{item.employeeName}</Text>
-                        <Text style={styles.employeeId}>{item.employeeId}</Text>
+                        <Text style={styles.employeeName}>{item.EmployeeName}</Text>
+                        <Text style={styles.employeeId}>{item.Department} • {item.Designation}</Text>
                     </View>
                 </View>
                 <View
                     style={[
                         styles.statusBadge,
-                        { backgroundColor: getStatusBgColor(item.status) },
+                        { backgroundColor: getStatusBgColor(item.ApprovalStatus) },
                     ]}
                 >
-                    <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                        {item.status}
+                    <Text style={[styles.statusText, { color: getStatusColor(item.ApprovalStatus) }]}>
+                        {item.ApprovalStatus}
                     </Text>
                 </View>
             </View>
@@ -280,16 +160,16 @@ const LeaveApplication = () => {
             <View
                 style={[
                     styles.leaveTypeBadge,
-                    { backgroundColor: `${getLeaveTypeColor(item.leaveType)}15` },
+                    { backgroundColor: `${getLeaveTypeColor(item.LeaveType)}15` },
                 ]}
             >
                 <Feather
-                    name={getLeaveTypeIcon(item.leaveType) as any}
+                    name={getLeaveTypeIcon(item.LeaveType) as any}
                     size={16}
-                    color={getLeaveTypeColor(item.leaveType)}
+                    color={getLeaveTypeColor(item.LeaveType)}
                 />
-                <Text style={[styles.leaveTypeText, { color: getLeaveTypeColor(item.leaveType) }]}>
-                    {item.leaveType}
+                <Text style={[styles.leaveTypeText, { color: getLeaveTypeColor(item.LeaveType) }]}>
+                    {item.LeaveType}
                 </Text>
             </View>
 
@@ -299,18 +179,18 @@ const LeaveApplication = () => {
                     <View style={styles.dateInfoItem}>
                         <Feather name="calendar" size={16} color="#666" />
                         <Text style={styles.dateInfoLabel}>From:</Text>
-                        <Text style={styles.dateInfoValue}>{formatDate(item.startDate)}</Text>
+                        <Text style={styles.dateInfoValue}>{item.StartDateFormatted}</Text>
                     </View>
                     <View style={styles.dateInfoItem}>
                         <Feather name="calendar" size={16} color="#666" />
                         <Text style={styles.dateInfoLabel}>To:</Text>
-                        <Text style={styles.dateInfoValue}>{formatDate(item.endDate)}</Text>
+                        <Text style={styles.dateInfoValue}>{item.EndDateFormatted}</Text>
                     </View>
                 </View>
                 <View style={styles.daysContainer}>
                     <Feather name="clock" size={14} color="#4A90FF" />
                     <Text style={styles.daysText}>
-                        {item.days} {item.days === 1 ? 'Day' : 'Days'}
+                        {item.TotalDays} {item.TotalDays === 1 ? 'Day' : 'Days'}
                     </Text>
                 </View>
             </View>
@@ -318,36 +198,22 @@ const LeaveApplication = () => {
             {/* Reason */}
             <View style={styles.reasonContainer}>
                 <Text style={styles.reasonLabel}>Reason:</Text>
-                <Text style={styles.reasonText}>{item.reason}</Text>
+                <Text style={styles.reasonText}>{item.Reason}</Text>
             </View>
 
             {/* Submitted Info */}
             <View style={styles.submittedInfo}>
                 <Feather name="send" size={12} color="#999" />
                 <Text style={styles.submittedText}>
-                    Submitted on {formatDate(item.submittedOn)}
+                    Submitted on {formatDate(item.CreatedAt)}
                 </Text>
             </View>
 
-            {/* Action Buttons (only for pending requests) */}
-            {item.status === 'Pending' && (
-                <View style={styles.actionButtons}>
-                    <TouchableOpacity
-                        style={[styles.actionButton, styles.approveButton]}
-                        onPress={() => handleApprove(item.id)}
-                        activeOpacity={0.7}
-                    >
-                        <Feather name="check-circle" size={18} color="#FFF" />
-                        <Text style={styles.actionButtonText}>Approve</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.actionButton, styles.rejectButton]}
-                        onPress={() => handleReject(item.id)}
-                        activeOpacity={0.7}
-                    >
-                        <Feather name="x-circle" size={18} color="#FFF" />
-                        <Text style={styles.actionButtonText}>Reject</Text>
-                    </TouchableOpacity>
+            {/* Status is Pending - show that it's awaiting approval */}
+            {item.ApprovalStatus === 'Pending' || item.ApprovalStatus === 'Awaiting Approve' && (
+                <View style={styles.pendingInfo}>
+                    <Feather name="clock" size={14} color="#FF9800" />
+                    <Text style={styles.pendingText}>Awaiting approval</Text>
                 </View>
             )}
         </View>

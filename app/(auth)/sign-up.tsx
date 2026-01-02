@@ -2,6 +2,7 @@
 import Custominputs from '@/components/Custominputs';
 import CustomModal from '@/components/CustomModal';
 import { register } from '@/lib/auth';
+import { dateStringToBackendFormat } from '@/lib/dateUtils';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -67,26 +68,7 @@ const SignUp = () => {
         return { valid: true, message: '' };
     };
 
-    const validateAge = (dateOfBirth: string): { valid: boolean; message: string } => {
-        if (!dateOfBirth) {
-            return { valid: false, message: 'Date of birth is required' };
-        }
 
-        const birthDate = new Date(dateOfBirth);
-        const today = new Date();
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
-
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-        }
-
-        if (age < 18) {
-            return { valid: false, message: 'You must be at least 18 years old' };
-        }
-
-        return { valid: true, message: '' };
-    };
 
     const validateForm = (): boolean => {
         const newErrors = {
@@ -131,12 +113,6 @@ const SignUp = () => {
         if (!form.date_of_birth) {
             newErrors.date_of_birth = 'Date of birth is required';
             isValid = false;
-        } else {
-            const ageValidation = validateAge(form.date_of_birth);
-            if (!ageValidation.valid) {
-                newErrors.date_of_birth = ageValidation.message;
-                isValid = false;
-            }
         }
 
         // Joining date validation
@@ -185,13 +161,13 @@ const SignUp = () => {
 
         try {
             const response = await register({
-                first_name: form.first_name.trim(),
-                last_name: form.last_name.trim(),
-                email: form.email.trim().toLowerCase(),
-                date_of_birth: form.date_of_birth,
-                joining_date: form.joining_date,
-                password: form.password,
-                confirm_password: form.confirm_password,
+                FName: form.first_name.trim(),
+                LName: form.last_name.trim(),
+                Email: form.email.trim().toLowerCase(),
+                DOB: dateStringToBackendFormat(form.date_of_birth),
+                JoiningDate: dateStringToBackendFormat(form.joining_date),
+                Password: form.password,
+                ConfirmPassword: form.confirm_password,
             });
 
             console.log('✅ Registration successful:', response);

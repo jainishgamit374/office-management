@@ -1,7 +1,9 @@
 import Feather from '@expo/vector-icons/Feather';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -371,90 +373,87 @@ const LeaveCalendar = () => {
   const [dateFilter, setDateFilter] = useState<DateFilter>('All');
   const [leaveTypeFilter, setLeaveTypeFilter] = useState<LeaveTypeFilter>('All');
   const [expandedLeaveId, setExpandedLeaveId] = useState<string | null>(null);
+  const [leaveData, setLeaveData] = useState<LeaveItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Sample data
-  const leaveData: LeaveItem[] = [
-    {
-      id: '1',
-      leaveType: 'PL',
-      status: 'Approved',
-      reason: 'Family function - attending wedding ceremony',
-      fromDate: '25 Dec 2025',
-      toDate: '27 Dec 2025',
-      duration: '3 Days',
-      appliedDate: '15 Dec 2025',
-      approvalHistory: [
-        {
-          approver: 'John Smith',
-          role: 'Team Lead',
-          status: 'Approved',
-          date: '16 Dec 2025',
-          comment: 'Approved. Enjoy your time!',
-        },
-        {
-          approver: 'Sarah Johnson',
-          role: 'HR Manager',
-          status: 'Approved',
-          date: '16 Dec 2025',
-        },
-      ],
-    },
-    {
-      id: '2',
-      leaveType: 'SL',
-      status: 'Pending',
-      reason: 'Medical appointment with specialist doctor',
-      fromDate: '20 Dec 2025',
-      toDate: '20 Dec 2025',
-      duration: '1 Day',
-      appliedDate: '18 Dec 2025',
-      approvalHistory: [
-        {
-          approver: 'John Smith',
-          role: 'Team Lead',
-          status: 'Pending',
-          date: '18 Dec 2025',
-        },
-      ],
-    },
-    {
-      id: '3',
-      leaveType: 'CL',
-      status: 'Rejected',
-      reason: 'Personal work',
-      fromDate: '15 Dec 2025',
-      toDate: '16 Dec 2025',
-      duration: '2 Days',
-      appliedDate: '10 Dec 2025',
-      approvalHistory: [
-        {
-          approver: 'John Smith',
-          role: 'Team Lead',
-          status: 'Rejected',
-          date: '11 Dec 2025',
-          comment: 'Critical project deadline. Please reschedule.',
-        },
-      ],
-    },
-    {
-      id: '4',
-      leaveType: 'AB',
-      status: 'Approved',
-      reason: 'Emergency - power outage at home',
-      fromDate: '12 Dec 2025',
-      toDate: '12 Dec 2025',
-      duration: '0.5 Day',
-      appliedDate: '12 Dec 2025',
-      approvalHistory: [
-        {
-          approver: 'John Smith',
-          role: 'Team Lead',
-          status: 'Approved',
-          date: '12 Dec 2025',
-        },
-      ],
-    },
-  ];
+  // Import the API function
+  const { getLeaveApplicationsList } = require('@/lib/leaves');
+
+  // Fetch leave applications from API
+  const fetchLeaveApplications = async (isRefresh: boolean = false) => {
+    try {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setError(null);
+
+      console.log('📋 Fetching leave applications from API...');
+
+      const response = await getLeaveApplicationsList({
+        limit: 50,
+        sortBy: 'StartDate',
+        sortOrder: 'desc',
+      });
+
+      console.log('✅ API Response:', response);
+
+      // Transform API data to component format
+      const transformedData: LeaveItem[] = response.data.map((item: any, index: number) => {
+        // Map approval status
+        let status: LeaveStatus = 'Pending';
+        if (item.ApprovalStatus?.toLowerCase().includes('approve')) {
+          status = 'Approved';
+        } else if (item.ApprovalStatus?.toLowerCase().includes('reject')) {
+          status = 'Rejected';
+        }
+
+        // Map leave type
+        const leaveType = item.ShortName || item.LeaveType?.substring(0, 2).toUpperCase() || 'PL';
+
+        // Transform workflow list to approval history
+        const approvalHistory: ApprovalHistoryItem[] = item.workflow_list?.map((workflow: any) => ({
+          approver: workflow.Approve_name || 'Unknown',
+          role: 'Approver',
+          status: workflow.status?.toLowerCase().includes('approve') ? 'Approved' :
+            workflow.status?.toLowerCase().includes('reject') ? 'Rejected' : 'Pending',
+          date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }),
+          comment: undefined,
+        })) || [];
+
+        return {
+          id: item.LeaveApplicationMasterID?.toString() || index.toString(),
+          leaveType: leaveType as LeaveType,
+          status,
+          reason: item.Reason || 'No reason provided',
+          fromDate: item.StartDateFormatted || 'N/A',
+          toDate: item.EndDateFormatted || 'N/A',
+          duration: item.TotalDays ? `${item.TotalDays} Day${item.TotalDays > 1 ? 's' : ''}` : 'N/A',
+          appliedDate: item.CreatedAt ? new Date(item.CreatedAt).toLocaleDateString('en-US', {
+            day: '2-digit', month: 'short', year: 'numeric'
+          }) : 'N/A',
+          approvalHistory,
+        };
+      });
+
+      setLeaveData(transformedData);
+      console.log('✅ Transformed data:', transformedData);
+    } catch (err: any) {
+      console.error('❌ Error fetching leave applications:', err);
+      setError(err.message || 'Failed to load leave applications');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  // Fetch data on component mount and when screen is focused
+  React.useEffect(() => {
+    fetchLeaveApplications();
+  }, []);
 
   const filteredLeaves = leaveData.filter((leave) => {
     // Filter by leave type
@@ -465,8 +464,17 @@ const LeaveCalendar = () => {
     return true;
   });
 
+  // Calculate status counts
+  const approvedCount = leaveData.filter(l => l.status === 'Approved').length;
+  const pendingCount = leaveData.filter(l => l.status === 'Pending').length;
+  const rejectedCount = leaveData.filter(l => l.status === 'Rejected').length;
+
   const handleLeavePress = (leaveId: string) => {
     setExpandedLeaveId(expandedLeaveId === leaveId ? null : leaveId);
+  };
+
+  const handleRefresh = () => {
+    fetchLeaveApplications(true);
   };
 
   return (
@@ -474,6 +482,14 @@ const LeaveCalendar = () => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#4A90FF']}
+            tintColor="#4A90FF"
+          />
+        }
       >
         {/* Header */}
         <View style={styles.header}>
@@ -486,73 +502,98 @@ const LeaveCalendar = () => {
           </Text>
         </View>
 
-        {/* Status Summary */}
-        <View style={styles.statusSummary}>
-          <View style={styles.statusCard}>
-            <View style={[styles.statusIconContainer, { backgroundColor: '#4CAF5020' }]}>
-              <Feather name="check-circle" size={20} color="#4CAF50" />
-            </View>
-            <Text style={styles.statusCount}>2</Text>
-            <Text style={styles.statusLabel}>Approved</Text>
+        {/* Loading State */}
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#4A90FF" />
+            <Text style={styles.loadingText}>Loading leave applications...</Text>
           </View>
-          <View style={styles.statusCard}>
-            <View style={[styles.statusIconContainer, { backgroundColor: '#FF980020' }]}>
-              <Feather name="clock" size={20} color="#FF9800" />
-            </View>
-            <Text style={styles.statusCount}>1</Text>
-            <Text style={styles.statusLabel}>Pending</Text>
+        )}
+
+        {/* Error State */}
+        {error && !isLoading && (
+          <View style={styles.errorContainer}>
+            <Feather name="alert-circle" size={48} color="#FF5252" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={() => fetchLeaveApplications()}>
+              <Feather name="refresh-cw" size={20} color="#FFF" />
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.statusCard}>
-            <View style={[styles.statusIconContainer, { backgroundColor: '#FF525220' }]}>
-              <Feather name="x-circle" size={20} color="#FF5252" />
+        )}
+
+        {/* Content - Only show if not loading and no error */}
+        {!isLoading && !error && (
+          <>
+            {/* Status Summary */}
+            <View style={styles.statusSummary}>
+              <View style={styles.statusCard}>
+                <View style={[styles.statusIconContainer, { backgroundColor: '#4CAF5020' }]}>
+                  <Feather name="check-circle" size={20} color="#4CAF50" />
+                </View>
+                <Text style={styles.statusCount}>{approvedCount}</Text>
+                <Text style={styles.statusLabel}>Approved</Text>
+              </View>
+              <View style={styles.statusCard}>
+                <View style={[styles.statusIconContainer, { backgroundColor: '#FF980020' }]}>
+                  <Feather name="clock" size={20} color="#FF9800" />
+                </View>
+                <Text style={styles.statusCount}>{pendingCount}</Text>
+                <Text style={styles.statusLabel}>Pending</Text>
+              </View>
+              <View style={styles.statusCard}>
+                <View style={[styles.statusIconContainer, { backgroundColor: '#FF525220' }]}>
+                  <Feather name="x-circle" size={20} color="#FF5252" />
+                </View>
+                <Text style={styles.statusCount}>{rejectedCount}</Text>
+                <Text style={styles.statusLabel}>Rejected</Text>
+              </View>
             </View>
-            <Text style={styles.statusCount}>1</Text>
-            <Text style={styles.statusLabel}>Rejected</Text>
-          </View>
-        </View>
 
-        {/* Filters */}
-        <View style={styles.filtersContainer}>
-          <Dropdown
-            label="Date Filter"
-            value={dateFilter}
-            options={['All', 'Today', 'Tomorrow']}
-            onSelect={(value) => setDateFilter(value as DateFilter)}
-          />
+            {/* Filters */}
+            <View style={styles.filtersContainer}>
+              <Dropdown
+                label="Date Filter"
+                value={dateFilter}
+                options={['All', 'Today', 'Tomorrow']}
+                onSelect={(value) => setDateFilter(value as DateFilter)}
+              />
 
-          <Dropdown
-            label="Leave Type"
-            value={leaveTypeFilter}
-            options={['All', 'PL', 'CL', 'SL', 'AB']}
-            onSelect={(value) => setLeaveTypeFilter(value as LeaveTypeFilter)}
-          />
-        </View>
+              <Dropdown
+                label="Leave Type"
+                value={leaveTypeFilter}
+                options={['All', 'PL', 'CL', 'SL', 'AB']}
+                onSelect={(value) => setLeaveTypeFilter(value as LeaveTypeFilter)}
+              />
+            </View>
 
-        {/* Leave List */}
-        <View style={styles.leaveListContainer}>
-          <Text style={styles.leaveListTitle}>
-            All Leaves ({filteredLeaves.length})
-          </Text>
-
-          {filteredLeaves.map((leave) => (
-            <LeaveCard
-              key={leave.id}
-              leave={leave}
-              onPress={() => handleLeavePress(leave.id)}
-              isExpanded={expandedLeaveId === leave.id}
-            />
-          ))}
-
-          {filteredLeaves.length === 0 && (
-            <View style={styles.emptyState}>
-              <Feather name="inbox" size={48} color="#CCC" />
-              <Text style={styles.emptyStateText}>No leaves found</Text>
-              <Text style={styles.emptyStateSubtext}>
-                Try adjusting your filters
+            {/* Leave List */}
+            <View style={styles.leaveListContainer}>
+              <Text style={styles.leaveListTitle}>
+                All Leaves ({filteredLeaves.length})
               </Text>
+
+              {filteredLeaves.map((leave) => (
+                <LeaveCard
+                  key={leave.id}
+                  leave={leave}
+                  onPress={() => handleLeavePress(leave.id)}
+                  isExpanded={expandedLeaveId === leave.id}
+                />
+              ))}
+
+              {filteredLeaves.length === 0 && (
+                <View style={styles.emptyState}>
+                  <Feather name="inbox" size={48} color="#CCC" />
+                  <Text style={styles.emptyStateText}>No leaves found</Text>
+                  <Text style={styles.emptyStateSubtext}>
+                    {leaveData.length === 0 ? 'You have not applied for any leaves yet' : 'Try adjusting your filters'}
+                  </Text>
+                </View>
+              )}
             </View>
-          )}
-        </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -917,6 +958,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#BBB',
     marginTop: 4,
+  },
+
+  // Loading State
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 16,
+  },
+
+  // Error State
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#FF5252',
+    marginTop: 16,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#4A90FF',
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
   },
 });
 

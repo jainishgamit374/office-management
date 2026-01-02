@@ -1,5 +1,5 @@
 import { useTheme } from '@/contexts/ThemeContext';
-import { getCurrentLocation, getPunchStatus, hasLocationPermission, recordPunch, requestLocationPermission } from '@/lib/attendance';
+import { getCurrentLocation, getPunchStatus, hasLocationPermission, isLateCheckIn, recordPunch, requestLocationPermission } from '@/lib/attendance';
 import { saveAttendanceRecord } from '@/lib/attendanceStorage';
 import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,9 +18,10 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 interface CheckInCardProps {
   onCheckInChange?: (isCheckedIn: boolean, hasCheckedOut: boolean) => void;
+  onLateEarlyCountChange?: (lateCount: number, earlyCount: number) => void;
 }
 
-const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
+const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyCountChange }) => {
   const { colors, theme } = useTheme();
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [hasCheckedOut, setHasCheckedOut] = useState(false);
@@ -32,6 +33,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
   const [expectedCheckout, setExpectedCheckout] = useState<string | null>(null);
   const [overtimeHours, setOvertimeHours] = useState<string | null>(null);
   const [tasksCompleted, setTasksCompleted] = useState<number>(0);
+  const [punchInLocation, setPunchInLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [punchOutLocation, setPunchOutLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [lateCheckInCount, setLateCheckInCount] = useState<number>(0);
+  const [earlyCheckOutCount, setEarlyCheckOutCount] = useState<number>(0);
   const pan = useRef(new Animated.Value(0)).current;
 
   // Animated color value for smooth transitions
@@ -76,6 +81,16 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
       const punchData = response.data?.punch;
       const punchType = punchData?.PunchType;
       const punchDateTime = punchData?.PunchDateTime;
+
+      // Load late/early counts from API response
+      if (response.data?.lateEarly) {
+        setLateCheckInCount(response.data.lateEarly.lateCheckins || 0);
+        setEarlyCheckOutCount(response.data.lateEarly.earlyCheckouts || 0);
+        onLateEarlyCountChange?.(
+          response.data.lateEarly.lateCheckins || 0,
+          response.data.lateEarly.earlyCheckouts || 0
+        );
+      }
 
       if (punchType === 1) {
         setIsCheckedIn(true);
@@ -229,12 +244,35 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
         throw new Error('Unable to get location. Please enable location services.');
       }
 
+      // Check if late check-in
+      const now = new Date();
+      const isLate = isLateCheckIn(now);
+
+      // Check 5-time limit for late check-ins
+      if (isLate && lateCheckInCount >= 5) {
+        Alert.alert(
+          'Late Check-In Limit Reached',
+          'You have reached the maximum limit of 5 late check-ins for this month. Please check in on time.',
+          [{ text: 'OK' }]
+        );
+        // Reset animation
+        Animated.spring(pan, {
+          toValue: 0,
+          useNativeDriver: false,
+          friction: 8,
+          tension: 40,
+        }).start();
+        return false;
+      }
+
       // Record punch IN via API
       console.log('📝 Recording Punch IN via API...');
       const punchResponse = await recordPunch('IN', false, true);
 
+      // Store location
+      setPunchInLocation({ latitude: location.latitude, longitude: location.longitude });
+
       // Save to local storage
-      const now = new Date();
       const timestamp = now.toISOString();
       const dateStr = now.toISOString().split('T')[0];
       setPunchInTime(timestamp);
@@ -246,11 +284,24 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
         console.error('⚠️ Failed to save punch IN locally:', storageError);
       }
 
-      // Check if late
+      // Update late check-in count if late
+      if (isLate) {
+        const newLateCount = lateCheckInCount + 1;
+        setLateCheckInCount(newLateCount);
+        onLateEarlyCountChange?.(newLateCount, earlyCheckOutCount);
+      }
+
+      // Check if late (from API response or local detection)
       if (punchResponse.data?.IsLate && punchResponse.data?.LateByMinutes > 0) {
         Alert.alert(
           'Checked In (Late) ⚠️',
-          `You are ${punchResponse.data.LateByMinutes} minute${punchResponse.data.LateByMinutes > 1 ? 's' : ''} late.`,
+          `You are ${punchResponse.data.LateByMinutes} minute${punchResponse.data.LateByMinutes > 1 ? 's' : ''} late.\n\nLate check-ins this month: ${lateCheckInCount + 1}/5`,
+          [{ text: 'OK' }]
+        );
+      } else if (isLate) {
+        Alert.alert(
+          'Checked In (Late) ⚠️',
+          `You checked in after 9:30 AM.\n\nLate check-ins this month: ${lateCheckInCount + 1}/5`,
           [{ text: 'OK' }]
         );
       } else {
@@ -332,13 +383,36 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
         throw new Error('Unable to get location. Please enable location services.');
       }
 
+      // Check if early check-out
+      const now = new Date();
+      const isEarly = isEarlyCheckOut(now);
+
+      // Check 5-time limit for early check-outs
+      if (isEarly && earlyCheckOutCount >= 5) {
+        Alert.alert(
+          'Early Check-Out Limit Reached',
+          'You have reached the maximum limit of 5 early check-outs for this month. Please check out after 6:30 PM.',
+          [{ text: 'OK' }]
+        );
+        // Reset animation
+        Animated.spring(pan, {
+          toValue: SCREEN_WIDTH - 115,
+          useNativeDriver: false,
+          friction: 8,
+          tension: 40,
+        }).start();
+        return false;
+      }
+
       // Record punch OUT via API
       console.log('💾 Recording Punch OUT via API...');
       const punchResponse = await recordPunch('OUT', false, true);
       console.log('✅ Punch OUT recorded via API successfully');
 
+      // Store location
+      setPunchOutLocation({ latitude: location.latitude, longitude: location.longitude });
+
       // Save to local storage
-      const now = new Date();
       const timestamp = now.toISOString();
       const dateStr = now.toISOString().split('T')[0];
       setPunchOutTime(timestamp);
@@ -358,11 +432,24 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
         setOvertimeHours(punchResponse.data.OvertimeHours);
       }
 
-      // Check if early
+      // Update early check-out count if early
+      if (isEarly) {
+        const newEarlyCount = earlyCheckOutCount + 1;
+        setEarlyCheckOutCount(newEarlyCount);
+        onLateEarlyCountChange?.(lateCheckInCount, newEarlyCount);
+      }
+
+      // Check if early (from API response or local detection)
       if (punchResponse.data?.IsEarly && punchResponse.data?.EarlyByMinutes > 0) {
         Alert.alert(
           'Checked Out (Early) ⚠️',
-          `You are leaving ${punchResponse.data.EarlyByMinutes} minute${punchResponse.data.EarlyByMinutes > 1 ? 's' : ''} early.`,
+          `You are leaving ${punchResponse.data.EarlyByMinutes} minute${punchResponse.data.EarlyByMinutes > 1 ? 's' : ''} early.\n\nEarly check-outs this month: ${earlyCheckOutCount + 1}/5`,
+          [{ text: 'OK' }]
+        );
+      } else if (isEarly) {
+        Alert.alert(
+          'Checked Out (Early) ⚠️',
+          `You checked out before 6:30 PM.\n\nEarly check-outs this month: ${earlyCheckOutCount + 1}/5`,
           [{ text: 'OK' }]
         );
       } else {
@@ -576,6 +663,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange }) => {
           workingHours={workingHours}
           overtimeHours={overtimeHours}
           tasksCompleted={tasksCompleted}
+          punchInLocation={punchInLocation}
+          punchOutLocation={punchOutLocation}
         />
       )}
     </View>

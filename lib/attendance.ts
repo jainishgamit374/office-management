@@ -76,6 +76,82 @@ export const getDeviceInfo = async (): Promise<string> => {
 };
 
 /**
+ * Check if current time is after 9:30 AM (late check-in threshold)
+ * @param date - Date object to check (defaults to current time)
+ * @returns true if time is after 9:30 AM IST
+ */
+export const isLateCheckIn = (date: Date = new Date()): boolean => {
+    // Convert to IST (UTC+5:30)
+    const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes in milliseconds
+    const istDate = new Date(date.getTime() + istOffset);
+
+    const hours = istDate.getUTCHours();
+    const minutes = istDate.getUTCMinutes();
+
+    // Check if time is after 9:30 AM (09:30)
+    return hours > 9 || (hours === 9 && minutes > 30);
+};
+
+/**
+ * Check if current time is before 6:30 PM (early check-out threshold)
+ * @param date - Date object to check (defaults to current time)
+ * @returns true if time is before 6:30 PM IST
+ */
+export const isEarlyCheckOut = (date: Date = new Date()): boolean => {
+    // Convert to IST (UTC+5:30)
+    const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes in milliseconds
+    const istDate = new Date(date.getTime() + istOffset);
+
+    const hours = istDate.getUTCHours();
+    const minutes = istDate.getUTCMinutes();
+
+    // Check if time is before 6:30 PM (18:30)
+    return hours < 18 || (hours === 18 && minutes < 30);
+};
+
+/**
+ * Get minutes late for check-in (after 9:30 AM)
+ * @param date - Date object to check (defaults to current time)
+ * @returns number of minutes late, or 0 if not late
+ */
+export const getMinutesLate = (date: Date = new Date()): number => {
+    if (!isLateCheckIn(date)) return 0;
+
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(date.getTime() + istOffset);
+
+    const hours = istDate.getUTCHours();
+    const minutes = istDate.getUTCMinutes();
+
+    // Calculate minutes after 9:30 AM
+    const currentMinutes = hours * 60 + minutes;
+    const thresholdMinutes = 9 * 60 + 30; // 9:30 AM
+
+    return currentMinutes - thresholdMinutes;
+};
+
+/**
+ * Get minutes early for check-out (before 6:30 PM)
+ * @param date - Date object to check (defaults to current time)
+ * @returns number of minutes early, or 0 if not early
+ */
+export const getMinutesEarly = (date: Date = new Date()): number => {
+    if (!isEarlyCheckOut(date)) return 0;
+
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istDate = new Date(date.getTime() + istOffset);
+
+    const hours = istDate.getUTCHours();
+    const minutes = istDate.getUTCMinutes();
+
+    // Calculate minutes before 6:30 PM
+    const currentMinutes = hours * 60 + minutes;
+    const thresholdMinutes = 18 * 60 + 30; // 6:30 PM
+
+    return thresholdMinutes - currentMinutes;
+};
+
+/**
  * Request location permissions and get current location
  */
 export const getCurrentLocation = async (): Promise<{ latitude: number; longitude: number; accuracy: number } | null> => {
@@ -416,6 +492,11 @@ export interface AttendanceRecord {
     isLateCheckIn?: boolean;
     isEarlyCheckOut?: boolean;
     isLocal?: boolean; // Flag to indicate if record is from local storage
+    latitude?: string;
+    longitude?: string;
+    address?: string;
+    lateByMinutes?: number;
+    earlyByMinutes?: number;
 }
 
 export interface AttendanceHistoryResponse {

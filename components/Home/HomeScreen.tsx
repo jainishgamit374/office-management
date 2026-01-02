@@ -23,6 +23,8 @@ const HomeScreen: React.FC = () => {
   const [hasCheckedOut, setHasCheckedOut] = useState(false);
   const [hasEverCheckedIn, setHasEverCheckedIn] = useState(false);
   const [expandedLeave, setExpandedLeave] = useState<number | null>(null);
+  const [lateCheckInCount, setLateCheckInCount] = useState<number>(0);
+  const [earlyCheckOutCount, setEarlyCheckOutCount] = useState<number>(0);
 
   const totalTasks = 12;
   const tasksToComplete = 4;
@@ -70,6 +72,11 @@ const HomeScreen: React.FC = () => {
 
   const handleExpandToggle = (newValue: number | null) => {
     setExpandedLeave(newValue);
+  };
+
+  const handleLateEarlyCountChange = (lateCount: number, earlyCount: number) => {
+    setLateCheckInCount(lateCount);
+    setEarlyCheckOutCount(earlyCount);
   };
 
   // Handle scroll for tab bar animation
@@ -129,10 +136,16 @@ const HomeScreen: React.FC = () => {
         <MissedPunchSection />
 
         {/* Attendance Tracking Cards */}
-        <AttendanceTrackingCards />
+        <AttendanceTrackingCards
+          lateCheckIns={lateCheckInCount}
+          earlyCheckOuts={earlyCheckOutCount}
+        />
 
         {/* Check In Card */}
-        <CheckInCard onCheckInChange={handleCheckInChange} />
+        <CheckInCard
+          onCheckInChange={handleCheckInChange}
+          onLateEarlyCountChange={handleLateEarlyCountChange}
+        />
 
         {/* My pending requests */}
         <PendingRequestsSection />

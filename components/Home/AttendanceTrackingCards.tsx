@@ -74,14 +74,32 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
 
                     <View style={styles.card}>
                         <Text style={styles.label}>Late Check In</Text>
-                        <Feather name="log-in" size={32} color={colors.primary} />
-                        <Text style={styles.count}>{lateCheckIns}</Text>
+                        <Feather
+                            name="log-in"
+                            size={32}
+                            color={lateCheckIns >= 5 ? '#FF5252' : lateCheckIns >= 3 ? '#FFA726' : '#4CAF50'}
+                        />
+                        <Text style={[
+                            styles.count,
+                            { color: lateCheckIns >= 5 ? '#FF5252' : lateCheckIns >= 3 ? '#FFA726' : '#4CAF50' }
+                        ]}>
+                            {lateCheckIns}/5
+                        </Text>
                     </View>
 
                     <View style={styles.card}>
                         <Text style={styles.label}>Early Check Out</Text>
-                        <Feather name="log-out" size={32} color={colors.primary} />
-                        <Text style={styles.count}>{earlyCheckOuts}</Text>
+                        <Feather
+                            name="log-out"
+                            size={32}
+                            color={earlyCheckOuts >= 5 ? '#FF5252' : earlyCheckOuts >= 3 ? '#FFA726' : '#4CAF50'}
+                        />
+                        <Text style={[
+                            styles.count,
+                            { color: earlyCheckOuts >= 5 ? '#FF5252' : earlyCheckOuts >= 3 ? '#FFA726' : '#4CAF50' }
+                        ]}>
+                            {earlyCheckOuts}/5
+                        </Text>
                     </View>
 
                     <View style={styles.card}>

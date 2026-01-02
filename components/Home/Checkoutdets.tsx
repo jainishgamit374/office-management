@@ -9,6 +9,8 @@ interface CheckoutDetailsProps {
     workingHours: string | null;
     overtimeHours?: string | null;
     tasksCompleted?: number;
+    punchInLocation?: { latitude: number; longitude: number } | null;
+    punchOutLocation?: { latitude: number; longitude: number } | null;
 }
 
 const Checkoutdets: React.FC<CheckoutDetailsProps> = ({
@@ -17,6 +19,8 @@ const Checkoutdets: React.FC<CheckoutDetailsProps> = ({
     workingHours,
     overtimeHours,
     tasksCompleted = 0,
+    punchInLocation,
+    punchOutLocation,
 }) => {
     const { colors, theme } = useTheme();
 
@@ -92,6 +96,34 @@ const Checkoutdets: React.FC<CheckoutDetailsProps> = ({
                     <View style={styles.overtimeBadge}>
                         <Feather name="zap" size={14} color="#9C27B0" />
                         <Text style={styles.overtimeText}>+{overtimeHours} overtime</Text>
+                    </View>
+                )}
+
+                {/* Location Information */}
+                {(punchInLocation || punchOutLocation) && (
+                    <View style={[styles.locationContainer, { backgroundColor: theme === 'dark' ? '#2a2a2a' : '#F9F9F9' }]}>
+                        <View style={styles.locationHeader}>
+                            <Feather name="map-pin" size={16} color="#FF9800" />
+                            <Text style={[styles.locationTitle, { color: colors.text }]}>Location Details</Text>
+                        </View>
+                        <View style={styles.locationContent}>
+                            {punchInLocation && (
+                                <View style={styles.locationItem}>
+                                    <Text style={[styles.locationLabel, { color: colors.textSecondary }]}>Check-In:</Text>
+                                    <Text style={[styles.locationValue, { color: colors.text }]}>
+                                        {punchInLocation.latitude.toFixed(6)}, {punchInLocation.longitude.toFixed(6)}
+                                    </Text>
+                                </View>
+                            )}
+                            {punchOutLocation && (
+                                <View style={styles.locationItem}>
+                                    <Text style={[styles.locationLabel, { color: colors.textSecondary }]}>Check-Out:</Text>
+                                    <Text style={[styles.locationValue, { color: colors.text }]}>
+                                        {punchOutLocation.latitude.toFixed(6)}, {punchOutLocation.longitude.toFixed(6)}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
                 )}
             </View>
@@ -232,6 +264,40 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: '#9C27B0',
+    },
+    // Location Styles
+    locationContainer: {
+        marginTop: 12,
+        borderRadius: 12,
+        padding: 12,
+    },
+    locationHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 10,
+    },
+    locationTitle: {
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    locationContent: {
+        gap: 8,
+    },
+    locationItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    locationLabel: {
+        fontSize: 11,
+        fontWeight: '500',
+        width: 80,
+    },
+    locationValue: {
+        fontSize: 11,
+        fontWeight: '400',
+        flex: 1,
     },
 });
 

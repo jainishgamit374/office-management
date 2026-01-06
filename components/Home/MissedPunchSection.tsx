@@ -1,5 +1,5 @@
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
-import { getPunchStatus } from '@/lib/attendance';
+import { getMissingPunchOut } from '@/lib/attendance';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
@@ -20,13 +20,24 @@ const MissedPunchSection: React.FC = () => {
     const fetchMissedPunches = useCallback(async () => {
         try {
             setIsLoading(true);
-            const response = await getPunchStatus();
+            const response = await getMissingPunchOut();
 
-            // For now, we'll use empty array since the API doesn't provide missed punches
-            // This can be updated when the API includes missed punch data
-            setMissedPunches([]);
+            // Transform API response to component format
+            const missedPunchData: MissedPunch[] = response.data.map(item => {
+                const date = new Date(item.missing_date);
+                return {
+                    date: item.missing_date,
+                    dateFormatted: date.toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                    }),
+                    type: 'check-out' as const, // Missing punch-out means they didn't check out
+                };
+            });
 
-            console.log('✅ Missed punches loaded from API');
+            setMissedPunches(missedPunchData);
+            console.log('✅ Missed punches loaded from API:', missedPunchData.length);
         } catch (error) {
             console.error('Failed to fetch missed punches:', error);
             setMissedPunches([]);

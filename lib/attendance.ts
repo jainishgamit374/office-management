@@ -755,3 +755,75 @@ export const getPunchStatus = async (): Promise<PunchStatusResponse> => {
         throw new Error(errorMessage);
     }
 };
+
+// ==================== MISSING PUNCH-OUT ====================
+
+export interface MissingPunchOutResponse {
+    status: string;
+    statusCode: number;
+    message: string;
+    data: Array<{
+        missing_date: string;
+    }>;
+}
+
+/**
+ * Get missing punch-out dates
+ * Returns dates where employee punched in but didn't punch out
+ */
+export const getMissingPunchOut = async (): Promise<MissingPunchOutResponse> => {
+    try {
+        console.log('📊 Fetching missing punch-out dates...');
+
+        // Get access token
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        // Make API request
+        const response = await fetch(
+            'https://karmyog.pythonanywhere.com/getmissingpunchout/',
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        // Try to parse JSON response
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Missing punch-out data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch missing punch-out dates';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Missing punch-out dates fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Missing punch-out error:', error);
+        // Extract meaningful error message
+        let errorMessage = 'Failed to fetch missing punch-out dates';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+

@@ -1,6 +1,8 @@
+import { getBirthdays } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
-import React from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface Birthday {
     id: string;
@@ -10,26 +12,64 @@ interface Birthday {
 }
 
 interface AllBirthdaysProps {
-    birthdays?: Birthday[];
     isExpanded: boolean;
     onToggleExpand: () => void;
     onAnimatePress: (animKey: 'birthday', callback: () => void) => void;
     scaleAnim: Animated.Value;
 }
 
-const defaultBirthdays: Birthday[] = [
-    { id: '1', name: 'Sneha Kapoor', initials: 'SK', date: 'December 12, 2024' },
-    { id: '2', name: 'Aditya Malhotra', initials: 'AM', date: 'December 15, 2024' },
-    { id: '3', name: 'Pooja Deshmukh', initials: 'PD', date: 'December 18, 2024' },
-];
-
 const AllBirthdays: React.FC<AllBirthdaysProps> = ({
-    birthdays = defaultBirthdays,
     isExpanded,
     onToggleExpand,
     onAnimatePress,
     scaleAnim,
 }) => {
+    const [birthdays, setBirthdays] = useState<Birthday[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const fetchBirthdays = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            const response = await getBirthdays();
+
+            // Transform today's birthdays to component format
+            const birthdayData: Birthday[] = response.data.todays_birthdays.map((person: any, index: number) => {
+                const initials = person.name.split(' ').map((n: string) => n[0]).join('');
+                
+                // Parse the date (format: "DD-MM-YYYY")
+                const [day, month, year] = person.dob.split('-');
+                const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                const formattedDate = date.toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+
+                return {
+                    id: `${index}`,
+                    name: person.name,
+                    initials: initials,
+                    date: formattedDate,
+                };
+            });
+
+            setBirthdays(birthdayData);
+            console.log('✅ Birthdays loaded:', birthdayData.length);
+        } catch (error) {
+            console.error('Failed to fetch birthdays:', error);
+            setBirthdays([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    // Fetch data on mount and when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchBirthdays();
+        }, [fetchBirthdays])
+    );
+
     return (
         <View style={styles.container}>
             <View style={styles.headerContainer}>
@@ -48,6 +88,12 @@ const AllBirthdays: React.FC<AllBirthdaysProps> = ({
             </View>
 
             {isExpanded ? (
+                isLoading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="small" color="#d4145a" />
+                        <Text style={styles.loadingText}>Loading birthdays...</Text>
+                    </View>
+                ) : birthdays.length > 0 ? (
                 <View style={styles.grid}>
                     {birthdays.map((birthday) => (
                         <View key={birthday.id} style={styles.card}>
@@ -64,11 +110,12 @@ const AllBirthdays: React.FC<AllBirthdaysProps> = ({
                         </View>
                     ))}
                 </View>
-            ) : (
-                <View style={styles.emptyState}>
-                    <Text style={styles.emptyText}>No birthdays today 🎈</Text>
-                </View>
-            )}
+                ) : (
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyText}>No birthdays today 🎈</Text>
+                    </View>
+                )
+            ) : null}
         </View>
     );
 };
@@ -177,6 +224,16 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#999',
         textAlign: 'center',
+    },
+    loadingContainer: {
+        paddingVertical: 20,
+        alignItems: 'center',
+        gap: 10,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '600',
     },
 });
 

@@ -1,4 +1,4 @@
-import { getLeaveApplications } from '@/lib/leaves';
+import { getUpcomingLeaves } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
@@ -44,46 +44,40 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
 
             console.log('📋 Fetching upcoming leaves from API...');
 
-            // Use /leaveapplications/ endpoint with pagination
-            const response = await getLeaveApplications(1, 10);
+            const response = await getUpcomingLeaves();
 
             console.log('✅ API Response:', response);
 
             // Transform API data to component format
-            const applications = response.data?.applications || [];
+            const applications = response.data || [];
             const transformedData: LeaveDetail[] = applications.slice(0, 3).map((item: any, index: number) => {
                 // Map approval status
                 let status: 'Pending' | 'Approved' | 'Rejected' = 'Pending';
-                if (item.ApprovalStatus?.toLowerCase().includes('approve')) {
+                if (item.approval_status?.toLowerCase().includes('approve')) {
                     status = 'Approved';
-                } else if (item.ApprovalStatus?.toLowerCase().includes('reject')) {
+                } else if (item.approval_status?.toLowerCase().includes('reject')) {
                     status = 'Rejected';
                 }
 
-                // Get leave type name
-                const leaveTypeName = item.LeaveType === 'CL' ? 'Casual Leave' :
-                    item.LeaveType === 'SL' ? 'Sick Leave' :
-                        item.LeaveType === 'PL' ? 'Privilege Leave' :
-                            item.LeaveTypeCode || item.LeaveType;
-
-                // Format dates
+                // Format dates (format: "DD-MM-YYYY")
                 const formatDate = (dateStr: string) => {
                     if (!dateStr) return '';
-                    const date = new Date(dateStr);
+                    const [day, month, year] = dateStr.split('-');
+                    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
                     return date.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
                 };
 
-                const startDate = formatDate(item.StartDate || item.StartDateFormatted);
-                const endDate = formatDate(item.EndDate || item.EndDateFormatted);
+                const startDate = formatDate(item.leave_application_enddate); // Note: Using enddate as start based on API
+                const endDate = formatDate(item.leave_application_date);
                 const dates = startDate === endDate ? startDate : `${startDate} - ${endDate}`;
 
                 return {
-                    id: item.LeaveApplicationMasterID || index + 1,
-                    name: item.EmployeeName || 'Employee',
-                    leaveType: leaveTypeName,
+                    id: index + 1,
+                    name: item.employee_name || 'Employee',
+                    leaveType: item.leave_type || 'Leave',
                     dates: dates,
-                    duration: item.TotalDays ? `${item.TotalDays} day${item.TotalDays > 1 ? 's' : ''}` : '1 day',
-                    reason: item.Reason || 'No reason provided',
+                    duration: item.total_days ? `${Math.abs(item.total_days)} day${Math.abs(item.total_days) > 1 ? 's' : ''}` : '1 day',
+                    reason: item.leave_duration || 'No reason provided',
                     status,
                 };
             });

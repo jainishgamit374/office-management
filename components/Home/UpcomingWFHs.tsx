@@ -1,6 +1,8 @@
+import { getWFHApplications } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
-import React from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface WFHDetail {
     id: number;
@@ -8,11 +10,10 @@ interface WFHDetail {
     dates: string;
     duration: string;
     reason: string;
-    status: 'Pending' | 'Approved';
+    status: 'Pending' | 'Approved' | 'Awaiting Approve';
 }
 
 interface UpcomingWFHsProps {
-    wfhs?: WFHDetail[];
     expandedLeave: number | null;
     onToggleExpand: (id: number | null) => void;
     onAnimatePress: (animKey: 'wfhMain' | 'wfh1' | 'wfh2' | 'wfh3', callback: () => void) => void;
@@ -24,41 +25,62 @@ interface UpcomingWFHsProps {
     };
 }
 
-const defaultWFHs: WFHDetail[] = [
-    {
-        id: 5,
-        name: 'Vikram Singh',
-        dates: '12-15 Dec',
-        duration: '12 Dec - 15 Dec (4 days)',
-        reason: 'Project work from home',
-        status: 'Pending',
-    },
-    {
-        id: 6,
-        name: 'Anjali Mehta',
-        dates: '16-18 Dec',
-        duration: '16 Dec - 18 Dec (3 days)',
-        reason: 'Remote client meetings',
-        status: 'Pending',
-    },
-    {
-        id: 7,
-        name: 'Suresh Patel',
-        dates: '20 Dec',
-        duration: '20 Dec (1 day)',
-        reason: 'Personal appointment',
-        status: 'Pending',
-    },
-];
-
 const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
-    wfhs = defaultWFHs,
     expandedLeave,
     onToggleExpand,
     onAnimatePress,
     scaleAnims,
 }) => {
-    const isMainExpanded = expandedLeave === 4 || expandedLeave === 5 || expandedLeave === 6 || expandedLeave === 7;
+    const [wfhs, setWfhs] = useState<WFHDetail[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const fetchWFHApplications = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            const response = await getWFHApplications();
+
+            // Transform API response to component format
+            const wfhData: WFHDetail[] = response.data.map(item => {
+                const date = new Date(item.DateTime);
+                const formattedDate = date.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric'
+                });
+
+                // Get approver name from workflow list
+                const approverName = item.workflow_list[0]?.Approve_name || 'Unknown';
+
+                return {
+                    id: item.WorkFromHomeReqMasterID,
+                    name: approverName,
+                    dates: formattedDate,
+                    duration: `${formattedDate}${item.IsHalfDay ? ' (Half Day)' : ' (Full Day)'}`,
+                    reason: item.Reason,
+                    status: item.ApprovalStatus as 'Pending' | 'Approved' | 'Awaiting Approve',
+                };
+            });
+
+            setWfhs(wfhData);
+            console.log('✅ WFH applications loaded:', wfhData.length);
+        } catch (error) {
+            console.error('Failed to fetch WFH applications:', error);
+            setWfhs([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    // Fetch data on mount and when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchWFHApplications();
+        }, [fetchWFHApplications])
+    );
+
+    // Check if main section is expanded
+    // Use a special ID (-1) for the main WFH section to avoid conflicts with actual WFH IDs
+    const MAIN_WFH_ID = -1;
+    const isMainExpanded = expandedLeave === MAIN_WFH_ID || wfhs.some(wfh => expandedLeave === wfh.id);
 
     return (
         <View style={styles.container}>
@@ -71,7 +93,7 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
                         style={styles.toggleIcon}
                         activeOpacity={0.7}
                         onPress={() =>
-                            onAnimatePress('wfhMain', () => onToggleExpand(isMainExpanded ? null : 4))
+                            onAnimatePress('wfhMain', () => onToggleExpand(isMainExpanded ? null : MAIN_WFH_ID))
                         }
                     >
                         <Feather name={isMainExpanded ? 'chevron-up' : 'chevron-down'} size={24} color="#4169E1" />
@@ -80,7 +102,18 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
             </View>
 
             {isMainExpanded && (
-                <View style={styles.grid}>
+                isLoading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="small" color="#4169E1" />
+                        <Text style={styles.loadingText}>Loading WFH applications...</Text>
+                    </View>
+                ) : wfhs.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                        <Feather name="calendar" size={32} color="#ccc" />
+                        <Text style={styles.emptyText}>No WFH applications found</Text>
+                    </View>
+                ) : (
+                    <View style={styles.grid}>
                     {wfhs.map((wfh, index) => {
                         const animKey = `wfh${index + 1}` as 'wfh1' | 'wfh2' | 'wfh3';
 
@@ -92,7 +125,7 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
                                         activeOpacity={0.7}
                                         onPress={() =>
                                             onAnimatePress(animKey, () =>
-                                                onToggleExpand(expandedLeave === wfh.id ? 4 : wfh.id)
+                                                onToggleExpand(expandedLeave === wfh.id ? MAIN_WFH_ID : wfh.id)
                                             )
                                         }
                                     >
@@ -133,6 +166,7 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
                         );
                     })}
                 </View>
+                )
             )}
         </View>
     );
@@ -242,6 +276,24 @@ const styles = StyleSheet.create({
         color: '#ff9800',
         fontWeight: '600',
         flex: 1,
+    },
+    loadingContainer: {
+        padding: 20,
+        alignItems: 'center',
+        gap: 10,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: '#666',
+    },
+    emptyContainer: {
+        padding: 30,
+        alignItems: 'center',
+        gap: 10,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#999',
     },
 });
 

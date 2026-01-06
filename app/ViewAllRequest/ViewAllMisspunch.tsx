@@ -1,6 +1,9 @@
+import { getMissPunchDetails } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
-import React, { useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     FlatList,
     Pressable,
@@ -8,101 +11,66 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Types
 type PunchType = 'In' | 'Out';
-type RequestStatus = 'Pending' | 'Approved' | 'Rejected';
+type RequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Awaiting Approve';
 
 interface MissPunchRequest {
-    id: string;
+    id: number;
     employeeName: string;
-    employeeId: string;
     date: string;
     punchType: PunchType;
-    actualTime: string;
     reason: string;
     status: RequestStatus;
-    submittedOn: string;
 }
-
-// Mock miss punch request data
-const missPunchRequestsData: MissPunchRequest[] = [
-    {
-        id: '1',
-        employeeName: 'John Doe',
-        employeeId: 'EMP001',
-        date: '2025-12-17',
-        punchType: 'Out',
-        actualTime: '18:30',
-        reason: 'Forgot to punch out due to urgent meeting',
-        status: 'Pending',
-        submittedOn: '2025-12-18',
-    },
-    {
-        id: '2',
-        employeeName: 'Jane Smith',
-        employeeId: 'EMP002',
-        date: '2025-12-16',
-        punchType: 'In',
-        actualTime: '09:15',
-        reason: 'Biometric system was not working',
-        status: 'Approved',
-        submittedOn: '2025-12-17',
-    },
-    {
-        id: '3',
-        employeeName: 'Mike Johnson',
-        employeeId: 'EMP003',
-        date: '2025-12-18',
-        punchType: 'Out',
-        actualTime: '19:00',
-        reason: 'System error - punch not recorded',
-        status: 'Approved',
-        submittedOn: '2025-12-18',
-    },
-    {
-        id: '4',
-        employeeName: 'Sarah Williams',
-        employeeId: 'EMP004',
-        date: '2025-12-17',
-        punchType: 'In',
-        actualTime: '09:30',
-        reason: 'Forgot to punch in, was in rush for meeting',
-        status: 'Pending',
-        submittedOn: '2025-12-18',
-    },
-    {
-        id: '5',
-        employeeName: 'David Brown',
-        employeeId: 'EMP005',
-        date: '2025-12-15',
-        punchType: 'Out',
-        actualTime: '17:45',
-        reason: 'Left early, forgot to punch out',
-        status: 'Rejected',
-        submittedOn: '2025-12-16',
-    },
-    {
-        id: '6',
-        employeeName: 'Emily Davis',
-        employeeId: 'EMP006',
-        date: '2025-12-16',
-        punchType: 'In',
-        actualTime: '08:45',
-        reason: 'Fingerprint scanner malfunction',
-        status: 'Approved',
-        submittedOn: '2025-12-17',
-    },
-];
 
 type FilterType = 'all' | 'punchIn' | 'punchOut';
 
 const ViewAllMisspunch = () => {
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
-    const [requests, setRequests] = useState<MissPunchRequest[]>(missPunchRequestsData);
+    const [requests, setRequests] = useState<MissPunchRequest[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const fetchMissPunchRequests = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            const response = await getMissPunchDetails();
+
+            // Transform API response to component format
+            const missPunchData: MissPunchRequest[] = response.data.map(item => {
+                // Get approver name from workflow list
+                const approverName = item.workflow_list[0]?.Approve_name || 'Unknown';
+
+                return {
+                    id: item.MissPunchReqMasterID,
+                    employeeName: approverName,
+                    date: item.datetime,
+                    punchType: item.PunchType === '1' ? 'In' : 'Out',
+                    reason: item.reason,
+                    status: item.approval_status as RequestStatus,
+                };
+            });
+
+            setRequests(missPunchData);
+            console.log('✅ Miss punch requests loaded:', missPunchData.length);
+        } catch (error) {
+            console.error('Failed to fetch miss punch requests:', error);
+            setRequests([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    // Fetch data on mount and when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchMissPunchRequests();
+        }, [fetchMissPunchRequests])
+    );
 
     // Filter requests based on selected filter
     const filteredRequests = requests.filter((request) => {
@@ -158,7 +126,7 @@ const ViewAllMisspunch = () => {
                     onPress: () => {
                         setRequests((prev) =>
                             prev.map((req) =>
-                                req.id === requestId ? { ...req, status: 'Approved' } : req
+                                req.id === parseInt(requestId) ? { ...req, status: 'Approved' } : req
                             )
                         );
                         Alert.alert('Success', 'Miss punch request approved successfully!');
@@ -180,7 +148,7 @@ const ViewAllMisspunch = () => {
                     onPress: () => {
                         setRequests((prev) =>
                             prev.map((req) =>
-                                req.id === requestId ? { ...req, status: 'Rejected' } : req
+                                req.id === parseInt(requestId) ? { ...req, status: 'Rejected' } : req
                             )
                         );
                         Alert.alert('Success', 'Miss punch request rejected successfully!');
@@ -207,7 +175,6 @@ const ViewAllMisspunch = () => {
                     </View>
                     <View style={styles.employeeDetails}>
                         <Text style={styles.employeeName}>{item.employeeName}</Text>
-                        <Text style={styles.employeeId}>{item.employeeId}</Text>
                     </View>
                 </View>
                 <View
@@ -239,17 +206,12 @@ const ViewAllMisspunch = () => {
                 </Text>
             </View>
 
-            {/* Date & Time Info */}
+            {/* Date Info */}
             <View style={styles.infoRow}>
                 <View style={styles.infoItem}>
                     <Feather name="calendar" size={16} color="#666" />
                     <Text style={styles.infoLabel}>Date:</Text>
                     <Text style={styles.infoValue}>{formatDate(item.date)}</Text>
-                </View>
-                <View style={styles.infoItem}>
-                    <Feather name="clock" size={16} color="#666" />
-                    <Text style={styles.infoLabel}>Time:</Text>
-                    <Text style={styles.infoValue}>{item.actualTime}</Text>
                 </View>
             </View>
 
@@ -259,20 +221,12 @@ const ViewAllMisspunch = () => {
                 <Text style={styles.reasonText}>{item.reason}</Text>
             </View>
 
-            {/* Submitted Info */}
-            <View style={styles.submittedInfo}>
-                <Feather name="send" size={12} color="#999" />
-                <Text style={styles.submittedText}>
-                    Submitted on {formatDate(item.submittedOn)}
-                </Text>
-            </View>
-
-            {/* Action Buttons (only for pending requests) */}
-            {item.status === 'Pending' && (
+            {/* Action Buttons (only for pending/awaiting requests) */}
+            {(item.status === 'Pending' || item.status === 'Awaiting Approve') && (
                 <View style={styles.actionButtons}>
                     <TouchableOpacity
                         style={[styles.actionButton, styles.approveButton]}
-                        onPress={() => handleApprove(item.id)}
+                        onPress={() => handleApprove(item.id.toString())}
                         activeOpacity={0.7}
                     >
                         <Feather name="check-circle" size={18} color="#FFF" />
@@ -280,7 +234,7 @@ const ViewAllMisspunch = () => {
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={[styles.actionButton, styles.rejectButton]}
-                        onPress={() => handleReject(item.id)}
+                        onPress={() => handleReject(item.id.toString())}
                         activeOpacity={0.7}
                     >
                         <Feather name="x-circle" size={18} color="#FFF" />
@@ -372,14 +326,19 @@ const ViewAllMisspunch = () => {
                 <View style={styles.requestsContainer}>
                     <View style={styles.requestsHeader}>
                         <Text style={styles.sectionTitle}>Miss Punch Requests</Text>
-                        <Text style={styles.recordCount}>{filteredRequests.length} records</Text>
+                        {!isLoading && <Text style={styles.recordCount}>{filteredRequests.length} records</Text>}
                     </View>
 
-                    {filteredRequests.length > 0 ? (
+                    {isLoading ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color="#4A90FF" />
+                            <Text style={styles.loadingText}>Loading miss punch requests...</Text>
+                        </View>
+                    ) : filteredRequests.length > 0 ? (
                         <FlatList
                             data={filteredRequests}
                             renderItem={renderMissPunchRequestItem}
-                            keyExtractor={(item) => item.id}
+                            keyExtractor={(item) => item.id.toString()}
                             scrollEnabled={false}
                             contentContainerStyle={styles.listContent}
                             ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
@@ -680,6 +639,18 @@ const styles = StyleSheet.create({
         paddingHorizontal: 40,
         lineHeight: 22,
         fontWeight: '500',
+    },
+
+    // Loading State
+    loadingContainer: {
+        paddingVertical: 60,
+        alignItems: 'center',
+        gap: 16,
+    },
+    loadingText: {
+        fontSize: 15,
+        color: '#666',
+        fontWeight: '600',
     },
 });
 

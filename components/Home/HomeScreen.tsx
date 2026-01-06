@@ -1,7 +1,6 @@
 import Navbar from '@/components/Navigation/Navbar';
 import { useTabBar } from '@/constants/TabBarContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { getLateCheckinCount } from '@/lib/earlyLatePunch';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useRef, useState } from 'react';
 import { Animated, ScrollView, StyleSheet } from 'react-native';
@@ -9,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AllBirthdays from './AllBirthdays';
 import AttendanceTrackingCards from './AttendanceTrackingCards';
 import CheckInCard from './CheckInCard';
+import EmployeeOfTheMonthSection from './EmployeeOfTheMonthSection';
 import EmployeesOnLeaveToday from './EmployeesOnLeaveToday';
 import EmployeesWFHToday from './EmployeesWFHToday';
 import InfoSection from './InfoSection';
@@ -47,32 +47,39 @@ const HomeScreen: React.FC = () => {
     birthday: new Animated.Value(1),
   }).current;
 
+
   // Fetch late/early counts from API
   const fetchAttendanceCounts = useCallback(async () => {
     try {
-      // Get current month and year
+      // Get current month date range
       const now = new Date();
-      const month = (now.getMonth() + 1).toString();
-      const year = now.getFullYear().toString();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      
+      // First day of current month
+      const fromDate = new Date(year, month, 1);
+      const fromDateStr = fromDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Last day of current month
+      const toDate = new Date(year, month + 1, 0);
+      const toDateStr = toDate.toISOString().split('T')[0]; // YYYY-MM-DD
 
-      console.log('📊 Fetching late check-in count for:', { month, year });
+      console.log('📊 Fetching late/early counts for:', { fromDateStr, toDateStr });
 
-      // Fetch late check-in count from /late-checkin-count/ API
-      const lateResponse = await getLateCheckinCount(month, year);
+      // Import the new API function
+      const { getLateEarlyCount } = await import('@/lib/api');
+      const response = await getLateEarlyCount(fromDateStr, toDateStr);
 
-      console.log('📊 Late check-in API response:', JSON.stringify(lateResponse, null, 2));
+      console.log('📊 Late/early API response:', JSON.stringify(response, null, 2));
 
-      if (lateResponse?.data?.late_checkin_count !== undefined) {
-        console.log('✅ Setting late check-in count to:', lateResponse.data.late_checkin_count);
-        setLateCheckInCount(lateResponse.data.late_checkin_count);
+      if (response?.data && response.data.length > 0) {
+        const employeeData = response.data[0]; // Get first employee's data
+        console.log('✅ Setting counts - Late:', employeeData.late, 'Early:', employeeData.early);
+        setLateCheckInCount(employeeData.late);
+        setEarlyCheckOutCount(employeeData.early);
       } else {
-        console.log('⚠️ No late_checkin_count in API response');
+        console.log('⚠️ No data in API response');
       }
-
-      // Note: Early checkout count API endpoint doesn't exist yet
-      // The backend needs to provide an endpoint like /early-checkout-count/
-      // Until then, early checkout count will remain at initial value (0)
-      // Do NOT manually set or override these counts - they come from API only
 
     } catch (error) {
       console.error('❌ Error fetching attendance counts:', error);
@@ -171,9 +178,6 @@ const HomeScreen: React.FC = () => {
         {/* Leave Balance Sheet */}
         <LeaveBalanceSection />
 
-        {/* Missed Punch Section */}
-        <MissedPunchSection />
-
         {/* Attendance Tracking Cards */}
         <AttendanceTrackingCards
           lateCheckIns={lateCheckInCount}
@@ -185,6 +189,11 @@ const HomeScreen: React.FC = () => {
           onCheckInChange={handleCheckInChange}
         />
 
+
+        {/* Missed Punch Section */}
+        <MissedPunchSection />
+
+  
         {/* My pending requests */}
         <PendingRequestsSection />
 
@@ -229,6 +238,9 @@ const HomeScreen: React.FC = () => {
           onAnimatePress={animatePress}
           scaleAnim={scaleAnims.wfhToday}
         />
+
+        {/* Employee of the Month */}
+        <EmployeeOfTheMonthSection />
 
         {/* All Birthdays */}
         <AllBirthdays

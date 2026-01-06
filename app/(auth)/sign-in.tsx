@@ -1,7 +1,7 @@
 // app/(auth)/sign-in.tsx
 import Custominputs from '@/components/Custominputs';
 import CustomModal from '@/components/CustomModal';
-import { login } from '@/lib/auth';
+import { useAuth } from '@/contexts/AuthContext';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 
 const SignIn = () => {
+    const { login } = useAuth();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [modalConfig, setModalConfig] = useState({
@@ -91,31 +92,26 @@ const SignIn = () => {
                 return;
             }
 
-            // Regular user login via API
-            const response = await login({
+            // Regular user login via AuthContext
+            await login({
                 username: form.emailOrUsername.trim(),
                 password: form.password,
             });
 
-            console.log('✅ Login successful:', response);
-
-            // Check if we received JWT tokens
-            if (response.access && response.refresh) {
-                console.log('✅ JWT Tokens received and stored');
-            }
+            console.log('✅ Login successful - AuthContext updated');
 
             // Show success modal
             setModalConfig({
                 visible: true,
                 type: 'success',
                 title: 'Welcome Back! 👋',
-                message: response.message || 'Login successful',
+                message: 'Login successful',
             });
 
             // Navigate to home screen
             setTimeout(() => {
                 setModalConfig((prev) => ({ ...prev, visible: false }));
-                router.replace('/');
+                router.replace('/(tabs)');
             }, 1500);
 
         } catch (error: any) {

@@ -1,4 +1,5 @@
 import { TabBarProvider, useTabBar } from '@/constants/TabBarContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Redirect, Tabs } from 'expo-router';
@@ -6,7 +7,7 @@ import "global.css";
 import React from 'react';
 import Toast from 'react-native-toast-message';
 
-import { Animated, Platform, Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 // Custom Animated Tab Bar Component
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -88,10 +89,20 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
+    const { isLoggedIn, isLoading } = useAuth();
 
-    const isAuthenticated = true;
-    if (!isAuthenticated) {
-        return <Redirect href="/sign-in" />;
+    // Show loading screen while checking authentication
+    if (isLoading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#4289f4ff" />
+            </View>
+        );
+    }
+
+    // Redirect to login if not authenticated
+    if (!isLoggedIn) {
+        return <Redirect href="/(auth)/sign-in" />;
     }
 
     function TabsLayoutContent() {
@@ -180,5 +191,11 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 4,
         fontWeight: '500',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#f0f2f5',
     },
 });

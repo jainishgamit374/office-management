@@ -1,0 +1,57 @@
+    const fetchAttendanceData = async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
+
+            console.log('📱 Loading attendance from LOCAL STORAGE ONLY...');
+            console.log('📅 Date Range:', startDate, 'to', endDate);
+
+            // Load records from local storage only
+            const localRecords = await getLocalRecordsByDateRange(startDate, endDate);
+            console.log('✅ Local records found:', localRecords.length);
+
+            if (localRecords.length > 0) {
+                console.log('📋 Local record details:');
+                localRecords.forEach((record, index) => {
+                    console.log(`  ${index + 1}. Date: ${record.date}`);
+                    console.log(`     Punch IN: ${record.punchInTime || 'N/A'} ${record.isLateCheckIn ? '🟠 LATE' : '🟢 ON TIME'}`);
+                    console.log(`     Punch OUT: ${record.punchOutTime || 'N/A'} ${record.isEarlyCheckOut ? '🟠 EARLY' : ''}`);
+                    console.log(`     Working Hours: ${record.workingHours || 'N/A'}`);
+                });
+
+                // Convert local records to display format
+                const formattedRecords = mergeAttendanceRecords(localRecords, []);
+                console.log('📊 Formatted records for display:', formattedRecords.length);
+                
+                setAttendanceData(formattedRecords);
+
+                // Calculate stats from local data
+                const presentDays = formattedRecords.filter(r => r.status === 'present').length;
+                const absentDays = formattedRecords.filter(r => r.status === 'absent').length;
+                
+                setStats({
+                    totalCount: formattedRecords.length,
+                    presentDays,
+                    absentDays,
+                    totalHours: '0h 0m',
+                });
+
+                console.log('✅ Attendance data loaded from local storage successfully');
+            } else {
+                console.log('ℹ️ No local records found for this date range');
+                setAttendanceData([]);
+                setStats({
+                    totalCount: 0,
+                    presentDays: 0,
+                    absentDays: 0,
+                    totalHours: '0h 0m',
+                });
+            }
+        } catch (err: any) {
+            console.error('❌ Error loading local attendance:', err);
+            setError(err.message || 'Failed to load attendance data from local storage');
+            setAttendanceData([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };

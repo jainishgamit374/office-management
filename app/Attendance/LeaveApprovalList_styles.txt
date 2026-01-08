@@ -1,0 +1,24 @@
+    reasonSection: {
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#F5F5F5',
+    },
+    reasonHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
+    reasonLabel: {
+        fontSize: 11,
+        color: '#999',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        fontWeight: '600',
+    },
+    reasonText: {
+        fontSize: 14,
+        color: '#666',
+        lineHeight: 20,
+    },

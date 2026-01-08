@@ -2,23 +2,22 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { getCurrentLocation, getPunchStatus, hasLocationPermission, isEarlyCheckOut, isLateCheckIn, recordPunch, requestLocationPermission } from '@/lib/attendance';
 import { saveAttendanceRecord } from '@/lib/attendanceStorage';
 import { formatWorkingHours } from '@/lib/dateUtils';
-import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  PanResponder,
-  Platform,
-  StyleSheet,
-  Text,
-  UIManager,
-  View,
-  type GestureResponderEvent,
-  type PanResponderGestureState,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    PanResponder,
+    Platform,
+    StyleSheet,
+    Text,
+    UIManager,
+    View,
+    type GestureResponderEvent,
+    type PanResponderGestureState,
 } from 'react-native';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -376,22 +375,19 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
         console.error('⚠️ Failed to save punch IN locally:', storageError);
       }
 
-      if (isLate) {
-        const newLateCount = lateCheckInCount + 1;
-        setLateCheckInCount(newLateCount);
-        onLateEarlyCountChange?.(newLateCount, earlyCheckOutCount);
-      }
+      // Backend handles late check-in counting
+      // The count will be updated when HomeScreen refreshes from API
 
       if (punchResponse.data?.IsLate && punchResponse.data?.LateByMinutes > 0) {
         Alert.alert(
           'Checked In (Late) ⚠️',
-          `You are ${punchResponse.data.LateByMinutes} minute${punchResponse.data.LateByMinutes > 1 ? 's' : ''} late.\n\nLate check-ins this month: ${lateCheckInCount + 1}/5`,
+          `You are ${punchResponse.data.LateByMinutes} minute${punchResponse.data.LateByMinutes > 1 ? 's' : ''} late.\n\nYour late check-in has been recorded.`,
           [{ text: 'OK' }]
         );
       } else if (isLate) {
         Alert.alert(
           'Checked In (Late) ⚠️',
-          `You checked in after 9:30 AM.\n\nLate check-ins this month: ${lateCheckInCount + 1}/5`,
+          `You checked in after 9:30 AM.\n\nYour late check-in has been recorded.`,
           [{ text: 'OK' }]
         );
       } else {
@@ -507,22 +503,19 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
         setOvertimeHours(punchResponse.data.OvertimeHours);
       }
 
-      if (isEarly) {
-        const newEarlyCount = earlyCheckOutCount + 1;
-        setEarlyCheckOutCount(newEarlyCount);
-        onLateEarlyCountChange?.(lateCheckInCount, newEarlyCount);
-      }
+      // Backend handles early check-out counting
+      // The count will be updated when HomeScreen refreshes from API
 
       if (punchResponse.data?.IsEarly && punchResponse.data?.EarlyByMinutes > 0) {
         Alert.alert(
           'Checked Out (Early) ⚠️',
-          `You are leaving ${punchResponse.data.EarlyByMinutes} minute${punchResponse.data.EarlyByMinutes > 1 ? 's' : ''} early.\n\nEarly check-outs this month: ${earlyCheckOutCount + 1}/5`,
+          `You are leaving ${punchResponse.data.EarlyByMinutes} minute${punchResponse.data.EarlyByMinutes > 1 ? 's' : ''} early.\n\nYour early check-out has been recorded.`,
           [{ text: 'OK' }]
         );
       } else if (isEarly) {
         Alert.alert(
           'Checked Out (Early) ⚠️',
-          `You checked out before 6:30 PM.\n\nEarly check-outs this month: ${earlyCheckOutCount + 1}/5`,
+          `You checked out before 6:30 PM.\n\nYour early check-out has been recorded.`,
           [{ text: 'OK' }]
         );
       } else {
@@ -789,6 +782,49 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
               )}
             </Animated.View>
           </View>
+
+          {/* Time Info Boxes - Show when checked in or checked out */}
+          {(isCheckedIn || hasCheckedOut) && (
+            <View style={styles.timeInfoSection}>
+              <View style={styles.topRow}>
+                {/* Check-in */}
+                <View style={[styles.timeBox, { backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f8f9fa' }]}>
+                  <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Check-In</Text>
+                  <Text style={[styles.timeValue, { color: '#4CAF50' }]}>
+                    {punchInTime
+                      ? new Date(punchInTime).toLocaleTimeString('en-IN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      })
+                      : '--'}
+                  </Text>
+                </View>
+
+                {/* Working Hours */}
+                <View style={[styles.timeBox, { backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f8f9fa' }]}>
+                  <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Working Hours</Text>
+                  <Text style={[styles.timeValue, { color: '#2196F3' }]}>
+                    {formatWorkingHours(punchInTime, punchOutTime)}
+                  </Text>
+                </View>
+
+                {/* Check-out */}
+                <View style={[styles.timeBox, { backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f8f9fa' }]}>
+                  <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Check-Out</Text>
+                  <Text style={[styles.timeValue, { color: colors.text }]}>
+                    {punchOutTime
+                      ? new Date(punchOutTime).toLocaleTimeString('en-IN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      })
+                      : '--'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Hour Pillars Section - Separate from swipe */}
@@ -833,63 +869,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
           </View>
         )}
       </View>
-
-      {/* Checkout Summary - Integrated within the same card */}
-      {hasCheckedOut && (
-        <View style={styles.checkoutSummary}>
-          <View style={styles.summaryDivider} />
-
-          <View style={styles.summaryContent}>
-            {/* Top Row: Check-in, Working Hours, and Check-out */}
-            <View style={styles.topRow}>
-              {/* Check-in */}
-              <View style={[styles.timeBox, { backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f8f9fa' }]}>
-                <View style={[styles.timeIcon, { backgroundColor: theme === 'dark' ? '#2a2a2a' : '#E8F5E9' }]}>
-                  <Feather name="log-in" size={18} color="#4CAF50" />
-                </View>
-                <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Check-In</Text>
-                <Text style={[styles.timeValue, { color: '#4CAF50' }]}>
-                  {punchInTime
-                    ? new Date(punchInTime).toLocaleTimeString('en-IN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true,
-                    })
-                    : '--'}
-                </Text>
-              </View>
-
-              {/* Working Hours */}
-              <View style={[styles.timeBox, { backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f8f9fa' }]}>
-                <View style={[styles.timeIcon, { backgroundColor: theme === 'dark' ? '#2a2a2a' : '#E3F2FD' }]}>
-                  <Feather name="clock" size={18} color="#2196F3" />
-                </View>
-                <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Working Hours</Text>
-                <Text style={[styles.timeValue, { color: '#2196F3' }]}>
-                  {formatWorkingHours(punchInTime, punchOutTime)}
-                </Text>
-              </View>
-
-              {/* Check-out */}
-              <View style={[styles.timeBox, { backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f8f9fa' }]}>
-                <View style={[styles.timeIcon, { backgroundColor: theme === 'dark' ? '#2a2a2a' : '#FFF3E0' }]}>
-                  <Feather name="log-out" size={18} color="#FF9800" />
-                </View>
-                <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Check-Out</Text>
-                <Text style={[styles.timeValue, { color: colors.text }]}>
-                  {punchOutTime
-                    ? new Date(punchOutTime).toLocaleTimeString('en-IN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true,
-                    })
-                    : '--'}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
     </View>
   );
 };
@@ -973,12 +952,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
   },
+  timeInfoSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
   pillarsSection: {
     width: '100%',
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 16,
     paddingBottom: 20,
     backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
   },
   pillarsRow: {
     flexDirection: 'row',
@@ -1039,16 +1026,16 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 8,
     paddingBottom: 4,
   },
   timeBox: {
     flex: 1,
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 18,
-    paddingHorizontal: 10,
-    borderRadius: 16,
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1057,25 +1044,25 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   timeIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   timeLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     textAlign: 'center',
     opacity: 0.6,
   },
   timeValue: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 });
 

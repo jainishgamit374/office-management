@@ -164,6 +164,21 @@ export const submitEarlyCheckoutRequest = async (
 };
 
 /**
+ * Get Early Checkout Count
+ * GET /early-checkout-count/
+ * Returns the count of early checkouts for the current user
+ */
+export const getEarlyCheckoutCount = async (month?: string, year?: string) => {
+    let endpoint = '/early-checkout-count/';
+
+    if (month && year) {
+        endpoint += `?month=${month}&year=${year}`;
+    }
+
+    return apiRequest(endpoint, 'GET');
+};
+
+/**
  * Get Early Checkout Details
  * GET /earlycheckoutdetails/
  */
@@ -228,6 +243,18 @@ export interface LateCheckinCountResponse {
         month?: string;
         year?: number;
         allowed_late_checkins?: number;
+        remaining?: number;
+    };
+}
+
+export interface EarlyCheckoutCountResponse {
+    status: string;
+    statusCode: number;
+    data: {
+        early_checkout_count: number;
+        month?: string;
+        year?: number;
+        allowed_early_checkouts?: number;
         remaining?: number;
     };
 }

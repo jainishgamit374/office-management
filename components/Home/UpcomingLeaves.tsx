@@ -59,25 +59,66 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
                     status = 'Rejected';
                 }
 
-                // Format dates (format: "DD-MM-YYYY")
-                const formatDate = (dateStr: string) => {
-                    if (!dateStr) return '';
-                    const [day, month, year] = dateStr.split('-');
-                    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                    return date.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+                // Format dates with error handling (format: "DD-MM-YYYY")
+                const formatDate = (dateStr: string | null | undefined): string => {
+                    if (!dateStr || typeof dateStr !== 'string') return '';
+                    
+                    try {
+                        const parts = dateStr.trim().split('-');
+                        if (parts.length !== 3) return dateStr;
+                        
+                        const [day, month, year] = parts;
+                        const dayNum = parseInt(day);
+                        const monthNum = parseInt(month);
+                        const yearNum = parseInt(year);
+                        
+                        if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) return dateStr;
+                        if (monthNum < 1 || monthNum > 12) return dateStr;
+                        if (dayNum < 1 || dayNum > 31) return dateStr;
+                        
+                        const date = new Date(yearNum, monthNum - 1, dayNum);
+                        if (isNaN(date.getTime())) return dateStr;
+                        
+                        return date.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+                    } catch (error) {
+                        console.warn('Date formatting error:', error);
+                        return dateStr || '';
+                    }
                 };
 
-                const startDate = formatDate(item.leave_application_enddate); // Note: Using enddate as start based on API
-                const endDate = formatDate(item.leave_application_date);
-                const dates = startDate === endDate ? startDate : `${startDate} - ${endDate}`;
+                // FIXED: Correct date order - start should be leave_application_date
+                const startDate = formatDate(item.leave_application_date);
+                const endDate = formatDate(item.leave_application_enddate);
+                
+                let dates = startDate;
+                if (startDate && endDate && startDate !== endDate) {
+                    dates = `${startDate} - ${endDate}`;
+                } else if (!startDate && endDate) {
+                    dates = endDate;
+                } else if (!startDate && !endDate) {
+                    dates = 'Date not specified';
+                }
+
+                // FIXED: Handle negative total_days properly
+                const totalDays = item.total_days != null ? parseFloat(item.total_days) : null;
+                let duration = '1 day';
+                
+                if (totalDays !== null && !isNaN(totalDays)) {
+                    const absDays = Math.abs(totalDays);
+                    const roundedDays = Math.ceil(absDays);
+                    const days = roundedDays > 0 ? roundedDays : 1;
+                    duration = `${days} day${days > 1 ? 's' : ''}`;
+                } else if (item.leave_duration) {
+                    duration = item.leave_duration;
+                }
 
                 return {
                     id: index + 1,
                     name: item.employee_name || 'Employee',
                     leaveType: item.leave_type || 'Leave',
                     dates: dates,
-                    duration: item.total_days ? `${Math.abs(item.total_days)} day${Math.abs(item.total_days) > 1 ? 's' : ''}` : '1 day',
-                    reason: item.leave_duration || 'No reason provided',
+                    duration: duration,
+                    reason: item.leave_type || 'Leave application', // FIXED: Use leave_type as reason
                     status,
                 };
             });

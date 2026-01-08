@@ -1,17 +1,18 @@
 import Navbar from '@/components/Navigation/Navbar';
 import { useTabBar } from '@/constants/TabBarContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Animated, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AllBirthdays from './AllBirthdays';
+import AttendanceIrregularities from './AttendanceIrregularities';
 import AttendanceTrackingCards from './AttendanceTrackingCards';
 import CheckInCard from './CheckInCard';
+import EarlyCheckouts from './EarlyCheckouts';
 import EmployeeOfTheMonthSection from './EmployeeOfTheMonthSection';
 import EmployeesOnLeaveToday from './EmployeesOnLeaveToday';
 import EmployeesWFHToday from './EmployeesWFHToday';
-import InfoSection from './InfoSection';
+import LateArrivals from './LateArrivals';
 import LeaveBalanceSection from './LeaveBalanceSection';
 import MissedPunchSection from './MissedPunchSection';
 import NotificationBanner from './NotificationBanner';
@@ -25,8 +26,6 @@ const HomeScreen: React.FC = () => {
   const [hasCheckedOut, setHasCheckedOut] = useState(false);
   const [hasEverCheckedIn, setHasEverCheckedIn] = useState(false);
   const [expandedLeave, setExpandedLeave] = useState<number | null>(null);
-  const [lateCheckInCount, setLateCheckInCount] = useState<number>(0);
-  const [earlyCheckOutCount, setEarlyCheckOutCount] = useState<number>(0);
 
   const totalTasks = 12;
   const tasksToComplete = 4;
@@ -47,53 +46,6 @@ const HomeScreen: React.FC = () => {
     birthday: new Animated.Value(1),
   }).current;
 
-
-  // Fetch late/early counts from API
-  const fetchAttendanceCounts = useCallback(async () => {
-    try {
-      // Get current month date range
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      
-      // First day of current month
-      const fromDate = new Date(year, month, 1);
-      const fromDateStr = fromDate.toISOString().split('T')[0]; // YYYY-MM-DD
-      
-      // Last day of current month
-      const toDate = new Date(year, month + 1, 0);
-      const toDateStr = toDate.toISOString().split('T')[0]; // YYYY-MM-DD
-
-      console.log('📊 Fetching late/early counts for:', { fromDateStr, toDateStr });
-
-      // Import the new API function
-      const { getLateEarlyCount } = await import('@/lib/api');
-      const response = await getLateEarlyCount(fromDateStr, toDateStr);
-
-      console.log('📊 Late/early API response:', JSON.stringify(response, null, 2));
-
-      if (response?.data && response.data.length > 0) {
-        const employeeData = response.data[0]; // Get first employee's data
-        console.log('✅ Setting counts - Late:', employeeData.late, 'Early:', employeeData.early);
-        setLateCheckInCount(employeeData.late);
-        setEarlyCheckOutCount(employeeData.early);
-      } else {
-        console.log('⚠️ No data in API response');
-      }
-
-    } catch (error) {
-      console.error('❌ Error fetching attendance counts:', error);
-      // Don't show error to user, just log it
-    }
-  }, []);
-
-  // Fetch counts on mount and when screen is focused
-  useFocusEffect(
-    useCallback(() => {
-      fetchAttendanceCounts();
-    }, [fetchAttendanceCounts])
-  );
-
   // Helper function for press animation
   const animatePress = (animKey: keyof typeof scaleAnims, callback: () => void) => {
     Animated.sequence([
@@ -112,13 +64,12 @@ const HomeScreen: React.FC = () => {
   };
 
   const handleCheckInChange = (checkedIn: boolean, checkedOut: boolean) => {
+    console.log('🔔 [handleCheckInChange] Called with:', { checkedIn, checkedOut });
     setIsCheckedIn(checkedIn);
     setHasCheckedOut(checkedOut);
     if (checkedIn) {
       setHasEverCheckedIn(true);
     }
-    // Refresh attendance counts after check-in/out
-    fetchAttendanceCounts();
   };
 
   const handleExpandToggle = (newValue: number | null) => {
@@ -178,11 +129,8 @@ const HomeScreen: React.FC = () => {
         {/* Leave Balance Sheet */}
         <LeaveBalanceSection />
 
-        {/* Attendance Tracking Cards */}
-        <AttendanceTrackingCards
-          lateCheckIns={lateCheckInCount}
-          earlyCheckOuts={earlyCheckOutCount}
-        />
+        {/* Attendance Tracking Cards - Now manages its own state */}
+        <AttendanceTrackingCards />
 
         {/* Check In Card */}
         <CheckInCard
@@ -193,15 +141,18 @@ const HomeScreen: React.FC = () => {
         {/* Missed Punch Section */}
         <MissedPunchSection />
 
+        {/* Attendance Irregularities */}
+        <AttendanceIrregularities />
+
   
         {/* My pending requests */}
         <PendingRequestsSection />
 
         {/* Late arrivals */}
-        <InfoSection title="Late Arrivals Today" />
+        <LateArrivals title="Late Arrivals Today" />
 
         {/* Leave Early Today */}
-        <InfoSection title="Leaving Early Today" />
+        <EarlyCheckouts title="Leaving Early Today" />
 
         {/* Employees on Leave Today */}
         <EmployeesOnLeaveToday />

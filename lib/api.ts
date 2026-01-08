@@ -553,6 +553,230 @@ export const getBirthdays = async (): Promise<BirthdaysResponse> => {
     }
 };
 
+// ==================== UPCOMING LEAVES ====================
+
+export interface UpcomingLeave {
+    leave_application_date: string;
+    leave_application_enddate: string;
+    leave_application_code: string;
+    employee_name: string;
+    leave_type: string;
+    created_date: string;
+    leave_duration: string;
+    total_days: number;
+    approval_status: string;
+}
+
+export interface UpcomingLeavesResponse {
+    status: string;
+    statusCode: number;
+    message: string;
+    data: UpcomingLeave[];
+}
+
+/**
+ * Get upcoming leaves
+ */
+export const getUpcomingLeaves = async (): Promise<UpcomingLeavesResponse> => {
+    try {
+        console.log('📊 Fetching upcoming leaves...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/getupcomingleaves/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Upcoming leaves data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch upcoming leaves';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Upcoming leaves fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Upcoming leaves error:', error);
+        let errorMessage = 'Failed to fetch upcoming leaves';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+
+// ==================== UPCOMING WFH ====================
+
+export interface UpcomingWFH {
+    wfh_date: string;
+    wfh_code: string;
+    employee_name: string;
+    created_date: string;
+    duration: string;
+    approval_status: string;
+}
+
+export interface UpcomingWFHResponse {
+    status: string;
+    statusCode: number;
+    message: string;
+    data: UpcomingWFH[];
+}
+
+/**
+ * Get upcoming work from home applications
+ */
+export const getUpcomingWFH = async (): Promise<UpcomingWFHResponse> => {
+    try {
+        console.log('📊 Fetching upcoming WFH applications...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/getupcomingworkfromhome/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Upcoming WFH data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch upcoming WFH applications';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Upcoming WFH applications fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Upcoming WFH error:', error);
+        let errorMessage = 'Failed to fetch upcoming WFH applications';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+
+// ==================== EMPLOYEE ATTENDANCE ====================
+
+export interface EmployeeAttendanceRecord {
+    emp_id: number;
+    fname: string;
+    lname: string;
+    attdate: string;
+    intime: string;
+    outtime: string;
+    wrkhours: string;
+    latein: string;
+    earlyout: string;
+    halfday: string;
+}
+
+export interface EmployeeAttendanceResponse {
+    status: string;
+    data: EmployeeAttendanceRecord[];
+}
+
+/**
+ * Get employee attendance for a date range
+ */
+export const getEmployeeAttendance = async (fromDate: string, toDate: string): Promise<EmployeeAttendanceResponse> => {
+    try {
+        console.log('📊 Fetching employee attendance...', { fromDate, toDate });
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/employeeattendance/?from_date=${fromDate}&to_date=${toDate}`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Employee attendance data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch employee attendance';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Employee attendance fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Employee attendance error:', error);
+        let errorMessage = 'Failed to fetch employee attendance';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+
 // ==================== LATE/EARLY PUNCH COUNT ====================
 
 export interface LateEarlyEmployee {
@@ -612,6 +836,282 @@ export const getLateEarlyCount = async (fromDate: string, toDate: string): Promi
     } catch (error: any) {
         console.error('❌ Late/early counts error:', error);
         let errorMessage = 'Failed to fetch late/early counts';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+
+// ==================== ABSENCE DATA ====================
+
+export interface AbsenceData {
+    absent: number;
+    absentees: string[];
+}
+
+export interface AbsenceResponse {
+    status: string;
+    statusCode: number;
+    message: string;
+    data: AbsenceData;
+}
+
+/**
+ * Get absence data for today
+ */
+export const getAbsenceData = async (): Promise<AbsenceResponse> => {
+    try {
+        console.log('📊 Fetching absence data...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/getabsence/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Absence data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch absence data';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Absence data fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Absence data error:', error);
+        let errorMessage = 'Failed to fetch absence data';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+
+// ==================== TODAY'S WFH ====================
+
+export interface TodayWFHEmployee {
+    EmployeeName: string;
+    IsHalfDay: boolean;
+    IsFirstHalf: boolean;
+    ApprovalStatus: number;
+    Reason: string;
+    DateTime: string;
+}
+
+export interface TodayWFHResponse {
+    status: string;
+    today_WFH: TodayWFHEmployee[];
+}
+
+/**
+ * Get employees working from home today
+ */
+export const getTodayWFH = async (): Promise<TodayWFHResponse> => {
+    try {
+        console.log('📊 Fetching today\'s WFH employees...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/todayworkfromhome/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Today\'s WFH data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch today\'s WFH data';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Today\'s WFH data fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Today\'s WFH error:', error);
+        let errorMessage = 'Failed to fetch today\'s WFH data';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+
+// ==================== LATE ARRIVALS ====================
+
+export interface LateArrivalEmployee {
+    EmployeeName: string;
+    ExpectedArrivalTime: string;
+    Reason?: string;
+}
+
+export interface LateArrivalsResponse {
+    status: string;
+    late_arrivals: LateArrivalEmployee[];
+}
+
+/**
+ * Get employees expected to arrive late today
+ */
+export const getLateArrivals = async (): Promise<LateArrivalsResponse> => {
+    try {
+        console.log('📊 Fetching late arrivals...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/expectedlatearrivals/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Late arrivals data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch late arrivals';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Late arrivals fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Late arrivals error:', error);
+        let errorMessage = 'Failed to fetch late arrivals';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+
+// ==================== EARLY CHECKOUTS ====================
+
+export interface EarlyCheckoutEmployee {
+    EmployeeName: string;
+    CheckoutTime: string;
+    ApprovalStatus: number;
+}
+
+export interface EarlyCheckoutsResponse {
+    status: string;
+    early_checkouts: EarlyCheckoutEmployee[];
+}
+
+/**
+ * Get employees who checked out early today
+ */
+export const getEarlyCheckouts = async (): Promise<EarlyCheckoutsResponse> => {
+    try {
+        console.log('📊 Fetching early checkouts...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/getearlycheckouts/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Early checkouts data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch early checkouts';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Early checkouts fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Early checkouts error:', error);
+        let errorMessage = 'Failed to fetch early checkouts';
         if (error instanceof Error) {
             errorMessage = error.message;
         } else if (typeof error === 'string') {

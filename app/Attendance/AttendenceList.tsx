@@ -1,4 +1,5 @@
-import { AttendanceRecord, getAttendanceHistory } from '@/lib/attendance';
+import type { TransformedAttendanceRecord } from '@/lib/employeeAttendance';
+import { getEmployeeAttendance } from '@/lib/employeeAttendance';
 import { formatISTTime } from '@/lib/timezone';
 import Feather from '@expo/vector-icons/Feather';
 import React, { useEffect, useState } from 'react';
@@ -25,7 +26,7 @@ const AttendenceList = () => {
     const [calendarType, setCalendarType] = useState<'start' | 'end'>('start');
 
     // API state
-    const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
+    const [attendanceData, setAttendanceData] = useState<TransformedAttendanceRecord[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [stats, setStats] = useState({
@@ -42,35 +43,21 @@ const AttendenceList = () => {
             setError(null);
 
             console.log('📅 Fetching attendance from API...');
-            const response = await getAttendanceHistory(startDate, endDate);
+            const response = await getEmployeeAttendance(startDate, endDate);
 
             console.log('📊 Full API Response:', JSON.stringify(response, null, 2));
 
             if (response.success && response.data) {
-                console.log('📊 Raw records from API:', response.data.records?.length || 0);
+                console.log('📊 Records from API:', response.data.records?.length || 0);
 
-                // Deduplicate records by date (keep the latest one)
-                const uniqueRecords = response.data.records?.reduce((acc: AttendanceRecord[], current) => {
-                    const existing = acc.find(record => record.date === current.date);
-                    if (!existing) {
-                        acc.push(current);
-                    }
-                    return acc;
-                }, []) || [];
-
-                console.log('📊 After deduplication:', uniqueRecords.length, 'records');
-                if (uniqueRecords.length > 0) {
-                    console.log('📊 First record:', uniqueRecords[0]);
-                }
-
-                setAttendanceData(uniqueRecords);
+                setAttendanceData(response.data.records || []);
                 setStats({
                     totalCount: response.data.total_count || 0,
                     presentDays: response.data.present_days || 0,
                     absentDays: response.data.absent_days || 0,
                     totalHours: response.data.total_hours || '0h 0m',
                 });
-                console.log('✅ Attendance data loaded:', uniqueRecords.length, 'unique records (deduplicated)');
+                console.log('✅ Attendance data loaded:', response.data.records.length, 'records');
             } else {
                 setAttendanceData([]);
                 setStats({

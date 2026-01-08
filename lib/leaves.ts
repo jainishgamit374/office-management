@@ -181,7 +181,65 @@ export interface LeaveApplicationsListResponse {
     requestId?: string;
 }
 
+export interface LeaveBalanceItem {
+    Leavename: string;
+    count: number;
+}
+
+export interface LeaveBalanceResponse {
+    status: string;
+    statusCode: number;
+    message: string;
+    data: LeaveBalanceItem[];
+}
+
 // ==================== API FUNCTIONS ====================
+
+/**
+ * Get employee leave balance
+ * GET /getemployeeleavebalance/
+ */
+export const getEmployeeLeaveBalance = async (): Promise<LeaveBalanceResponse> => {
+    try {
+        console.log('📊 Fetching employee leave balance...');
+
+        // Get access token
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        // Make API request
+        const response = await fetch(`${API_BASE_URL}/getemployeeleavebalance/`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+
+        console.log('📡 Response status:', response.status);
+
+        // Parse response
+        const data = await response.json();
+        console.log('📡 Response data:', data);
+
+        // Handle error responses
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('Your session has expired. Please login again.');
+            } else {
+                throw new Error(data.message || 'Failed to fetch leave balance');
+            }
+        }
+
+        console.log('✅ Leave balance fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Get leave balance error:', error);
+        throw new Error(error.message || 'Failed to fetch leave balance');
+    }
+};
 
 /**
  * Get access token from AsyncStorage

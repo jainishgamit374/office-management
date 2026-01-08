@@ -1,26 +1,104 @@
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
-import { recordEarlyLatePunch } from '@/lib/earlyLatePunch';
+import { getLateEarlyCount } from '@/lib/api';
+import { createEarlyLatePunch, getLateCheckinCount } from '@/lib/earlyLatePunch';
 import Feather from '@expo/vector-icons/Feather';
-import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface AttendanceTrackingCardsProps {
-    lateCheckIns?: number;
-    earlyCheckOuts?: number;
-    halfDays?: number;
+    onCountsChange?: (lateCount: number, earlyCount: number) => void;
 }
 
-const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
-    lateCheckIns = 0,
-    earlyCheckOuts = 0,
-    halfDays = 0,
-}) => {
+const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCountsChange }) => {
     const { colors } = useTheme();
     const styles = createStyles(colors);
     const [showModal, setShowModal] = useState(false);
     const [selectedType, setSelectedType] = useState<'Early' | 'Late'>('Early');
     const [reason, setReason] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // Manage counts internally
+    const [lateCheckIns, setLateCheckIns] = useState(0);
+    const [earlyCheckOuts, setEarlyCheckOuts] = useState(0);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    // Fetch counts from API
+    const fetchCounts = useCallback(async () => {
+        try {
+            console.log('🔄 [AttendanceTrackingCards] Fetching counts...');
+            
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const monthStr = (month + 1).toString();
+            const yearStr = year.toString();
+
+            // First day of current month
+            const fromDate = new Date(year, month, 1);
+            const fromDateStr = fromDate.toISOString().split('T')[0];
+            
+            // Last day of current month
+            const toDate = new Date(year, month + 1, 0);
+            const toDateStr = toDate.toISOString().split('T')[0];
+
+            // Fetch both counts in parallel
+            // Late from dedicated endpoint, Early from combined endpoint
+            const [lateResponse, earlyResponse] = await Promise.all([
+                getLateCheckinCount(monthStr, yearStr).catch(err => {
+                    console.error('❌ Error fetching late count:', err);
+                    return null;
+                }),
+                getLateEarlyCount(fromDateStr, toDateStr).catch(err => {
+                    console.error('❌ Error fetching early count:', err);
+                    return null;
+                })
+            ]);
+
+            console.log('📊 Late check-in response:', lateResponse);
+            console.log('📊 Early check-out response:', earlyResponse);
+
+            // Update late check-in count from dedicated endpoint
+            if (lateResponse?.data?.late_checkin_count !== undefined) {
+                const newLateCount = lateResponse.data.late_checkin_count;
+                console.log('✅ Setting late count:', newLateCount);
+                setLateCheckIns(newLateCount);
+            }
+
+            // Update early check-out count from combined endpoint
+            if (earlyResponse?.data && earlyResponse.data.length > 0) {
+                const newEarlyCount = earlyResponse.data[0].early;
+                console.log('✅ Setting early count:', newEarlyCount);
+                setEarlyCheckOuts(newEarlyCount);
+            }
+
+            // Notify parent if callback provided
+            if (onCountsChange) {
+                onCountsChange(
+                    lateResponse?.data?.late_checkin_count || 0,
+                    earlyResponse?.data?.[0]?.early || 0
+                );
+            }
+
+            console.log('✅ [AttendanceTrackingCards] Counts updated successfully');
+        } catch (error) {
+            console.error('❌ [AttendanceTrackingCards] Error fetching counts:', error);
+        }
+    }, [onCountsChange]);
+
+    // Fetch on mount and when screen gains focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchCounts();
+        }, [fetchCounts])
+    );
+
+    // Manual refresh
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        await fetchCounts();
+        setIsRefreshing(false);
+    };
 
     const handleSubmit = async () => {
         if (!reason.trim()) {
@@ -35,7 +113,7 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
             const now = new Date();
             const dateTime = now.toISOString().slice(0, 19); // Remove milliseconds and Z
 
-            await recordEarlyLatePunch(dateTime, selectedType, reason.trim());
+            await createEarlyLatePunch(dateTime, selectedType, reason.trim());
 
             Alert.alert(
                 'Success',
@@ -44,6 +122,8 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
                     text: 'OK', onPress: () => {
                         setShowModal(false);
                         setReason('');
+                        // Refresh counts after recording
+                        setTimeout(() => fetchCounts(), 1500);
                     }
                 }]
             );
@@ -61,6 +141,13 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.container}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={isRefreshing}
+                            onRefresh={handleRefresh}
+                            tintColor={colors.primary}
+                        />
+                    }
                 >
                     <TouchableOpacity
                         style={styles.card}
@@ -72,7 +159,11 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
                         <Text style={styles.actionText}>Tap to Record</Text>
                     </TouchableOpacity>
 
-                    <View style={styles.card}>
+                    <TouchableOpacity
+                        style={styles.card}
+                        onPress={handleRefresh}
+                        activeOpacity={0.7}
+                    >
                         <Text style={styles.label}>Late Check In</Text>
                         <Feather
                             name="log-in"
@@ -85,9 +176,13 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
                         ]}>
                             {lateCheckIns}/5
                         </Text>
-                    </View>
+                    </TouchableOpacity>
 
-                    <View style={styles.card}>
+                    <TouchableOpacity
+                        style={styles.card}
+                        onPress={handleRefresh}
+                        activeOpacity={0.7}
+                    >
                         <Text style={styles.label}>Early Check Out</Text>
                         <Feather
                             name="log-out"
@@ -100,12 +195,12 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({
                         ]}>
                             {earlyCheckOuts}/5
                         </Text>
-                    </View>
+                    </TouchableOpacity>
 
                     <View style={styles.card}>
                         <Text style={styles.label}>Half Day</Text>
                         <Feather name="calendar" size={32} color={colors.primary} />
-                        <Text style={styles.count}>{halfDays}</Text>
+                        <Text style={styles.count}>0</Text>
                     </View>
                 </ScrollView>
             </View>

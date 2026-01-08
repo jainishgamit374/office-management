@@ -1,4 +1,4 @@
-import { getWFHApplications } from '@/lib/api';
+import { getUpcomingWFH } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
@@ -37,26 +37,35 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
     const fetchWFHApplications = useCallback(async () => {
         try {
             setIsLoading(true);
-            const response = await getWFHApplications();
+            const response = await getUpcomingWFH();
 
             // Transform API response to component format
-            const wfhData: WFHDetail[] = response.data.map(item => {
-                const date = new Date(item.DateTime);
-                const formattedDate = date.toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric'
-                });
+            const wfhData: WFHDetail[] = response.data.map((item: any, index: number) => {
+                // Map approval status
+                let status: 'Pending' | 'Approved' | 'Awaiting Approve' = 'Pending';
+                if (item.approval_status?.toLowerCase().includes('approve')) {
+                    status = 'Approved';
+                } else if (item.approval_status?.toLowerCase().includes('await')) {
+                    status = 'Awaiting Approve';
+                }
 
-                // Get approver name from workflow list
-                const approverName = item.workflow_list[0]?.Approve_name || 'Unknown';
+                // Format date (format: "DD-MM-YYYY")
+                const formatDate = (dateStr: string) => {
+                    if (!dateStr) return '';
+                    const [day, month, year] = dateStr.split('-');
+                    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                    return date.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+                };
+
+                const formattedDate = formatDate(item.wfh_date);
 
                 return {
-                    id: item.WorkFromHomeReqMasterID,
-                    name: approverName,
+                    id: index + 1,
+                    name: item.employee_name || 'Employee',
                     dates: formattedDate,
-                    duration: `${formattedDate}${item.IsHalfDay ? ' (Half Day)' : ' (Full Day)'}`,
-                    reason: item.Reason,
-                    status: item.ApprovalStatus as 'Pending' | 'Approved' | 'Awaiting Approve',
+                    duration: item.duration || 'Full Day',
+                    reason: 'Work from home', // API doesn't provide reason field
+                    status,
                 };
             });
 

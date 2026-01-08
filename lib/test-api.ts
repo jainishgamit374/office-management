@@ -1,3 +1,15 @@
+/**
+ * ⚠️ DEVELOPMENT UTILITY ONLY ⚠️
+ * 
+ * This file contains API testing utilities for development and debugging purposes.
+ * It is NOT used in production code and should NOT be removed.
+ * 
+ * Purpose: Test API endpoints directly to debug request/response formats
+ * Usage: Import and call runAPITests() in development components
+ * 
+ * @see app/(auth)/test-api-screen.tsx for UI implementation
+ */
+
 // 🧪 API Test Script - Run this to test the API directly
 // This helps debug what the API expects and returns
 

@@ -1,24 +1,14 @@
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
-import { getPunchStatus } from '@/lib/attendance';
-import { getLateCheckinCount, type LateCheckinCountResponse } from '@/lib/earlyLatePunch';
+import { getEmployeeLeaveBalance, type LeaveBalanceItem } from '@/lib/leaves';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-interface LeaveBalanceData {
-    name: string;
-    total: number;
-    used: number;
-    pending: number;
-    available: number;
-}
-
 const LeaveBalanceSection: React.FC = () => {
     const { colors } = useTheme();
     const styles = createStyles(colors);
-    const [leaveBalances, setLeaveBalances] = useState<{ [key: string]: LeaveBalanceData }>({});
-    const [lateCheckinData, setLateCheckinData] = useState<LateCheckinCountResponse['data'] | null>(null);
+    const [leaveBalances, setLeaveBalances] = useState<LeaveBalanceItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -27,33 +17,43 @@ const LeaveBalanceSection: React.FC = () => {
             setIsLoading(true);
             setError(null);
 
-            // Fetch both leave balance and late check-in count in parallel
-            const [punchResponse, lateCheckinResponse] = await Promise.all([
-                getPunchStatus(),
-                getLateCheckinCount().catch(err => {
-                    console.warn('⚠️ Failed to load late check-in count:', err);
-                    return null;
-                })
-            ]);
+            console.log('🔄 [LeaveBalanceSection] Fetching leave balance...');
+            const response = await getEmployeeLeaveBalance();
 
-            if (punchResponse.data?.leaveBalance) {
-                setLeaveBalances(punchResponse.data.leaveBalance);
-                console.log('✅ Leave balance loaded from API');
-            } else {
-                // Fallback to empty state
-                setLeaveBalances({});
-                console.log('⚠️ No leave balance data in response');
+            console.log('📡 [LeaveBalanceSection] Full API response:', JSON.stringify(response, null, 2));
+
+            // Handle different response structures
+            let balanceData: LeaveBalanceItem[] = [];
+
+            if (response.data && Array.isArray(response.data)) {
+                balanceData = response.data;
+                console.log('✅ Using response.data array:', balanceData);
+            } else if (Array.isArray(response)) {
+                balanceData = response as any;
+                console.log('✅ Using direct response array:', balanceData);
+            } else if (response && typeof response === 'object') {
+                // Try to extract data from nested structure
+                const possibleData = (response as any).leave_balance || (response as any).leaveBalance || (response as any).balances;
+                if (possibleData && Array.isArray(possibleData)) {
+                    balanceData = possibleData;
+                    console.log('✅ Using nested data:', balanceData);
+                }
             }
 
-            if (lateCheckinResponse?.data) {
-                setLateCheckinData(lateCheckinResponse.data);
-                console.log('✅ Late check-in count loaded from API');
+            if (balanceData.length > 0) {
+                setLeaveBalances(balanceData);
+                console.log('✅ Leave balance loaded:', balanceData.length, 'items');
+                console.log('📊 Balance details:', balanceData.map(b => `${b.Leavename}: ${b.count}`).join(', '));
+            } else {
+                setLeaveBalances([]);
+                console.warn('⚠️ No leave balance data found in response');
+                console.warn('⚠️ Response structure:', Object.keys(response));
             }
         } catch (err: any) {
-            console.error('❌ Failed to load data:', err);
+            console.error('❌ Failed to load leave balance:', err);
+            console.error('❌ Error details:', err.message);
             setError(err.message);
-            // Set default values on error
-            setLeaveBalances({});
+            setLeaveBalances([]);
         } finally {
             setIsLoading(false);
         }
@@ -66,15 +66,10 @@ const LeaveBalanceSection: React.FC = () => {
         }, [fetchLeaveBalance])
     );
 
-    // Get leave data by type
-    const getLeaveData = (leaveType: string): LeaveBalanceData => {
-        return leaveBalances[leaveType] || {
-            name: leaveType,
-            total: 0,
-            used: 0,
-            pending: 0,
-            available: 0,
-        };
+    // Get leave count by type
+    const getLeaveCount = (leaveType: string): number => {
+        const leave = leaveBalances.find(item => item.Leavename === leaveType);
+        return leave?.count || 0;
     };
 
     // Get badge color
@@ -89,145 +84,114 @@ const LeaveBalanceSection: React.FC = () => {
 
     // Calculate total available leaves
     const getTotalAvailable = (): number => {
-        const cl = getLeaveData('CL');
-        const sl = getLeaveData('SL');
-        const pl = getLeaveData('PL');
-        return cl.available + sl.available + pl.available;
+        return leaveBalances.reduce((sum, leave) => sum + leave.count, 0);
     };
 
     return (
-        <View style={styles.container}>
+        <TouchableOpacity 
+            style={styles.container}
+            onPress={fetchLeaveBalance}
+            disabled={isLoading}
+            activeOpacity={0.7}
+        >
             <View style={styles.header}>
                 <View>
                     <Text style={styles.title}>Leave Balance</Text>
-                    <Text style={styles.subtitle}>Remaining leaves available</Text>
+                    <Text style={styles.subtitle}>
+                        {isLoading ? 'Refreshing...' : 'Tap to refresh'}
+                    </Text>
                 </View>
-                <TouchableOpacity
-                    onPress={fetchLeaveBalance}
-                    disabled={isLoading}
-                    style={styles.refreshButton}
-                >
-                    <Feather
-                        name="refresh-cw"
-                        size={20}
-                        color={colors.primary}
-                    />
-                </TouchableOpacity>
+                {isLoading && (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                )}
             </View>
 
-            {isLoading ? (
+            {isLoading && !leaveBalances.length ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="small" color={colors.primary} />
                 </View>
+            ) : error ? (
+                <View style={styles.errorContainer}>
+                    <Feather name="alert-circle" size={20} color={colors.error} />
+                    <Text style={styles.errorText}>{error}</Text>
+                </View>
             ) : (
-                <View style={styles.grid}>
-                    {/* Privilege Leave (PL) */}
-                    <View style={styles.card}>
-                        <View style={[styles.badge, { backgroundColor: getBadgeColor('PL') }]}>
-                            <Text style={styles.badgeText}>PL</Text>
+                <>
+                    <View style={styles.grid}>
+                        {/* Privilege Leave (PL) */}
+                        <View style={styles.card}>
+                            <View style={[styles.badge, { backgroundColor: getBadgeColor('PL') }]}>
+                                <Text style={styles.badgeText}>PL</Text>
+                            </View>
+                            <Text style={styles.count}>{getLeaveCount('PL')}</Text>
+                            <Text style={styles.leaveLabel}>Available</Text>
                         </View>
-                        <Text style={styles.count}>{getLeaveData('PL').available}</Text>
-                        <Text style={styles.leaveLabel}>Available</Text>
-                        {getLeaveData('PL').pending > 0 && (
-                            <Text style={styles.pendingText}>({getLeaveData('PL').pending} pending)</Text>
-                        )}
+
+                        {/* Casual Leave (CL) */}
+                        <View style={styles.card}>
+                            <View style={[styles.badge, { backgroundColor: getBadgeColor('CL') }]}>
+                                <Text style={styles.badgeText}>CL</Text>
+                            </View>
+                            <Text style={styles.count}>{getLeaveCount('CL')}</Text>
+                            <Text style={styles.leaveLabel}>Available</Text>
+                        </View>
+
+                        {/* Sick Leave (SL) */}
+                        <View style={styles.card}>
+                            <View style={[styles.badge, { backgroundColor: getBadgeColor('SL') }]}>
+                                <Text style={styles.badgeText}>SL</Text>
+                            </View>
+                            <Text style={styles.count}>{getLeaveCount('SL')}</Text>
+                            <Text style={styles.leaveLabel}>Available</Text>
+                        </View>
+
+                        {/* Total */}
+                        <View style={styles.card}>
+                            <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+                                <Text style={styles.badgeText}>Total</Text>
+                            </View>
+                            <Text style={styles.count}>{getTotalAvailable()}</Text>
+                            <Text style={styles.leaveLabel}>Available</Text>
+                        </View>
                     </View>
 
-                    {/* Casual Leave (CL) */}
-                    <View style={styles.card}>
-                        <View style={[styles.badge, { backgroundColor: getBadgeColor('CL') }]}>
-                            <Text style={styles.badgeText}>CL</Text>
-                        </View>
-                        <Text style={styles.count}>{getLeaveData('CL').available}</Text>
-                        <Text style={styles.leaveLabel}>Available</Text>
-                        {getLeaveData('CL').pending > 0 && (
-                            <Text style={styles.pendingText}>({getLeaveData('CL').pending} pending)</Text>
-                        )}
-                    </View>
-
-                    {/* Sick Leave (SL) */}
-                    <View style={styles.card}>
-                        <View style={[styles.badge, { backgroundColor: getBadgeColor('SL') }]}>
-                            <Text style={styles.badgeText}>SL</Text>
-                        </View>
-                        <Text style={styles.count}>{getLeaveData('SL').available}</Text>
-                        <Text style={styles.leaveLabel}>Available</Text>
-                        {getLeaveData('SL').pending > 0 && (
-                            <Text style={styles.pendingText}>({getLeaveData('SL').pending} pending)</Text>
-                        )}
-                    </View>
-
-                    {/* Total */}
-                    <View style={styles.card}>
-                        <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                            <Text style={styles.badgeText}>Total</Text>
-                        </View>
-                        <Text style={styles.count}>{getTotalAvailable()}</Text>
-                        <Text style={styles.leaveLabel}>Available</Text>
-                    </View>
-                </View>
-            )}
-
-            {/* Leave Balance Summary */}
-            {!isLoading && Object.keys(leaveBalances).length > 0 && (
-                <View style={styles.lateCheckinContainer}>
-                    <View style={styles.lateCheckinHeader}>
-                        <Feather name="calendar" size={16} color={colors.primary} />
-                        <Text style={styles.lateCheckinTitle}>Leave Balance Summary</Text>
-                    </View>
-                    <View style={styles.lateCheckinContent}>
-                        <View style={styles.lateCheckinStats}>
-                            <Text style={[
-                                styles.lateCheckinCount,
-                                { color: colors.primary }
-                            ]}>
-                                {Object.values(leaveBalances).reduce((sum, leave) => sum + leave.total, 0)}
-                            </Text>
-                            <Text style={styles.lateCheckinLabel}>Total Leaves</Text>
-                        </View>
-                        <View style={styles.lateCheckinDivider} />
-                        <View style={styles.lateCheckinStats}>
-                            <Text style={[
-                                styles.lateCheckinCount,
-                                { color: colors.error }
-                            ]}>
-                                {Object.values(leaveBalances).reduce((sum, leave) => sum + leave.used, 0)}
-                            </Text>
-                            <Text style={styles.lateCheckinLabel}>Used</Text>
-                        </View>
-                        <View style={styles.lateCheckinDivider} />
-                        <View style={styles.lateCheckinStats}>
-                            <Text style={[
-                                styles.lateCheckinCount,
-                                { color: getTotalAvailable() > 5 ? colors.success : colors.warning }
-                            ]}>
-                                {getTotalAvailable()}
-                            </Text>
-                            <Text style={styles.lateCheckinLabel}>Remaining</Text>
-                        </View>
-                    </View>
-                    {getTotalAvailable() <= 3 && getTotalAvailable() > 0 && (
-                        <View style={styles.warningBox}>
-                            <Feather name="alert-circle" size={12} color={colors.warning} />
-                            <Text style={[styles.warningText, { color: colors.warning }]}>Running low on leaves!</Text>
+                    {/* Leave Balance Summary */}
+                    {leaveBalances.length > 0 && (
+                        <View style={styles.summaryContainer}>
+                            <View style={styles.summaryHeader}>
+                                <Feather name="calendar" size={16} color={colors.primary} />
+                                <Text style={styles.summaryTitle}>Leave Summary</Text>
+                            </View>
+                            <View style={styles.summaryContent}>
+                                <View style={styles.summaryStats}>
+                                    <Text style={[
+                                        styles.summaryCount,
+                                        { color: getTotalAvailable() > 5 ? colors.success : getTotalAvailable() > 0 ? colors.warning : colors.error }
+                                    ]}>
+                                        {getTotalAvailable()}
+                                    </Text>
+                                    <Text style={styles.summaryLabel}>Total Available</Text>
+                                </View>
+                            </View>
+                            {getTotalAvailable() <= 3 && getTotalAvailable() > 0 && (
+                                <View style={styles.warningBox}>
+                                    <Feather name="alert-circle" size={12} color={colors.warning} />
+                                    <Text style={[styles.warningText, { color: colors.warning }]}>Running low on leaves!</Text>
+                                </View>
+                            )}
+                            {getTotalAvailable() === 0 && (
+                                <View style={[styles.warningBox, { borderLeftColor: colors.error, backgroundColor: '#ffebee' }]}>
+                                    <Feather name="alert-triangle" size={12} color={colors.error} />
+                                    <Text style={[styles.warningText, { color: colors.error }]}>No leaves remaining!</Text>
+                                </View>
+                            )}
                         </View>
                     )}
-                    {getTotalAvailable() === 0 && (
-                        <View style={styles.warningBox}>
-                            <Feather name="alert-triangle" size={12} color={colors.error} />
-                            <Text style={styles.warningText}>No leaves remaining!</Text>
-                        </View>
-                    )}
-                </View>
+                </>
             )}
-
-            {error && (
-                <Text style={styles.errorText}>{error}</Text>
-            )}
-        </View>
+        </TouchableOpacity>
     );
 };
-
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
@@ -255,14 +219,24 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         color: colors.textSecondary,
         marginTop: 2,
     },
-    refreshButton: {
-        padding: 6,
-        borderRadius: 8,
-        backgroundColor: colors.primary + '10',
-    },
     loadingContainer: {
         paddingVertical: 16,
         alignItems: 'center',
+    },
+    errorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        padding: 12,
+        backgroundColor: colors.error + '10',
+        borderRadius: 8,
+        borderLeftWidth: 3,
+        borderLeftColor: colors.error,
+    },
+    errorText: {
+        flex: 1,
+        fontSize: 12,
+        color: colors.error,
     },
     grid: {
         flexDirection: 'row',
@@ -307,35 +281,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         color: colors.textSecondary,
         textAlign: 'center',
     },
-    pendingText: {
-        fontSize: 9,
-        color: colors.warning,
-        textAlign: 'center',
-        marginTop: 2,
-    },
-    errorText: {
-        fontSize: 12,
-        color: colors.error,
-        textAlign: 'center',
-        marginTop: 10,
-    },
-    infoBox: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginTop: 15,
-        padding: 10,
-        backgroundColor: colors.background,
-        borderRadius: 8,
-        borderLeftWidth: 3,
-        borderLeftColor: colors.info,
-    },
-    infoText: {
-        flex: 1,
-        fontSize: 11,
-        color: colors.textSecondary,
-    },
-    lateCheckinContainer: {
+    summaryContainer: {
         marginTop: 15,
         padding: 12,
         backgroundColor: colors.background,
@@ -343,39 +289,32 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
     },
-    lateCheckinHeader: {
+    summaryHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
         marginBottom: 10,
     },
-    lateCheckinTitle: {
+    summaryTitle: {
         fontSize: 13,
         fontWeight: '600',
         color: colors.text,
-        width: '60%',
     },
-    lateCheckinContent: {
-        flexDirection: 'row',
+    summaryContent: {
         alignItems: 'center',
-        justifyContent: 'space-around',
+        justifyContent: 'center',
     },
-    lateCheckinStats: {
+    summaryStats: {
         alignItems: 'center',
         gap: 4,
     },
-    lateCheckinCount: {
-        fontSize: 28,
+    summaryCount: {
+        fontSize: 32,
         fontWeight: '700',
     },
-    lateCheckinLabel: {
+    summaryLabel: {
         fontSize: 11,
         color: colors.textSecondary,
-    },
-    lateCheckinDivider: {
-        width: 1,
-        height: 40,
-        backgroundColor: colors.border,
     },
     warningBox: {
         flexDirection: 'row',
@@ -383,15 +322,14 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         gap: 6,
         marginTop: 10,
         padding: 8,
-        backgroundColor: '#ffebee',
+        backgroundColor: '#fff3e0',
         borderRadius: 6,
         borderLeftWidth: 3,
-        borderLeftColor: colors.error,
+        borderLeftColor: colors.warning,
     },
     warningText: {
         fontSize: 11,
         fontWeight: '600',
-        color: colors.error,
     },
 });
 

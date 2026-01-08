@@ -130,6 +130,41 @@ export default function ExploreScreen() {
           />
 
           <ExploreCard
+            icon="user-x"
+            title="Absence List"
+            description="View employee absences"
+            route="/Attendance/AbsenceList"
+          />
+
+          <ExploreCard
+            icon="log-out"
+            title="Early Checkout List"
+            description="View early checkout requests"
+            route="/Attendance/EarlyCheckoutList"
+          />
+
+          <ExploreCard
+            icon="alert-circle"
+            title="Missed Punch List"
+            description="View missed punch requests"
+            route="/Attendance/MissPunchList"
+          />
+
+          <ExploreCard
+            icon="user-x"
+            title="Is Away List"
+            description="View is away requests"
+            route="/Attendance/IsAwayList"
+          />
+
+          <ExploreCard
+            icon="check-circle"
+            title="Leave Approval List"
+            description="View leave approval requests"
+            route="/Attendance/LeaveApprovalList"
+          />
+
+          <ExploreCard
             icon="home"
             title="Work From Home"
             description="Manage your WFH requests"

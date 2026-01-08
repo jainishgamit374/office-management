@@ -50,11 +50,6 @@ const EmployeeOfTheMonthSection: React.FC = () => {
         }, [fetchEmployeeOfTheMonth])
     );
 
-    // Don't render if no employee data and not loading
-    if (!isLoading && !employee) {
-        return null;
-    }
-
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -81,7 +76,11 @@ const EmployeeOfTheMonthSection: React.FC = () => {
                         <Feather name="star" size={32} color="#FFD700" />
                     </View>
                 </View>
-            ) : null}
+            ) : (
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No employee selected yet</Text>
+                </View>
+            )}
         </View>
     );
 };
@@ -155,6 +154,15 @@ const styles = StyleSheet.create({
     },
     badgeContainer: {
         padding: 8,
+    },
+    emptyContainer: {
+        paddingVertical: 20,
+        alignItems: 'center',
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#999',
+        fontStyle: 'italic',
     },
 });
 

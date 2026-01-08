@@ -1,3 +1,15 @@
+/**
+ * ⚠️ DEVELOPMENT SCREEN ONLY ⚠️
+ * 
+ * This screen is for testing API endpoints during development.
+ * It provides a UI to run API tests and view responses.
+ * 
+ * Purpose: Debug API integration issues
+ * Usage: Navigate to this screen in development builds
+ * 
+ * @see lib/test-api.ts for test implementation
+ */
+
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 

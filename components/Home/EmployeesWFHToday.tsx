@@ -1,6 +1,8 @@
+import { getTodayWFH } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
-import React from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface WFHEmployee {
     id: string;
@@ -9,26 +11,61 @@ interface WFHEmployee {
 }
 
 interface EmployeesWFHTodayProps {
-    employees?: WFHEmployee[];
     isExpanded: boolean;
     onToggleExpand: () => void;
     onAnimatePress: (animKey: 'wfhToday', callback: () => void) => void;
     scaleAnim: Animated.Value;
 }
 
-const defaultEmployees: WFHEmployee[] = [
-    { id: '1', name: 'Arjun Reddy', task: 'Client presentation preparation' },
-    { id: '2', name: 'Kavya Iyer', task: 'Backend API development' },
-    { id: '3', name: 'Rohan Gupta', task: 'Database optimization tasks' },
-];
-
 const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
-    employees = defaultEmployees,
     isExpanded,
     onToggleExpand,
     onAnimatePress,
     scaleAnim,
 }) => {
+    const [employees, setEmployees] = useState<WFHEmployee[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const fetchWFHEmployees = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            const response = await getTodayWFH();
+
+            if (response.today_WFH && response.today_WFH.length > 0) {
+                const transformedData: WFHEmployee[] = response.today_WFH.map((emp, index) => {
+                    // Determine task description based on half-day status
+                    let task = emp.Reason || 'Working from home';
+                    if (emp.IsHalfDay) {
+                        task = emp.IsFirstHalf ? 'First half WFH' : 'Second half WFH';
+                    }
+
+                    return {
+                        id: `${index + 1}`,
+                        name: emp.EmployeeName,
+                        task: task,
+                    };
+                });
+
+                setEmployees(transformedData);
+                console.log('✅ Today\'s WFH employees loaded:', transformedData.length);
+            } else {
+                setEmployees([]);
+            }
+        } catch (error) {
+            console.error('Failed to fetch WFH employees:', error);
+            setEmployees([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    // Fetch data on mount and when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchWFHEmployees();
+        }, [fetchWFHEmployees])
+    );
+
     return (
         <View style={styles.container}>
             <View style={styles.headerContainer}>
@@ -47,22 +84,34 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
             </View>
 
             {isExpanded && (
-                <View style={styles.grid}>
-                    {employees.map((employee) => (
-                        <View key={employee.id} style={styles.card}>
-                            <View style={styles.profileImage}>
-                                <Feather name="user" size={24} color="#4169E1" />
+                isLoading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="small" color="#4169E1" />
+                        <Text style={styles.loadingText}>Loading...</Text>
+                    </View>
+                ) : employees.length > 0 ? (
+                    <View style={styles.grid}>
+                        {employees.map((employee) => (
+                            <View key={employee.id} style={styles.card}>
+                                <View style={styles.profileImage}>
+                                    <Feather name="user" size={24} color="#4169E1" />
+                                </View>
+                                <View style={styles.cardContent}>
+                                    <Text style={styles.cardTitle}>{employee.name}</Text>
+                                    <Text style={styles.cardSubtitle}>{employee.task}</Text>
+                                </View>
+                                <View style={styles.statusIcon}>
+                                    <Feather name="home" size={24} color="#4169E1" />
+                                </View>
                             </View>
-                            <View style={styles.cardContent}>
-                                <Text style={styles.cardTitle}>{employee.name}</Text>
-                                <Text style={styles.cardSubtitle}>{employee.task}</Text>
-                            </View>
-                            <View style={styles.statusIcon}>
-                                <Feather name="home" size={24} color="#4169E1" />
-                            </View>
-                        </View>
-                    ))}
-                </View>
+                        ))}
+                    </View>
+                ) : (
+                    <View style={styles.emptyContainer}>
+                        <Feather name="users" size={32} color="#ccc" />
+                        <Text style={styles.emptyText}>No employees working from home today</Text>
+                    </View>
+                )
             )}
         </View>
     );
@@ -146,6 +195,24 @@ const styles = StyleSheet.create({
         height: 40,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    loadingContainer: {
+        padding: 20,
+        alignItems: 'center',
+        gap: 10,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: '#666',
+    },
+    emptyContainer: {
+        padding: 30,
+        alignItems: 'center',
+        gap: 10,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: '#999',
     },
 });
 

@@ -10,8 +10,10 @@ export const debugPunchStatus = async () => {
 
         console.log('🔍 DEBUG: Full Response:', JSON.stringify(response, null, 2));
         console.log('🔍 DEBUG: Response.data:', JSON.stringify(response.data, null, 2));
-        console.log('🔍 DEBUG: PunchType:', response.data?.PunchType);
-        console.log('🔍 DEBUG: PunchTypeName:', response.data?.punch?.PunchTypeName);
+        // Type casting for debug purposes since debug file might run before types are updated
+        const punchData = (response.data as any)?.punch;
+        console.log('🔍 DEBUG: PunchType:', punchData?.PunchType);
+        console.log('🔍 DEBUG: PunchTypeName:', punchData?.PunchTypeName);
 
         // Check if response has nested structure
         if (response.data?.punch) {

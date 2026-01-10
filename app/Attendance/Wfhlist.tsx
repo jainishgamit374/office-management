@@ -1,106 +1,74 @@
+import { getWFHList, WFHEmployee } from '@/lib/wfhList';
 import Feather from '@expo/vector-icons/Feather';
-import React, { useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import {
+    ActivityIndicator,
     FlatList,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
-    View,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Types
 type ApprovalStatus = 'Approved' | 'Pending' | 'Rejected';
 
-interface WFHEmployee {
-    id: string;
-    employeeName: string;
-    employeeId: string;
-    department: string;
-    date: string;
-    isHalfDay: boolean;
-    reason: string;
-    approvalStatus: ApprovalStatus;
-    approvedBy?: string;
-}
-
-// Mock WFH employee data
-const wfhEmployeesData: WFHEmployee[] = [
-    {
-        id: '1',
-        employeeName: 'John Doe',
-        employeeId: 'EMP001',
-        department: 'Engineering',
-        date: '2025-12-20',
-        isHalfDay: false,
-        reason: 'Internet installation at home',
-        approvalStatus: 'Approved',
-        approvedBy: 'Manager A',
-    },
-    {
-        id: '2',
-        employeeName: 'Jane Smith',
-        employeeId: 'EMP002',
-        department: 'Marketing',
-        date: '2025-12-19',
-        isHalfDay: true,
-        reason: 'Plumber coming for repairs in the morning',
-        approvalStatus: 'Approved',
-        approvedBy: 'Manager B',
-    },
-    {
-        id: '3',
-        employeeName: 'Mike Johnson',
-        employeeId: 'EMP003',
-        department: 'Sales',
-        date: '2025-12-23',
-        isHalfDay: false,
-        reason: 'Avoiding traffic during festival season',
-        approvalStatus: 'Approved',
-        approvedBy: 'Manager C',
-    },
-    {
-        id: '4',
-        employeeName: 'Sarah Williams',
-        employeeId: 'EMP004',
-        department: 'HR',
-        date: '2025-12-21',
-        isHalfDay: false,
-        reason: 'Need to take care of sick family member',
-        approvalStatus: 'Pending',
-    },
-    {
-        id: '5',
-        employeeName: 'Emily Davis',
-        employeeId: 'EMP006',
-        department: 'Engineering',
-        date: '2025-12-24',
-        isHalfDay: false,
-        reason: 'Working on important project requiring quiet environment',
-        approvalStatus: 'Approved',
-        approvedBy: 'Manager A',
-    },
-    {
-        id: '6',
-        employeeName: 'Robert Chen',
-        employeeId: 'EMP007',
-        department: 'Design',
-        date: '2025-12-19',
-        isHalfDay: true,
-        reason: 'Medical appointment in afternoon',
-        approvalStatus: 'Approved',
-        approvedBy: 'Manager D',
-    },
-];
-
 type FilterType = 'all' | 'approved' | 'pending' | 'fullDay' | 'halfDay';
 
 const Wfhlist = () => {
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
+    const [employees, setEmployees] = useState<WFHEmployee[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Fetch WFH list from backend
+    const fetchWFHList = async (isRefresh = false) => {
+        try {
+            if (isRefresh) {
+                setIsRefreshing(true);
+            } else {
+                setIsLoading(true);
+            }
+            setError(null);
+
+            console.log('📋 Fetching WFH employee list...');
+            const response = await getWFHList();
+
+            if (response.status === 'Success') {
+                setEmployees(response.data || []);
+                console.log('✅ Loaded', response.data?.length || 0, 'WFH employees');
+            } else {
+                setEmployees([]);
+            }
+        } catch (err: any) {
+            console.error('❌ Error fetching WFH list:', err);
+            setError(err.message || 'Failed to load WFH employee list');
+            setEmployees([]);
+        } finally {
+            setIsLoading(false);
+            setIsRefreshing(false);
+        }
+    };
+
+    // Fetch on mount and when screen gains focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchWFHList();
+        }, [])
+    );
+
+    // Handle pull to refresh
+    const handleRefresh = () => {
+        fetchWFHList(true);
+    };
 
     // Filter employees based on selected filter
-    const filteredEmployees = wfhEmployeesData.filter((employee) => {
+    const filteredEmployees = employees.filter((employee) => {
         if (selectedFilter === 'all') return true;
         if (selectedFilter === 'approved') return employee.approvalStatus === 'Approved';
         if (selectedFilter === 'pending') return employee.approvalStatus === 'Pending';
@@ -222,10 +190,40 @@ const Wfhlist = () => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-            >
+            {/* Loading State */}
+            {isLoading && !isRefreshing && (
+                <View style={styles.centerContainer}>
+                    <ActivityIndicator size="large" color="#4A90FF" />
+                    <Text style={styles.loadingText}>Loading WFH employees...</Text>
+                </View>
+            )}
+
+            {/* Error State */}
+            {!isLoading && error && (
+                <View style={styles.errorContainer}>
+                    <Feather name="alert-circle" size={48} color="#FF5252" />
+                    <Text style={styles.errorText}>{error}</Text>
+                    <Pressable style={styles.retryButton} onPress={() => fetchWFHList()}>
+                        <Feather name="refresh-cw" size={16} color="#FFF" />
+                        <Text style={styles.retryButtonText}>Retry</Text>
+                    </Pressable>
+                </View>
+            )}
+
+            {/* Content */}
+            {!isLoading && !error && (
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.scrollContent}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={isRefreshing}
+                            onRefresh={handleRefresh}
+                            colors={['#4A90FF']}
+                            tintColor="#4A90FF"
+                        />
+                    }
+                >
                 {/* Filter Tabs */}
                 <View style={styles.filterContainer}>
                     <Text style={styles.sectionTitle}>Filter</Text>
@@ -372,6 +370,7 @@ const Wfhlist = () => {
                     )}
                 </View>
             </ScrollView>
+            )}
         </SafeAreaView>
     );
 };
@@ -623,6 +622,47 @@ const styles = StyleSheet.create({
         paddingHorizontal: 40,
         lineHeight: 22,
         fontWeight: '500',
+    },
+
+    // Loading & Error States
+    centerContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 40,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: '#666',
+        marginTop: 12,
+    },
+    errorContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 40,
+    },
+    errorText: {
+        fontSize: 15,
+        color: '#FF5252',
+        textAlign: 'center',
+        marginTop: 16,
+        marginBottom: 24,
+        fontWeight: '500',
+    },
+    retryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#4A90FF',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 12,
+    },
+    retryButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#FFF',
     },
 });
 

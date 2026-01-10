@@ -1,4 +1,5 @@
 import { getLeaveApplicationsList, LeaveApplicationDetails } from '@/lib/leaves';
+import { disapproveAll } from '@/lib/workflow';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
@@ -12,9 +13,10 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ApprovalHistoryModal from '../../components/Admin/ApprovalHistoryModal';
 
 // Types
-type FilterType = 'All' | 'CL' | 'SL' | 'PL';
+type FilterType = 'All' | 'casualLeave' | 'sickLeave' | 'privilegeLeave';
 type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
 
 const LeaveApplication = () => {
@@ -25,6 +27,10 @@ const LeaveApplication = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalRecords, setTotalRecords] = useState(0);
+
+    // History Modal State
+    const [historyModalVisible, setHistoryModalVisible] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState<LeaveApplicationDetails | null>(null);
 
     // Fetch leave applications from API
     const fetchLeaveApplications = useCallback(async (refresh: boolean = false) => {
@@ -38,7 +44,7 @@ const LeaveApplication = () => {
             const response = await getLeaveApplicationsList({
                 page: currentPage,
                 limit: 50,
-                leaveType: selectedFilter,
+                leaveType: selectedFilter as any, // Temporary fix for strict union mismatch
                 status: statusFilter,
                 sortBy: 'CreatedDate',
                 sortOrder: 'desc',
@@ -128,6 +134,39 @@ const LeaveApplication = () => {
         return 'calendar';
     };
 
+    const handleViewHistory = (item: LeaveApplicationDetails) => {
+        setSelectedRequest(item);
+        setHistoryModalVisible(true);
+    };
+
+    const handleReject = (requestId: number) => {
+        Alert.alert(
+            'Reject Leave Request',
+            'Are you sure you want to reject this leave request?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Reject',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            setIsLoading(true);
+                            // PROGRAM ID 1 for Leave
+                            await disapproveAll({ ProgramID: 1, TranID: requestId });
+                            Alert.alert('Success', 'Request rejected successfully');
+                            // Refresh list
+                            fetchLeaveApplications();
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to reject request');
+                        } finally {
+                            setIsLoading(false);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     const renderLeaveRequestItem = ({ item }: { item: any }) => {
         // Get approver name from workflow_list
         const approverName = item.workflow_list?.[0]?.Approve_name || 'N/A';
@@ -163,6 +202,12 @@ const LeaveApplication = () => {
                             {item.ApprovalStatus}
                         </Text>
                     </View>
+                    <Pressable
+                        style={styles.historyIconButton}
+                        onPress={() => handleViewHistory(item)}
+                    >
+                         <Feather name="clock" size={16} color="#4A90FF" />
+                    </Pressable>
                 </View>
 
                 {/* Leave Type Badge */}
@@ -207,13 +252,23 @@ const LeaveApplication = () => {
                     </View>
                 )}
 
-                {/* Status is Pending - show that it's awaiting approval */}
+                {/* Action Buttons for Pending Requests */}
                 {(item.ApprovalStatus === 'Pending' || item.ApprovalStatus === 'Awaiting Approve') && (
-                    <View style={styles.pendingInfo}>
-                        <Feather name="clock" size={14} color="#FFA726" />
-                        <Text style={styles.pendingText}>
-                            Awaiting approval from {approverName}
-                        </Text>
+                    <View style={styles.actionButtons}>
+                        <Pressable
+                            style={[styles.actionButton, styles.approveButton]}
+                            onPress={() => Alert.alert('Info', 'Approve functionality coming soon')}
+                        >
+                            <Feather name="check-circle" size={18} color="#FFF" />
+                            <Text style={styles.actionButtonText}>Approve</Text>
+                        </Pressable>
+                        <Pressable
+                            style={[styles.actionButton, styles.rejectButton]}
+                            onPress={() => handleReject(item.LeaveApplicationMasterID)}
+                        >
+                            <Feather name="x-circle" size={18} color="#FFF" />
+                            <Text style={styles.actionButtonText}>Reject</Text>
+                        </Pressable>
                     </View>
                 )}
             </View>
@@ -233,14 +288,14 @@ const LeaveApplication = () => {
                         <Pressable
                             style={[
                                 styles.filterChip,
-                                selectedFilter === 'all' && styles.filterChipActive,
+                                selectedFilter === 'All' && styles.filterChipActive,
                             ]}
-                            onPress={() => setSelectedFilter('all')}
+                            onPress={() => setSelectedFilter('All')}
                         >
                             <Text
                                 style={[
                                     styles.filterChipText,
-                                    selectedFilter === 'all' && styles.filterChipTextActive,
+                                    selectedFilter === 'All' && styles.filterChipTextActive,
                                 ]}
                             >
                                 All Leaves
@@ -343,12 +398,23 @@ const LeaveApplication = () => {
                             <Feather name="inbox" size={48} color="#CCC" />
                             <Text style={styles.emptyStateText}>No leave requests found</Text>
                             <Text style={styles.emptyStateSubtext}>
-                                There are no {selectedFilter === 'all' ? '' : selectedFilter.replace(/([A-Z])/g, ' $1').toLowerCase()} leave requests at the moment
+                                There are no {selectedFilter === 'All' ? '' : selectedFilter.replace(/([A-Z])/g, ' $1').toLowerCase()} leave requests at the moment
                             </Text>
                         </View>
                     )}
                 </View>
             </ScrollView>
+
+            {/* Approval History Modal */}
+            {selectedRequest && (
+                <ApprovalHistoryModal
+                    visible={historyModalVisible}
+                    onClose={() => setHistoryModalVisible(false)}
+                    tranId={selectedRequest.LeaveApplicationMasterID}
+                    progId={1} // Guessing 1 for Leave. Update if needed.
+                    employeeName={selectedRequest.EmployeeName || 'Unknown'}
+                />
+            )}
         </SafeAreaView>
     );
 };
@@ -502,7 +568,14 @@ const styles = StyleSheet.create({
         paddingVertical: 7,
         paddingHorizontal: 24,
         textTransform: 'uppercase',
+
         letterSpacing: 0.6,
+    },
+    historyIconButton: {
+        marginLeft: 8,
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: '#E3F2FD',
     },
 
     // Leave Type Badge

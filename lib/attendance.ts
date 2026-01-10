@@ -44,6 +44,8 @@ export interface PunchResponse {
         IsEarly: boolean;
         EarlyByMinutes: number;
         ExpectedTime: string;
+        WorkingHours?: string;
+        OvertimeHours?: string;
         ShiftDetails?: {
             ShiftName: string;
             StartTime: string;

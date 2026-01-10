@@ -2,7 +2,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { compareApis, runAllTests, testLateCheckinCount, testLateEarlyCount } from '../../test-late-early-apis';
+import { compareApis, runAllTests, testIsAwayApis, testLateCheckinCount, testLateEarlyCount } from '../../test-late-early-apis';
 
 const TestLateEarlyScreen: React.FC = () => {
     const { colors } = useTheme();
@@ -182,6 +182,20 @@ const TestLateEarlyScreen: React.FC = () => {
                         ) : (
                             <>
                                 <Text style={styles.buttonText}>Compare Both APIs</Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.button}
+                        onPress={() => runTest(testIsAwayApis, 'Is Away APIs')}
+                        disabled={isLoading}
+                    >
+                        {isLoading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <>
+                                <Text style={styles.buttonText}>Test Is Away APIs</Text>
                             </>
                         )}
                     </TouchableOpacity>

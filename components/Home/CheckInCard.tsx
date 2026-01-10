@@ -6,18 +6,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    PanResponder,
-    Platform,
-    StyleSheet,
-    Text,
-    UIManager,
-    View,
-    type GestureResponderEvent,
-    type PanResponderGestureState,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  PanResponder,
+  Platform,
+  StyleSheet,
+  Text,
+  UIManager,
+  View,
+  type GestureResponderEvent,
+  type PanResponderGestureState,
 } from 'react-native';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -83,12 +83,31 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
     onCheckInChange?.(isCheckedIn, hasCheckedOut);
   }, [isCheckedIn, hasCheckedOut, onCheckInChange]);
 
+  // Save current state to AsyncStorage for persistence across hot reloads
+  const saveStateToStorage = useCallback(async (state: {
+    isCheckedIn: boolean;
+    hasCheckedOut: boolean;
+    hasEverCheckedIn: boolean;
+    punchInTime: string | null;
+    punchOutTime: string | null;
+    workingHours: string | null;
+    sliderPosition: number;
+    colorValue: number;
+  }) => {
+    try {
+      await AsyncStorage.setItem('checkInCardState', JSON.stringify(state));
+    } catch (error) {
+      console.error('Failed to save state:', error);
+    }
+  }, []);
+
   // Load punch status function
   const loadPunchStatus = useCallback(async () => {
     try {
       const forceReset = await AsyncStorage.getItem('forceResetMode');
       if (forceReset === 'true') {
         await AsyncStorage.removeItem('forceResetMode');
+        await AsyncStorage.removeItem('checkInCardState');
         setIsCheckedIn(false);
         setHasCheckedOut(false);
         setHasEverCheckedIn(false);
@@ -100,6 +119,40 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
         return;
       }
 
+      // Try to restore from saved state first (for hot reload persistence)
+      const savedState = await AsyncStorage.getItem('checkInCardState');
+      if (savedState) {
+        const state = JSON.parse(savedState);
+        const savedDate = await AsyncStorage.getItem('lastResetDate');
+        const currentDate = new Date().toISOString().split('T')[0];
+        
+        // Only restore if it's the same day
+        if (savedDate === currentDate) {
+          console.log('🔄 Restoring state from storage (hot reload)...');
+          setIsCheckedIn(state.isCheckedIn);
+          setHasCheckedOut(state.hasCheckedOut);
+          setHasEverCheckedIn(state.hasEverCheckedIn);
+          setPunchInTime(state.punchInTime);
+          setPunchOutTime(state.punchOutTime);
+          setWorkingHours(state.workingHours);
+          pan.setValue(state.sliderPosition);
+          colorAnim.setValue(state.colorValue);
+          
+          // Still fetch API data to update counts and other info
+          const response = await getPunchStatus();
+          if (response.data?.lateEarly) {
+            setLateCheckInCount(response.data.lateEarly.lateCheckins || 0);
+            setEarlyCheckOutCount(response.data.lateEarly.earlyCheckouts || 0);
+            onLateEarlyCountChange?.(
+              response.data.lateEarly.lateCheckins || 0,
+              response.data.lateEarly.earlyCheckouts || 0
+            );
+          }
+          return;
+        }
+      }
+
+      // Fetch from API if no saved state or different day
       const response = await getPunchStatus();
       const punchData = response.data?.punch;
       const punchType = punchData?.PunchType;
@@ -116,6 +169,17 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
       }
 
       if (punchType === 1) {
+        const newState = {
+          isCheckedIn: true,
+          hasCheckedOut: false,
+          hasEverCheckedIn: true,
+          punchInTime: punchDateTime || null,
+          punchOutTime: null,
+          workingHours: punchData?.WorkingHours || null,
+          sliderPosition: MAX_SWIPE_DISTANCE,
+          colorValue: 1,
+        };
+        
         setIsCheckedIn(true);
         setHasEverCheckedIn(true);
         setHasCheckedOut(false);
@@ -125,7 +189,20 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
         if (punchData?.OvertimeHours) setOvertimeHours(punchData.OvertimeHours);
         pan.setValue(MAX_SWIPE_DISTANCE);
         Animated.timing(colorAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start();
+        
+        await saveStateToStorage(newState);
       } else if (punchType === 2) {
+        const newState = {
+          isCheckedIn: false,
+          hasCheckedOut: true,
+          hasEverCheckedIn: true,
+          punchInTime: null,
+          punchOutTime: punchDateTime || null,
+          workingHours: punchData?.WorkingHours || null,
+          sliderPosition: 0,
+          colorValue: 2,
+        };
+        
         setIsCheckedIn(false);
         setHasCheckedOut(true);
         setHasEverCheckedIn(true);
@@ -134,7 +211,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
         if (punchData?.OvertimeHours) setOvertimeHours(punchData.OvertimeHours);
         pan.setValue(0);
         Animated.timing(colorAnim, { toValue: 2, duration: 800, useNativeDriver: false }).start();
+        
+        await saveStateToStorage(newState);
       } else {
+        await AsyncStorage.removeItem('checkInCardState');
         setIsCheckedIn(false);
         setHasCheckedOut(false);
         setHasEverCheckedIn(false);
@@ -152,7 +232,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
       pan.setValue(0);
       colorAnim.setValue(0);
     }
-  }, [pan, colorAnim, onLateEarlyCountChange]);
+  }, [pan, colorAnim, onLateEarlyCountChange, saveStateToStorage]);
 
   // Load initial punch status on mount
   useEffect(() => {
@@ -594,6 +674,18 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
               if (success) {
                 setIsCheckedIn(true);
                 setHasEverCheckedIn(true);
+                
+                // Save state after successful punch in
+                await saveStateToStorage({
+                  isCheckedIn: true,
+                  hasCheckedOut: false,
+                  hasEverCheckedIn: true,
+                  punchInTime: new Date().toISOString(),
+                  punchOutTime: null,
+                  workingHours: null,
+                  sliderPosition: MAX_SWIPE_DISTANCE,
+                  colorValue: 1,
+                });
               }
             });
           } else {
@@ -619,6 +711,18 @@ const CheckInCard: React.FC<CheckInCardProps> = ({ onCheckInChange, onLateEarlyC
               if (success) {
                 setIsCheckedIn(false);
                 setHasCheckedOut(true);
+                
+                // Save state after successful punch out
+                await saveStateToStorage({
+                  isCheckedIn: false,
+                  hasCheckedOut: true,
+                  hasEverCheckedIn: true,
+                  punchInTime: punchInTime,
+                  punchOutTime: new Date().toISOString(),
+                  workingHours: workingHours,
+                  sliderPosition: 0,
+                  colorValue: 2,
+                });
               }
             });
           } else {

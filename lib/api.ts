@@ -1122,3 +1122,207 @@ export const getEarlyCheckouts = async (): Promise<EarlyCheckoutsResponse> => {
         throw new Error(errorMessage);
     }
 };
+
+// ==================== MISSING PUNCH OUT ====================
+
+export interface MissingPunchOut {
+    missing_date: string;
+}
+
+export interface MissingPunchOutResponse {
+    status: string;
+    statusCode: number;
+    message: string;
+    data: MissingPunchOut[];
+}
+
+/**
+ * Get missing punch-out dates
+ */
+export const getMissingPunchOut = async (): Promise<MissingPunchOutResponse> => {
+    try {
+        console.log('📊 Fetching missing punch-out dates...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/getmissingpunchout/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Missing punch-out data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch missing punch-out dates';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Missing punch-out dates fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Missing punch-out error:', error);
+        let errorMessage = 'Failed to fetch missing punch-out dates';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+
+// ==================== IS AWAY APPROVALS ====================
+
+export interface IsAwayApprovalRequest {
+    EmpPunchMasterID: number;
+    Type: string;
+    Distance: number;
+    FormatedWorkHours: string;
+    EmployeeName: string;
+    DateTime: string;
+    Reason: string;
+}
+
+export interface IsAwayApprovalsResponse {
+    status: string;
+    statusCode: number;
+    total_pending_approvals: number;
+    approval_requests: IsAwayApprovalRequest[];
+}
+
+/**
+ * Get pending approval requests (is away approvals)
+ */
+export const getIsAwayApprovals = async (): Promise<IsAwayApprovalsResponse> => {
+    try {
+        console.log('📊 Fetching away approval requests...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/isawayapprovals/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Away approval requests data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch away approval requests';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Away approval requests fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Away approval requests error:', error);
+        let errorMessage = 'Failed to fetch away approval requests';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};
+
+// ==================== IS AWAY APPROVAL HISTORY ====================
+
+export interface IsAwayApprovalHistoryResponse {
+    status: string;
+    approval_requests: IsAwayApprovalRequest[];
+}
+
+/**
+ * Get approval history (is away approvals)
+ */
+export const getIsAwayApprovalHistory = async (): Promise<IsAwayApprovalHistoryResponse> => {
+    try {
+        console.log('📊 Fetching away approval history...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/isawayapprovalhistory/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        console.log('📡 Response status:', response.status);
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Away approval history data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch away approval history';
+            throw new Error(errorMessage);
+        }
+
+        console.log('✅ Away approval history fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Away approval history error:', error);
+        let errorMessage = 'Failed to fetch away approval history';
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (typeof error === 'string') {
+            errorMessage = error;
+        } else if (error?.message) {
+            errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+};

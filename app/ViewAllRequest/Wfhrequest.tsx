@@ -1,4 +1,5 @@
 import { authApiRequest } from '@/lib/api';
+import { disapproveAll } from '@/lib/workflow';
 import Feather from '@expo/vector-icons/Feather';
 import React, { useEffect, useState } from 'react';
 import {
@@ -12,6 +13,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ApprovalHistoryModal from '../../components/Admin/ApprovalHistoryModal';
 
 // Types
 interface WorkflowItem {
@@ -40,6 +42,10 @@ const Wfhrequest = () => {
     const [requests, setRequests] = useState<WFHRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
+
+    // History Modal State
+    const [historyModalVisible, setHistoryModalVisible] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState<WFHRequest | null>(null);
 
     // Fetch WFH requests from API
     const fetchWFHRequests = async (isRefresh = false) => {
@@ -147,13 +153,28 @@ const Wfhrequest = () => {
                 {
                     text: 'Reject',
                     style: 'destructive',
-                    onPress: () => {
-                        // TODO: Implement reject API call
-                        Alert.alert('Info', 'Reject functionality will be implemented with the rejection API endpoint');
+                    onPress: async () => {
+                        try {
+                            setIsLoading(true);
+                            // PROGRAM ID 3 for WFH (as verified in other components)
+                            await disapproveAll({ ProgramID: 3, TranID: requestId });
+                            Alert.alert('Success', 'Request rejected successfully');
+                            // Refresh list
+                            fetchWFHRequests();
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to reject request');
+                        } finally {
+                            setIsLoading(false);
+                        }
                     },
                 },
             ]
         );
+    };
+
+    const handleViewHistory = (item: WFHRequest) => {
+        setSelectedRequest(item);
+        setHistoryModalVisible(true);
     };
 
     const renderWFHRequestItem = ({ item }: { item: WFHRequest }) => (
@@ -188,6 +209,12 @@ const Wfhrequest = () => {
                         {item.ApprovalStatus}
                     </Text>
                 </View>
+                <TouchableOpacity
+                    style={styles.historyIconButton}
+                    onPress={() => handleViewHistory(item)}
+                >
+                    <Feather name="clock" size={16} color="#4A90FF" />
+                </TouchableOpacity>
             </View>
 
             {/* WFH Type Badge */}
@@ -373,6 +400,18 @@ const Wfhrequest = () => {
                     )}
                 </View>
             </ScrollView>
+
+
+            {/* Approval History Modal */}
+            {selectedRequest && (
+                <ApprovalHistoryModal
+                    visible={historyModalVisible}
+                    onClose={() => setHistoryModalVisible(false)}
+                    tranId={selectedRequest.WorkFromHomeReqMasterID}
+                    progId={3} // Guessing 3 for WFH. Update if needed.
+                    employeeName={`Employee ${selectedRequest.EmployeeID}`}
+                />
+            )}
         </SafeAreaView>
     );
 };
@@ -526,7 +565,14 @@ const styles = StyleSheet.create({
         paddingVertical: 7,
         paddingHorizontal: 24,
         textTransform: 'uppercase',
+
         letterSpacing: 0.6,
+    },
+    historyIconButton: {
+        marginLeft: 8,
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: '#E3F2FD',
     },
 
     // WFH Type Badge

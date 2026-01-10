@@ -193,6 +193,18 @@ export interface LeaveBalanceResponse {
     data: LeaveBalanceItem[];
 }
 
+export interface LeaveDataViewResponse {
+    status: string;
+    statusCode?: number;
+    message?: string;
+    data: {
+        approved_count: number;
+        applied_count: number;
+    };
+    timestamp?: string;
+    requestId?: string;
+}
+
 // ==================== API FUNCTIONS ====================
 
 /**
@@ -238,6 +250,52 @@ export const getEmployeeLeaveBalance = async (): Promise<LeaveBalanceResponse> =
     } catch (error: any) {
         console.error('❌ Get leave balance error:', error);
         throw new Error(error.message || 'Failed to fetch leave balance');
+    }
+};
+
+/**
+ * Get employee leave data view (approved and applied counts)
+ * GET /getemployeeleavedataview/
+ */
+export const getEmployeeLeaveDataView = async (): Promise<LeaveDataViewResponse> => {
+    try {
+        console.log('📊 Fetching employee leave data view...');
+
+        // Get access token
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        // Make API request
+        const response = await fetch(`${API_BASE_URL}/getemployeeleavedataview/`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+
+        console.log('📡 Response status:', response.status);
+
+        // Parse response
+        const data = await response.json();
+        console.log('📡 Response data:', data);
+
+        // Handle error responses
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('Your session has expired. Please login again.');
+            } else {
+                throw new Error(data.message || 'Failed to fetch leave data view');
+            }
+        }
+
+        console.log('✅ Leave data view fetched successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Get leave data view error:', error);
+        throw new Error(error.message || 'Failed to fetch leave data view');
     }
 };
 
@@ -595,6 +653,8 @@ export const calculateLeaveDays = (startDate: string, endDate: string, isHalfDay
 };
 
 export default {
+    getEmployeeLeaveBalance,
+    getEmployeeLeaveDataView,
     applyLeave,
     getLeaveApplication,
     getLeaveApplications,

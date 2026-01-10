@@ -32,29 +32,31 @@ interface NotificationCardProps {
     notification: Notification;
     onDismiss?: (id: string) => void;
     onPress?: (notification: Notification) => void;
+    enableSwipe?: boolean;
 }
 
 const NotificationCard: React.FC<NotificationCardProps> = ({
     notification,
     onDismiss,
     onPress,
+    enableSwipe = true,
 }) => {
     const { colors, theme } = useTheme();
     const [pan] = useState(new Animated.ValueXY());
     const [dismissed, setDismissed] = useState(false);
 
     const panResponder = PanResponder.create({
-        onStartShouldSetPanResponder: () => notification.dismissible,
+        onStartShouldSetPanResponder: () => enableSwipe && notification.dismissible,
         onMoveShouldSetPanResponder: (_, gestureState) => {
-            return notification.dismissible && Math.abs(gestureState.dx) > 5;
+            return enableSwipe && notification.dismissible && Math.abs(gestureState.dx) > 5;
         },
         onPanResponderMove: (_, gestureState) => {
-            if (notification.dismissible) {
+            if (enableSwipe && notification.dismissible) {
                 pan.setValue({ x: gestureState.dx, y: 0 });
             }
         },
         onPanResponderRelease: (_, gestureState) => {
-            if (notification.dismissible && Math.abs(gestureState.dx) > SWIPE_THRESHOLD) {
+            if (enableSwipe && notification.dismissible && Math.abs(gestureState.dx) > SWIPE_THRESHOLD) {
                 // Swipe to dismiss
                 Animated.timing(pan, {
                     toValue: { x: gestureState.dx > 0 ? SCREEN_WIDTH : -SCREEN_WIDTH, y: 0 },
@@ -180,7 +182,7 @@ const NotificationCard: React.FC<NotificationCardProps> = ({
 
 const styles = StyleSheet.create({
     container: {
-        marginHorizontal: 16,
+        marginHorizontal: 0,
         marginVertical: 12,
         borderRadius: 16,
         overflow: 'hidden',
@@ -194,8 +196,8 @@ const styles = StyleSheet.create({
     content: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 16,
-        gap: 12,
+        padding: 18,
+        gap: 20,
     },
     iconContainer: {
         width: 48,

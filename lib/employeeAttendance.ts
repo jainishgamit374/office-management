@@ -144,8 +144,8 @@ export const getEmployeeAttendance = async (
             const workingHours = record.wrkhours || '--';
 
             // Check for late/early status
-            const isLateCheckIn = record.latein && record.latein.toLowerCase() !== 'on time';
-            const isEarlyCheckOut = record.earlyout && record.earlyout.toLowerCase() === 'early';
+            const isLateCheckIn = !!record.latein && record.latein.toLowerCase() !== 'on time';
+            const isEarlyCheckOut = !!record.earlyout && record.earlyout.toLowerCase() === 'early';
 
             // Full employee name
             const employeeName = `${record.fname} ${record.lname}`.trim();
@@ -202,7 +202,7 @@ export const getEmployeeAttendance = async (
             timestamp: new Date().toISOString(),
         };
 
-        console.log('✅ Employee attendance transformed:', result.data.total_count, 'records');
+        console.log('✅ Employee attendance transformed:', result.data?.total_count, 'records');
         return result;
     } catch (error: any) {
         console.error('❌ Employee attendance error:', error);

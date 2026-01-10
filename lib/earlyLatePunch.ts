@@ -65,6 +65,8 @@ export const getEarlyLatePunchList = async (params?: {
     status?: 'Pending' | 'Approved' | 'Rejected' | 'All';
     startDate?: string;
     endDate?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
 }) => {
     let endpoint = '/early-late-punch/';
 
@@ -76,6 +78,8 @@ export const getEarlyLatePunchList = async (params?: {
         if (params.status) queryParams.append('status', params.status);
         if (params.startDate) queryParams.append('startDate', params.startDate);
         if (params.endDate) queryParams.append('endDate', params.endDate);
+        if (params.sortBy) queryParams.append('sortBy', params.sortBy);
+        if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
         const queryString = queryParams.toString();
         if (queryString) {
@@ -221,10 +225,30 @@ export interface EarlyLatePunchItem {
     IsActive: boolean;
 }
 
+// Detailed type with employee information for approval lists
+export interface EarlyLatePunchDetails {
+    EarlyLatePunchMasterID: number;
+    EmployeeID: number;
+    EmployeeName: string | null;
+    EmployeeEmail: string | null;
+    DateTime: string;
+    DateTimeISO: string;
+    CheckoutType: 'Early' | 'Late';
+    Reason: string;
+    ApprovalStatus: 'Pending' | 'Approved' | 'Rejected';
+    CreatedBy: number;
+    UpdatedBy: number;
+    CreatedDate: string;
+    CreatedDateISO: string;
+    UpdatedDate: string;
+    IsActive: boolean;
+    CanEdit: boolean;
+}
+
 export interface EarlyLatePunchResponse {
     status: string;
     statusCode: number;
-    data: EarlyLatePunchItem[];
+    data: EarlyLatePunchDetails[];
     pagination?: {
         currentPage: number;
         totalPages: number;

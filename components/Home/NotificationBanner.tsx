@@ -1,18 +1,15 @@
 import { aggregateCalendarEvents, getSampleCalendarEvents } from '@/lib/calendarEvents';
-import React, { useEffect, useRef, useState } from 'react';
-import { Dimensions, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Dimensions, StyleSheet, View } from 'react-native';
+import Carousel from 'react-native-reanimated-carousel';
 import NotificationCard, { Notification } from './NotificationCard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH - 64;
-const AUTO_SLIDE_INTERVAL = 5000; // 5 seconds
+const CARD_WIDTH = SCREEN_WIDTH - 64; // Keeping the same card width logic
 
 const NotificationBanner: React.FC = () => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
-    const scrollViewRef = useRef<ScrollView>(null);
-    const autoSlideTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
         // Load calendar events (birthdays, holidays, announcements)
@@ -44,44 +41,8 @@ const NotificationBanner: React.FC = () => {
         }
     };
 
-    // Auto-slide functionality
-    useEffect(() => {
-        if (notifications.length <= 1) return;
-
-        // Clear existing timer
-        if (autoSlideTimer.current) {
-            clearInterval(autoSlideTimer.current);
-        }
-
-        // Start auto-sliding
-        autoSlideTimer.current = setInterval(() => {
-            setCurrentIndex((prevIndex) => {
-                const nextIndex = (prevIndex + 1) % notifications.length;
-
-                // Scroll to next card
-                scrollViewRef.current?.scrollTo({
-                    x: nextIndex * CARD_WIDTH + (nextIndex > 0 ? nextIndex * 16 : 0), // Account for gap
-                    animated: true,
-                });
-
-                return nextIndex;
-            });
-        }, AUTO_SLIDE_INTERVAL);
-
-        // Cleanup on unmount
-        return () => {
-            if (autoSlideTimer.current) {
-                clearInterval(autoSlideTimer.current);
-            }
-        };
-    }, [notifications.length]);
-
     const handleDismiss = (id: string) => {
         setNotifications((prev) => prev.filter((n) => n.id !== id));
-        // Reset index if needed
-        if (currentIndex >= notifications.length - 1) {
-            setCurrentIndex(0);
-        }
     };
 
     const handlePress = (notification: Notification) => {
@@ -89,83 +50,51 @@ const NotificationBanner: React.FC = () => {
         // Handle notification press - navigate to details, etc.
     };
 
-    const handleScrollBeginDrag = () => {
-        // Pause auto-slide when user manually scrolls
-        if (autoSlideTimer.current) {
-            clearInterval(autoSlideTimer.current);
-        }
-    };
-
-    const handleScrollEndDrag = () => {
-        // Resume auto-slide after user stops scrolling
-        if (notifications.length > 1) {
-            autoSlideTimer.current = setInterval(() => {
-                setCurrentIndex((prevIndex) => {
-                    const nextIndex = (prevIndex + 1) % notifications.length;
-                    scrollViewRef.current?.scrollTo({
-                        x: nextIndex * CARD_WIDTH + (nextIndex > 0 ? nextIndex * 16 : 0),
-                        animated: true,
-                    });
-                    return nextIndex;
-                });
-            }, AUTO_SLIDE_INTERVAL);
-        }
-    };
-
     if (notifications.length === 0) return null;
 
     return (
         <View style={styles.container}>
-            <ScrollView
-                ref={scrollViewRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-                pagingEnabled={false}
-                snapToInterval={CARD_WIDTH + 16} // Card width + gap
-                snapToAlignment="center"
-                decelerationRate="fast"
-                scrollEventThrottle={16}
-                bounces={true}
-                bouncesZoom={false}
-                alwaysBounceHorizontal={false}
-                directionalLockEnabled={true}
-                onScrollBeginDrag={handleScrollBeginDrag}
-                onScrollEndDrag={handleScrollEndDrag}
-                onMomentumScrollEnd={(event) => {
-                    // Update current index based on scroll position
-                    const offsetX = event.nativeEvent.contentOffset.x;
-                    const index = Math.round(offsetX / (CARD_WIDTH + 16));
-                    setCurrentIndex(index);
+            <Carousel
+                loop
+                width={SCREEN_WIDTH}
+                height={160} // Adjust height as needed based on card content
+                autoPlay={true}
+                autoPlayInterval={5000}
+                data={notifications}
+                scrollAnimationDuration={1000}
+                // Parallax effect config
+                mode="parallax"
+                modeConfig={{
+                    parallaxScrollingScale: 0.9,
+                    parallaxScrollingOffset: 50,
                 }}
-            >
-                {notifications.map((notification) => (
-                    <View key={notification.id} style={styles.cardWrapper}>
+                renderItem={({ item }) => (
+                    <View style={styles.cardWrapper}>
                         <NotificationCard
-                            notification={notification}
+                            notification={item}
                             onDismiss={handleDismiss}
                             onPress={handlePress}
+                            enableSwipe={false} // Disable swipe-to-dismiss in carousel to prevent gesture conflicts
                         />
                     </View>
-                ))}
-            </ScrollView>
+                )}
+            />
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        marginTop: 8,
+        marginTop: 10,
         marginBottom: 8,
-    },
-    scrollContent: {
-        paddingHorizontal: 16,
-        paddingRight: 32, // Extra space at the end for last card
-        gap: 16,
+        height: 100, // Match carousel height
+        justifyContent: 'center',
     },
     cardWrapper: {
-        width: CARD_WIDTH,
-        marginRight: 0,
+        flex: 1,
+        justifyContent: 'center',
+        paddingHorizontal: 0, // Carousel handles spacing via modeConfig or width
+        marginHorizontal: 2,
     },
 });
 

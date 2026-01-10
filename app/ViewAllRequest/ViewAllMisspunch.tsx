@@ -1,4 +1,3 @@
-import { getMissPunchDetails } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
@@ -7,6 +6,7 @@ import {
     Alert,
     FlatList,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -14,6 +14,10 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ApprovalHistoryModal from '../../components/Admin/ApprovalHistoryModal';
+
+import { getMissingPunchDetails } from '@/lib/missPunchList';
+import { disapproveAll } from '@/lib/workflow';
 
 // Types
 type PunchType = 'In' | 'Out';
@@ -22,10 +26,12 @@ type RequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Awaiting Approve';
 interface MissPunchRequest {
     id: number;
     employeeName: string;
+    employeeId: string;
     date: string;
     punchType: PunchType;
     reason: string;
     status: RequestStatus;
+    workflowApprovers?: string[];
 }
 
 type FilterType = 'all' | 'punchIn' | 'punchOut';
@@ -34,43 +40,77 @@ const ViewAllMisspunch = () => {
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
     const [requests, setRequests] = useState<MissPunchRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    const fetchMissPunchRequests = useCallback(async () => {
+    // History Modal State
+    const [historyModalVisible, setHistoryModalVisible] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState<MissPunchRequest | null>(null);
+
+    const fetchMissPunchRequests = useCallback(async (isRefresh = false) => {
         try {
-            setIsLoading(true);
-            const response = await getMissPunchDetails();
+            if (isRefresh) {
+                setIsRefreshing(true);
+            } else {
+                setIsLoading(true);
+            }
+            setError(null);
 
-            // Transform API response to component format
-            const missPunchData: MissPunchRequest[] = response.data.map(item => {
-                // Get approver name from workflow list
-                const approverName = item.workflow_list[0]?.Approve_name || 'Unknown';
+            console.log('📋 Fetching all miss punch requests...');
+            const response = await getMissingPunchDetails();
 
-                return {
-                    id: item.MissPunchReqMasterID,
-                    employeeName: approverName,
-                    date: item.datetime,
-                    punchType: item.PunchType === '1' ? 'In' : 'Out',
-                    reason: item.reason,
-                    status: item.approval_status as RequestStatus,
-                };
-            });
+            if (response.status === 'Success' && response.data) {
+                // Transform API response to component format
+                const missPunchData: MissPunchRequest[] = response.data.map(item => {
+                    // Extract employee info from workflow list
+                    const employeeName = item.workflow_list && item.workflow_list.length > 0 
+                        ? item.workflow_list[0].Approve_name 
+                        : 'Unknown Employee';
+                    
+                    // Generate employee ID from MissPunchReqMasterID (you may need to adjust this based on actual API)
+                    const employeeId = `EMP${String(item.MissPunchReqMasterID).padStart(4, '0')}`;
+                    
+                    // Get all workflow approvers
+                    const workflowApprovers = item.workflow_list?.map(w => w.Approve_name) || [];
 
-            setRequests(missPunchData);
-            console.log('✅ Miss punch requests loaded:', missPunchData.length);
-        } catch (error) {
-            console.error('Failed to fetch miss punch requests:', error);
+                    return {
+                        id: item.MissPunchReqMasterID,
+                        employeeName: employeeName,
+                        employeeId: employeeId,
+                        date: item.datetime,
+                        punchType: item.PunchType === '1' ? 'In' : 'Out',
+                        reason: item.reason || 'No reason provided',
+                        status: item.approval_status as RequestStatus,
+                        workflowApprovers: workflowApprovers,
+                    };
+                });
+
+                setRequests(missPunchData);
+                console.log('✅ Miss punch requests loaded:', missPunchData.length);
+            } else {
+                setRequests([]);
+            }
+        } catch (err: any) {
+            console.error('❌ Failed to fetch miss punch requests:', err);
+            setError(err.message || 'Failed to load miss punch requests');
             setRequests([]);
         } finally {
             setIsLoading(false);
+            setIsRefreshing(false);
         }
     }, []);
 
     // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
-            fetchMissPunchRequests();
+            fetchMissPunchRequests(false);
         }, [fetchMissPunchRequests])
     );
+
+    // Handle pull to refresh
+    const handleRefresh = () => {
+        fetchMissPunchRequests(true);
+    };
 
     // Filter requests based on selected filter
     const filteredRequests = requests.filter((request) => {
@@ -145,17 +185,35 @@ const ViewAllMisspunch = () => {
                 {
                     text: 'Reject',
                     style: 'destructive',
-                    onPress: () => {
-                        setRequests((prev) =>
-                            prev.map((req) =>
-                                req.id === parseInt(requestId) ? { ...req, status: 'Rejected' } : req
-                            )
-                        );
-                        Alert.alert('Success', 'Miss punch request rejected successfully!');
+                    onPress: async () => {
+                        try {
+                            setIsLoading(true);
+                            // PROGRAM ID 4 for Miss Punch
+                            await disapproveAll({ ProgramID: 4, TranID: parseInt(requestId) });
+                            
+                            // Optimistic update
+                            setRequests((prev) =>
+                                prev.map((req) =>
+                                    req.id === parseInt(requestId) ? { ...req, status: 'Rejected' } : req
+                                )
+                            );
+                            
+                            Alert.alert('Success', 'Miss punch request rejected successfully!');
+                            fetchMissPunchRequests(); // Refresh to ensure sync
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to reject request');
+                        } finally {
+                            setIsLoading(false);
+                        }
                     },
                 },
             ]
         );
+    };
+
+    const handleViewHistory = (item: MissPunchRequest) => {
+        setSelectedRequest(item);
+        setHistoryModalVisible(true);
     };
 
     const renderMissPunchRequestItem = ({ item }: { item: MissPunchRequest }) => (
@@ -175,6 +233,7 @@ const ViewAllMisspunch = () => {
                     </View>
                     <View style={styles.employeeDetails}>
                         <Text style={styles.employeeName}>{item.employeeName}</Text>
+                        <Text style={styles.employeeId}>ID: {item.employeeId}</Text>
                     </View>
                 </View>
                 <View
@@ -187,6 +246,12 @@ const ViewAllMisspunch = () => {
                         {item.status}
                     </Text>
                 </View>
+                <TouchableOpacity
+                    style={styles.historyIconButton}
+                    onPress={() => handleViewHistory(item)}
+                >
+                    <Feather name="clock" size={16} color="#4A90FF" />
+                </TouchableOpacity>
             </View>
 
             {/* Punch Type Badge */}
@@ -221,6 +286,21 @@ const ViewAllMisspunch = () => {
                 <Text style={styles.reasonText}>{item.reason}</Text>
             </View>
 
+            {/* Workflow Approvers */}
+            {item.workflowApprovers && item.workflowApprovers.length > 0 && (
+                <View style={styles.workflowContainer}>
+                    <Text style={styles.workflowLabel}>Approvers:</Text>
+                    <View style={styles.approversList}>
+                        {item.workflowApprovers.map((approver, index) => (
+                            <View key={index} style={styles.approverChip}>
+                                <Feather name="user-check" size={12} color="#4A90FF" />
+                                <Text style={styles.approverText}>{approver}</Text>
+                            </View>
+                        ))}
+                    </View>
+                </View>
+            )}
+
             {/* Action Buttons (only for pending/awaiting requests) */}
             {(item.status === 'Pending' || item.status === 'Awaiting Approve') && (
                 <View style={styles.actionButtons}>
@@ -247,9 +327,28 @@ const ViewAllMisspunch = () => {
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Error State */}
+            {error && !isLoading && (
+                <View style={styles.errorBanner}>
+                    <Feather name="alert-circle" size={16} color="#FF5252" />
+                    <Text style={styles.errorText}>{error}</Text>
+                    <TouchableOpacity onPress={() => fetchMissPunchRequests(false)}>
+                        <Feather name="refresh-cw" size={16} color="#4A90FF" />
+                    </TouchableOpacity>
+                </View>
+            )}
+
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={isRefreshing}
+                        onRefresh={handleRefresh}
+                        colors={['#4A90FF']}
+                        tintColor="#4A90FF"
+                    />
+                }
             >
                 {/* Filter Tabs */}
                 <View style={styles.filterContainer}>
@@ -354,6 +453,17 @@ const ViewAllMisspunch = () => {
                     )}
                 </View>
             </ScrollView>
+
+            {/* Approval History Modal */}
+            {selectedRequest && (
+                <ApprovalHistoryModal
+                    visible={historyModalVisible}
+                    onClose={() => setHistoryModalVisible(false)}
+                    tranId={selectedRequest.id}
+                    progId={4} // Guessing 4 for Miss Punch. Update if needed.
+                    employeeName={selectedRequest.employeeName || 'Unknown'}
+                />
+            )}
         </SafeAreaView>
     );
 };
@@ -509,6 +619,12 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 0.6,
     },
+    historyIconButton: {
+        marginLeft: 8,
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: '#E3F2FD',
+    },
 
     // Punch Type Badge
     punchTypeBadge: {
@@ -651,6 +767,61 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: '#666',
         fontWeight: '600',
+    },
+
+    // Workflow Approvers
+    workflowContainer: {
+        backgroundColor: '#F0F4FF',
+        borderRadius: 10,
+        padding: 14,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: '#D6E4FF',
+    },
+    workflowLabel: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#4A90FF',
+        marginBottom: 10,
+    },
+    approversList: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    approverChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#FFF',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#4A90FF',
+    },
+    approverText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#4A90FF',
+    },
+
+    // Error Banner
+    errorBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: '#FFEBEE',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#FFCDD2',
+    },
+    errorText: {
+        flex: 1,
+        fontSize: 13,
+        color: '#FF5252',
+        fontWeight: '500',
     },
 });
 

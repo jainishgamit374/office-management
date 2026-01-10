@@ -195,16 +195,87 @@ export const compareApis = async () => {
     }
 };
 
+// Test 4: Is Away APIs
+export const testIsAwayApis = async () => {
+    console.log('\n========================================');
+    console.log('TEST 4: Is Away APIs');
+    console.log('========================================\n');
+
+    try {
+        const token = await getAuthToken();
+        if (!token) {
+            console.error('❌ No auth token found. Please login first.');
+            return;
+        }
+
+        // 1. Test /isawayapprovals/
+        console.log('🌐 Endpoint: /isawayapprovals/');
+        const approvalsUrl = `${BASE_URL}/isawayapprovals/`;
+        console.log('🔗 URL:', approvalsUrl);
+
+        const approvalsResponse = await fetch(approvalsUrl, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        console.log('\n📡 Response Status:', approvalsResponse.status);
+        const approvalsData = await approvalsResponse.json();
+        console.log('📊 Response Data:');
+        console.log(JSON.stringify(approvalsData, null, 2));
+
+        if (approvalsResponse.ok) {
+            console.log('✅ /isawayapprovals/ success!');
+        } else {
+            console.log('❌ /isawayapprovals/ failed!');
+        }
+
+        // 2. Test /isawayapprovalhistory/
+        console.log('\n----------------------------------------\n');
+        console.log('🌐 Endpoint: /isawayapprovalhistory/');
+        const historyUrl = `${BASE_URL}/isawayapprovalhistory/`;
+        console.log('🔗 URL:', historyUrl);
+
+        const historyResponse = await fetch(historyUrl, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        console.log('\n📡 Response Status:', historyResponse.status);
+        const historyData = await historyResponse.json();
+        console.log('📊 Response Data:');
+        console.log(JSON.stringify(historyData, null, 2));
+
+        if (historyResponse.ok) {
+            console.log('✅ /isawayapprovalhistory/ success!');
+        } else {
+            console.log('❌ /isawayapprovalhistory/ failed!');
+        }
+
+        return { approvals: approvalsData, history: historyData };
+
+    } catch (error) {
+        console.error('\n❌ ERROR:', error);
+        throw error;
+    }
+};
+
 // Run all tests
 export const runAllTests = async () => {
     console.log('\n╔════════════════════════════════════════╗');
-    console.log('║  Late/Early API Endpoint Test Suite   ║');
+    console.log('║  Late/Early & Is Away API Test Suite  ║');
     console.log('╚════════════════════════════════════════╝\n');
 
     try {
         await testLateCheckinCount();
         await testLateEarlyCount();
         await compareApis();
+        await testIsAwayApis();
 
         console.log('\n✅ All tests completed successfully!\n');
     } catch (error) {
@@ -217,5 +288,6 @@ export default {
     testLateCheckinCount,
     testLateEarlyCount,
     compareApis,
+    testIsAwayApis,
     runAllTests,
 };

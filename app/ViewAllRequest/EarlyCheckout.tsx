@@ -1,4 +1,5 @@
 import { getEarlyLatePunchList, type EarlyLatePunchDetails } from '@/lib/earlyLatePunch';
+import { disapproveAll } from '@/lib/workflow';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
@@ -14,6 +15,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ApprovalHistoryModal from '../../components/Admin/ApprovalHistoryModal';
 
 // Types
 type FilterType = 'All' | 'Early' | 'Late';
@@ -25,6 +27,10 @@ const EarlyCheckoutt = () => {
     const [requests, setRequests] = useState<EarlyLatePunchDetails[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // History Modal State
+    const [historyModalVisible, setHistoryModalVisible] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState<EarlyLatePunchDetails | null>(null);
 
     // Fetch requests from API
     const fetchRequests = useCallback(async () => {
@@ -141,14 +147,35 @@ const EarlyCheckoutt = () => {
                 {
                     text: 'Reject',
                     style: 'destructive',
-                    onPress: () => {
-                        // TODO: Call API to reject request
-                        Alert.alert('Success', 'Request rejected successfully!');
-                        fetchRequests(); // Refresh list
+                    onPress: async () => {
+                        try {
+                            setIsLoading(true);
+                            // PROGRAM ID 6 for Early/Late Punch
+                            await disapproveAll({ ProgramID: 6, TranID: requestId });
+                            
+                            // Optimistic update
+                            setRequests((prev) =>
+                                prev.map((req) =>
+                                    req.EarlyLatePunchMasterID === requestId ? { ...req, ApprovalStatus: 'Rejected' as any } : req
+                                )
+                            );
+
+                            Alert.alert('Success', 'Request rejected successfully!');
+                            fetchRequests(); // Refresh list
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to reject request');
+                        } finally {
+                            setIsLoading(false);
+                        }
                     },
                 },
             ]
         );
+    };
+
+    const handleViewHistory = (item: EarlyLatePunchDetails) => {
+        setSelectedRequest(item);
+        setHistoryModalVisible(true);
     };
 
     const renderRequestItem = ({ item }: { item: EarlyLatePunchDetails }) => (
@@ -171,15 +198,24 @@ const EarlyCheckoutt = () => {
                         <Text style={styles.employeeId}>{item.EmployeeEmail || 'No email'}</Text>
                     </View>
                 </View>
-                <View
-                    style={[
-                        styles.statusBadge,
-                        { backgroundColor: getStatusBgColor(item.ApprovalStatus) },
-                    ]}
-                >
-                    <Text style={[styles.statusText, { color: getStatusColor(item.ApprovalStatus) }]}>
-                        {item.ApprovalStatus}
-                    </Text>
+                <View style={styles.headerActions}>
+                    <View
+                        style={[
+                            styles.statusBadge,
+                            { backgroundColor: getStatusBgColor(item.ApprovalStatus) },
+                        ]}
+                    >
+                        <Text style={[styles.statusText, { color: getStatusColor(item.ApprovalStatus) }]}>
+                            {item.ApprovalStatus}
+                        </Text>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.historyIconButton}
+                        onPress={() => handleViewHistory(item)}
+                    >
+                        <Feather name="clock" size={16} color="#4A90FF" />
+                        <Text style={styles.historyLinkText}>History</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -373,6 +409,17 @@ const EarlyCheckoutt = () => {
                     )}
                 </View>
             </ScrollView>
+
+            {/* Approval History Modal */}
+            {selectedRequest && (
+                <ApprovalHistoryModal
+                    visible={historyModalVisible}
+                    onClose={() => setHistoryModalVisible(false)}
+                    tranId={selectedRequest.EarlyLatePunchMasterID}
+                    progId={6} // Using 6 for Early/Late Punch based on user info
+                    employeeName={selectedRequest.EmployeeName || 'Unknown'}
+                />
+            )}
         </SafeAreaView>
     );
 };
@@ -506,6 +553,26 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#999',
         fontWeight: '600',
+    },
+
+    // Header Actions
+    headerActions: {
+        alignItems: 'flex-end',
+        gap: 6,
+    },
+    historyIconButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 6,
+        backgroundColor: '#E3F2FD',
+    },
+    historyLinkText: {
+        fontSize: 11,
+        color: '#4A90FF',
+        fontWeight: '700',
     },
 
     // Status Badge

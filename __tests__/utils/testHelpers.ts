@@ -312,4 +312,361 @@ export function generateTestSummary(results: {
   `.trim();
 }
 
+// ==================== ADVANCED TESTING UTILITIES ====================
+
+/**
+ * Performance testing - Measure throughput (requests per second)
+ */
+export async function measureThroughput(
+    requestFn: () => Promise<any>,
+    durationMs: number = 10000
+): Promise<{ requestsPerSecond: number; totalRequests: number; errors: number }> {
+    const startTime = Date.now();
+    let totalRequests = 0;
+    let errors = 0;
+
+    while (Date.now() - startTime < durationMs) {
+        try {
+            await requestFn();
+            totalRequests++;
+        } catch (error) {
+            errors++;
+        }
+    }
+
+    const actualDuration = (Date.now() - startTime) / 1000;
+    const requestsPerSecond = totalRequests / actualDuration;
+
+    return { requestsPerSecond, totalRequests, errors };
+}
+
+/**
+ * Load testing - Simulate concurrent users
+ */
+export async function simulateConcurrentUsers(
+    requestFn: () => Promise<any>,
+    userCount: number
+): Promise<{
+    successful: number;
+    failed: number;
+    avgResponseTime: number;
+    maxResponseTime: number;
+    minResponseTime: number;
+}> {
+    const promises = Array(userCount)
+        .fill(null)
+        .map(async () => {
+            const startTime = Date.now();
+            try {
+                await requestFn();
+                return { success: true, duration: Date.now() - startTime };
+            } catch (error) {
+                return { success: false, duration: Date.now() - startTime };
+            }
+        });
+
+    const results = await Promise.all(promises);
+    const successful = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+    const durations = results.map((r) => r.duration);
+
+    return {
+        successful,
+        failed,
+        avgResponseTime: durations.reduce((a, b) => a + b, 0) / durations.length,
+        maxResponseTime: Math.max(...durations),
+        minResponseTime: Math.min(...durations),
+    };
+}
+
+/**
+ * Rate limiting test - Check if rate limiting is enforced
+ */
+export async function testRateLimiting(
+    requestFn: () => Promise<Response>,
+    requestCount: number = 20,
+    delayMs: number = 100
+): Promise<{ rateLimited: boolean; limitReachedAt: number | null }> {
+    for (let i = 0; i < requestCount; i++) {
+        const response = await requestFn();
+        if (response.status === 429) {
+            return { rateLimited: true, limitReachedAt: i + 1 };
+        }
+        await wait(delayMs);
+    }
+    return { rateLimited: false, limitReachedAt: null };
+}
+
+/**
+ * Security testing - Test for SQL injection vulnerability
+ */
+export async function testSQLInjection(
+    endpoint: string,
+    method: string,
+    fieldName: string,
+    sqlPayloads: string[]
+): Promise<{ vulnerable: boolean; vulnerablePayloads: string[] }> {
+    const vulnerablePayloads: string[] = [];
+
+    for (const payload of sqlPayloads) {
+        try {
+            const body = { [fieldName]: payload };
+            const response = await unauthenticatedRequest(endpoint, method, body);
+            const data = await response.json();
+
+            // Check for SQL error messages or successful injection
+            const responseText = JSON.stringify(data).toLowerCase();
+            if (
+                responseText.includes('sql') ||
+                responseText.includes('syntax') ||
+                responseText.includes('mysql') ||
+                responseText.includes('postgresql') ||
+                data.status === 'Success' // Successful injection
+            ) {
+                vulnerablePayloads.push(payload);
+            }
+        } catch (error) {
+            // Network errors are not vulnerabilities
+        }
+    }
+
+    return {
+        vulnerable: vulnerablePayloads.length > 0,
+        vulnerablePayloads,
+    };
+}
+
+/**
+ * Security testing - Test for XSS vulnerability
+ */
+export async function testXSS(
+    endpoint: string,
+    method: string,
+    fieldName: string,
+    xssPayloads: string[]
+): Promise<{ vulnerable: boolean; vulnerablePayloads: string[] }> {
+    const vulnerablePayloads: string[] = [];
+
+    for (const payload of xssPayloads) {
+        try {
+            const body = { [fieldName]: payload };
+            const response = await unauthenticatedRequest(endpoint, method, body);
+            const data = await response.json();
+
+            // Check if payload is reflected unsanitized
+            const responseText = JSON.stringify(data);
+            if (responseText.includes(payload) && payload.includes('<')) {
+                vulnerablePayloads.push(payload);
+            }
+        } catch (error) {
+            // Network errors are not vulnerabilities
+        }
+    }
+
+    return {
+        vulnerable: vulnerablePayloads.length > 0,
+        vulnerablePayloads,
+    };
+}
+
+/**
+ * Authorization testing - Check if user can access other user's data
+ */
+export async function testAuthorizationBypass(
+    endpoint: string,
+    token: string,
+    otherUserId: number
+): Promise<{ vulnerable: boolean; message: string }> {
+    try {
+        // Try to access other user's data by manipulating user ID
+        const response = await authenticatedRequest(
+            `${endpoint}?user_id=${otherUserId}`,
+            'GET',
+            token
+        );
+
+        if (response.ok) {
+            return {
+                vulnerable: true,
+                message: 'Successfully accessed other user data',
+            };
+        }
+
+        return {
+            vulnerable: false,
+            message: 'Authorization check passed',
+        };
+    } catch (error) {
+        return {
+            vulnerable: false,
+            message: 'Request failed (expected)',
+        };
+    }
+}
+
+/**
+ * Mock data factory - Generate attendance punch data
+ */
+export function generateMockPunchData(overrides: any = {}) {
+    return {
+        latitude: 23.0225,
+        longitude: 72.5714,
+        timestamp: new Date().toISOString(),
+        ...overrides,
+    };
+}
+
+/**
+ * Mock data factory - Generate leave application data
+ */
+export function generateMockLeaveApplication(overrides: any = {}) {
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() + 7); // 7 days from now
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 2); // 2 days duration
+
+    return {
+        StartDate: startDate.toISOString().split('T')[0],
+        EndDate: endDate.toISOString().split('T')[0],
+        LeaveType: 'Casual Leave',
+        Reason: 'Personal work',
+        IsHalfDay: false,
+        IsFirstHalf: false,
+        ...overrides,
+    };
+}
+
+/**
+ * Mock data factory - Generate WFH request data
+ */
+export function generateMockWFHRequest(overrides: any = {}) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    return {
+        DateTime: tomorrow.toISOString().split('T')[0],
+        Reason: 'Remote work required',
+        IsHalfDay: false,
+        IsFirstHalf: false,
+        ...overrides,
+    };
+}
+
+/**
+ * Mock data factory - Generate miss punch request data
+ */
+export function generateMockMissPunchRequest(overrides: any = {}) {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    return {
+        datetime: yesterday.toISOString(),
+        PunchType: 'out',
+        reason: 'Forgot to punch out',
+        ...overrides,
+    };
+}
+
+/**
+ * Date utility - Generate date range
+ */
+export function generateDateRange(
+    startDate: Date,
+    endDate: Date
+): { fromDate: string; toDate: string } {
+    return {
+        fromDate: startDate.toISOString().split('T')[0],
+        toDate: endDate.toISOString().split('T')[0],
+    };
+}
+
+/**
+ * Date utility - Get current month date range
+ */
+export function getCurrentMonthRange(): { fromDate: string; toDate: string } {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return generateDateRange(firstDay, lastDay);
+}
+
+/**
+ * Validation helper - Check if response matches expected structure
+ */
+export function validateResponseStructure(
+    response: any,
+    expectedStructure: Record<string, string>
+): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    for (const [field, type] of Object.entries(expectedStructure)) {
+        if (!(field in response)) {
+            errors.push(`Missing field: ${field}`);
+        } else if (typeof response[field] !== type && type !== 'any') {
+            errors.push(`Field ${field} has wrong type: expected ${type}, got ${typeof response[field]}`);
+        }
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors,
+    };
+}
+
+/**
+ * Test fixture - Create test user with cleanup
+ */
+export async function withTestUser<T>(
+    testFn: (user: { email: string; password: string; token: string }) => Promise<T>
+): Promise<T> {
+    const email = generateRandomEmail();
+    const password = generateRandomPassword();
+
+    // Create test user
+    await createTestUser({
+        email,
+        password,
+        firstName: 'Test',
+        lastName: 'User',
+        dateOfBirth: '1990-01-01',
+        joiningDate: new Date().toISOString().split('T')[0],
+    });
+
+    // Login to get token
+    const tokens = await loginAndGetTokens(email, password);
+    if (!tokens) {
+        throw new Error('Failed to login test user');
+    }
+
+    try {
+        // Run test
+        return await testFn({ email, password, token: tokens.accessToken });
+    } finally {
+        // Cleanup
+        await cleanupTestUser(email, password);
+    }
+}
+
+/**
+ * Assertion helper - Assert response is successful
+ */
+export function assertSuccessResponse(response: any) {
+    expect(response).toHaveProperty('status');
+    expect(response.status).toBe('Success');
+    expect(response).toHaveProperty('data');
+}
+
+/**
+ * Assertion helper - Assert response is error
+ */
+export function assertErrorResponse(response: any, expectedStatus?: number) {
+    expect(response).toHaveProperty('status');
+    expect(response.status).not.toBe('Success');
+    expect(response).toHaveProperty('message');
+    if (expectedStatus) {
+        expect(response.statusCode).toBe(expectedStatus);
+    }
+}
+
 export { API_BASE_URL, HTTP_STATUS };

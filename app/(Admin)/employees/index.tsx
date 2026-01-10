@@ -1,67 +1,62 @@
 import EmployeeListItem from '@/components/Admin/EmployeeListItem';
+import { Employee, getEmployeeList } from '@/lib/employees';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  FlatList,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-type Employee = {
-  id: string;
-  name: string;
-  department: string;
-  role: string;
-  avatar: string;
-};
-
-const MOCK_EMPLOYEES: Employee[] = [
-  {
-    id: '1',
-    name: 'Jane Doe',
-    department: 'Engineering',
-    role: 'Software Engineer',
-    avatar:
-      'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?w=200',
-  },
-  {
-    id: '2',
-    name: 'John Smith',
-    department: 'Sales',
-    role: 'Regional Manager',
-    avatar:
-      'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?w=200',
-  },
-  {
-    id: '3',
-    name: 'Emily Davis',
-    department: 'Marketing',
-    role: 'Content Strategist',
-    avatar:
-      'https://images.pexels.com/photos/3760852/pexels-photo-3760852.jpeg?w=200',
-  },
-  {
-    id: '4',
-    name: 'Michael Brown',
-    department: 'HR',
-    role: 'Talent Acquisition',
-    avatar:
-      'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?w=200',
-  },
-];
 
 const AdminEmployeesScreen = () => {
   const [query, setQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch employees from backend
+  const fetchEmployees = async (isRefresh = false) => {
+    try {
+      if (isRefresh) setIsRefreshing(true);
+      else setIsLoading(true);
+      setError(null);
+
+      const response = await getEmployeeList();
+      if (response.status === 'Success') {
+        setEmployees(response.data || []);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load employees');
+      setEmployees([]);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchEmployees();
+    }, [])
+  );
 
   const departments = ['All', 'Engineering', 'Sales', 'Marketing', 'HR'];
 
-  const filtered = MOCK_EMPLOYEES.filter((e) => {
+  const filtered = employees.filter((e) => {
     const matchDept =
       selectedFilter === 'All' || e.department === selectedFilter;
     const matchQuery =
@@ -73,6 +68,26 @@ const AdminEmployeesScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {isLoading && !isRefreshing && (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#4A90FF" />
+          <Text style={styles.loadingText}>Loading employees...</Text>
+        </View>
+      )}
+
+      {!isLoading && error && (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={48} color="#FF5252" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchEmployees()}>
+            <Ionicons name="refresh" size={16} color="#FFF" />
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {!isLoading && !error && (
+      <>
       {/* Simple header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerLeft}>
@@ -145,7 +160,17 @@ const AdminEmployeesScreen = () => {
             }
           />
         )}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => fetchEmployees(true)}
+            colors={['#4A90FF']}
+            tintColor="#4A90FF"
+          />
+        }
       />
+      </>
+      )}
     </SafeAreaView>
   );
 };
@@ -259,5 +284,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 24,
+  },
+
+  centerContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 12,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  errorText: {
+    fontSize: 15,
+    color: '#FF5252',
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#4A90FF',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
   },
 });

@@ -79,3 +79,48 @@ export const getIsAwayApprovals = async (): Promise<IsAwayApprovalsResponse> => 
     }
 };
 
+/**
+ * Get is away approval history
+ * GET /isawayapprovalhistory/
+ */
+export const getIsAwayApprovalHistory = async (): Promise<IsAwayApprovalsResponse> => {
+    try {
+        console.log('📊 Fetching is away approval history...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(
+            `${BASE_URL}/isawayapprovalhistory/`,
+            {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+
+        let data;
+        try {
+            data = await response.json();
+            console.log('📊 Is away approval history data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON:', jsonError);
+            throw new Error('Server returned invalid response');
+        }
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || 'Failed to fetch is away approval history';
+            throw new Error(errorMessage);
+        }
+
+        return data;
+    } catch (error: any) {
+        console.error('❌ Is away approval history error:', error);
+        throw error instanceof Error ? error : new Error(String(error));
+    }
+};
+

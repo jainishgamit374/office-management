@@ -398,8 +398,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       const workingHrs = calculateWorkingHours(punchInDate);
       setCompletedWorkingHours(workingHrs);
 
+      // Simple elapsed time for slider progress bar (0-9 hours)
+      const elapsedMs = now.getTime() - punchInDate.getTime();
+      const elapsedHours = elapsedMs / (1000 * 60 * 60);
+      const clampedElapsed = Math.min(Math.max(elapsedHours, 0), 9);
+
       Animated.timing(progressAnim, {
-        toValue: workingHrs / TOTAL_WORKING_HOURS,
+        toValue: clampedElapsed / 9,
         duration: 500,
         useNativeDriver: false,
       }).start();
@@ -788,9 +793,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
                     backgroundColor: progressAnim.interpolate({
                       inputRange: [0, 0.5, 1],
                       outputRange: [
-                        isDark ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.12)',
-                        isDark ? 'rgba(245,158,11,0.25)' : 'rgba(245,158,11,0.12)',
-                        isDark ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.12)'
+                        isDark ? 'rgba(239,68,68,0.45)' : 'rgba(239,68,68,0.30)',
+                        isDark ? 'rgba(245,158,11,0.45)' : 'rgba(245,158,11,0.30)',
+                        isDark ? 'rgba(16,185,129,0.45)' : 'rgba(16,185,129,0.30)'
                       ]
                     }),
                   },
@@ -802,7 +807,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
             <View style={styles.swipeTextWrapper}>
               <Text style={[
                 styles.swipeText,
-                { color: hasCheckedOut ? colors.textSecondary : (isDark ? '#A5B4FC' : '#6366F1') }
+                { color: hasCheckedOut ? colors.textSecondary : (isDark ? '#A5B4FC' : '#4245f3ff') }
               ]}>
                 {getSwipeText()}
               </Text>

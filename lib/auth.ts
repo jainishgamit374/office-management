@@ -10,6 +10,9 @@ import {
     USER_KEY
 } from './api';
 
+// Re-export commonly used functions
+export { getAccessToken, getRefreshToken };
+
 // ==================== TYPES ====================
 
 export interface RegisterData {

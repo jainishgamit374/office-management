@@ -5,6 +5,7 @@ import { getEmployeeAttendance } from '@/lib/employeeAttendance';
 import { formatISTTime } from '@/lib/timezone';
 import { getWFHApprovalHistory } from '@/lib/wfhApprovalHistory';
 import Feather from '@expo/vector-icons/Feather';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -675,22 +676,28 @@ const AttendenceList = () => {
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.calendarPlaceholder}>
-                            <Feather name="calendar" size={48} color="#4A90FF" />
-                            <Text style={styles.placeholderText}>
-                                Calendar picker will be implemented here
-                            </Text>
-                            <Text style={styles.placeholderSubtext}>
-                                Available from version 1.0.0
-                            </Text>
+                        <View style={styles.calendarContainer}>
+                            <DateTimePicker
+                                testID="dateTimePicker"
+                                value={tempDate}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                onChange={handleDateChange}
+                                style={styles.datePicker}
+                                themeVariant="light"
+                                accentColor="#4A90FF"
+                                textColor="#000000"
+                            />
                         </View>
 
-                        <TouchableOpacity
-                            style={styles.modalButton}
-                            onPress={() => setShowCalendar(false)}
-                        >
-                            <Text style={styles.modalButtonText}>Close</Text>
-                        </TouchableOpacity>
+                        {Platform.OS === 'ios' && (
+                            <TouchableOpacity
+                                style={styles.modalButton}
+                                onPress={() => applyDateSelection(tempDate)}
+                            >
+                                <Text style={styles.modalButtonText}>Confirm Date</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
             </Modal>
@@ -977,22 +984,13 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#333',
     },
-    calendarPlaceholder: {
+    calendarContainer: {
         alignItems: 'center',
-        paddingVertical: 40,
-        gap: 12,
+        justifyContent: 'center',
+        marginBottom: 24,
     },
-    placeholderText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#666',
-        textAlign: 'center',
-    },
-    placeholderSubtext: {
-        fontSize: 13,
-        color: '#999',
-        textAlign: 'center',
-        paddingHorizontal: 20,
+    datePicker: {
+        width: Platform.OS === 'ios' ? '100%' : undefined,
     },
     modalButton: {
         backgroundColor: '#4A90FF',

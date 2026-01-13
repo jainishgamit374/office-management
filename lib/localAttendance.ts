@@ -50,11 +50,24 @@ export interface LocalPunchRecord {
     isRemote: boolean;
 }
 
+import { decodeToken, getAccessToken } from './auth';
+
 /**
  * Get user-specific storage key
  */
-const getUserStorageKey = async (): Promise<string> => {
+export const getUserStorageKey = async (): Promise<string> => {
     try {
+        // Try to get user_id from access token first (most reliable)
+        const token = await getAccessToken();
+        if (token) {
+            const decoded = decodeToken(token);
+            const userId = decoded?.user_id || decoded?.sub || decoded?.id;
+            if (userId) {
+                return `${ATTENDANCE_STORAGE_PREFIX}${userId}`;
+            }
+        }
+
+        // Fallback to email if token/user_id not available (legacy support)
         const userEmail = await AsyncStorage.getItem(USER_EMAIL_KEY);
         if (!userEmail) {
             // If no user email, use a default key (for testing)
@@ -286,16 +299,26 @@ export const clearTodayAttendance = async (force: boolean = false): Promise<void
         // Remove today's records
         const filteredRecords = records.filter(r => r.date !== today);
         await AsyncStorage.setItem(storageKey, JSON.stringify(filteredRecords));
-        console.log('✅ Local attendance records cleared');
+        console.log('✅ Local attendance records cleared for user');
 
         // 2. Clear punch state keys (used by CheckInCard)
+        // Get user-specific keys
+        const userEmail = await AsyncStorage.getItem(USER_EMAIL_KEY);
+        const suffix = userEmail ? `_${userEmail}` : '';
+
         const keysToRemove = [
-            'lastAttendanceDate',           // Date tracking for reset
-            'lastAttendanceStatsDate',      // Stats date tracking
-            'punchStatus',                  // Current punch status
-            'isCheckedIn',                  // Check-in state
-            'hasCheckedOut',                // Check-out state
-            'hasEverCheckedIn',             // Ever checked in flag
+            'lastAttendanceDate',           // Legacy
+            'lastAttendanceStatsDate',      // Legacy
+            'punchStatus',                  // Legacy
+            'isCheckedIn',                  // Legacy
+            'hasCheckedOut',                // Legacy
+            'hasEverCheckedIn',             // Legacy
+            'checkInCardState',             // Legacy/Static
+
+            // User specific keys
+            `checkInCardState${suffix}`,
+            `lastResetDate${suffix}`,
+            `lastLunchAlert${suffix}`
         ];
 
         await AsyncStorage.multiRemove(keysToRemove);

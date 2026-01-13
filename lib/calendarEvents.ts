@@ -39,6 +39,7 @@ const HOLIDAY_IMAGES = {
     'Holi': 'https://images.unsplash.com/photo-1583241800698-c8e8e6e8e0c4?w=800&q=80',
     'Christmas': 'https://images.unsplash.com/photo-1512389142860-9c449e58a543?w=800&q=80',
     'New Year': 'https://images.unsplash.com/photo-1467810563316-b5476525c0f9?w=800&q=80',
+    'Uttarayan': 'https://images.unsplash.com/photo-1516361839211-1c36b85d9284?w=800&q=80', // Kite festival image
 };
 
 /**
@@ -85,6 +86,8 @@ export const getTodaysHolidays = async (): Promise<CalendarEvent[]> => {
 
     // Sample holiday data - replace with actual API call
     const holidays: { [key: string]: { name: string; date: string } } = {
+        '1-14': { name: 'Uttarayan', date: 'January 14' },
+        '1-15': { name: 'Uttarayan (Vasi)', date: 'January 15' },
         '1-26': { name: 'Republic Day', date: 'January 26' },
         '8-15': { name: 'Independence Day', date: 'August 15' },
         '10-2': { name: 'Gandhi Jayanti', date: 'October 2' },
@@ -113,28 +116,49 @@ export const getTodaysHolidays = async (): Promise<CalendarEvent[]> => {
 };
 
 /**
- * Get upcoming holidays (next 7 days)
+ * Get upcoming holidays (next 2 months)
  */
 export const getUpcomingHolidays = async (): Promise<CalendarEvent[]> => {
     const today = new Date();
-    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    // Check next 60 days (2 months)
+    const nextTwoMonths = new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000);
 
-    // Sample upcoming holiday
-    if (today.getMonth() === 0 && today.getDate() < 26) {
-        return [{
-            id: 'holiday-upcoming',
-            type: 'holiday',
-            title: '📅 Upcoming Holiday',
-            message: 'Republic Day on January 26th. Office will be closed.',
-            date: 'Jan 26',
-            imageUrl: HOLIDAY_IMAGES['Republic Day'],
-            imageLayout: 'horizontal',
-            priority: 'medium',
-            holidayName: 'Republic Day',
-        }];
-    }
+    const events: CalendarEvent[] = [];
+    const currentYear = today.getFullYear();
 
-    return [];
+    // List of holidays to check
+    const upcomingHolidaysList = [
+        { name: 'Uttarayan', month: 0, day: 14, dateStr: 'Jan 14' }, // Month is 0-indexed
+        { name: 'Republic Day', month: 0, day: 26, dateStr: 'Jan 26' },
+        { name: 'Holi', month: 2, day: 25, dateStr: 'Mar 25' }, // Approx date
+    ];
+
+    upcomingHolidaysList.forEach(holiday => {
+        // Create date object for this holiday in current year
+        let holidayDate = new Date(currentYear, holiday.month, holiday.day);
+
+        // If date has passed this year, check next year (though mainly relevant for Dec/Jan transition)
+        if (holidayDate < today) {
+            holidayDate = new Date(currentYear + 1, holiday.month, holiday.day);
+        }
+
+        // Check if within our 2-month window
+        if (holidayDate > today && holidayDate <= nextTwoMonths) {
+            events.push({
+                id: `holiday-${holiday.name.replace(/\s+/g, '-').toLowerCase()}`,
+                type: 'holiday',
+                title: `📅 Upcoming: ${holiday.name}`,
+                message: `${holiday.name} is coming up on ${holiday.dateStr}.`,
+                date: holiday.dateStr,
+                imageUrl: HOLIDAY_IMAGES[holiday.name as keyof typeof HOLIDAY_IMAGES] || HOLIDAY_IMAGES['Republic Day'],
+                imageLayout: 'horizontal',
+                priority: 'medium',
+                holidayName: holiday.name,
+            });
+        }
+    });
+
+    return events;
 };
 
 /**
@@ -218,6 +242,17 @@ export const aggregateCalendarEvents = async (): Promise<Notification[]> => {
 export const getSampleCalendarEvents = (): Notification[] => {
     return [
         {
+            id: 'sample-holiday-uttarayan',
+            type: 'holiday',
+            title: '🪁 Uttarayan',
+            message: 'Happy Uttarayan! Enjoy the kite festival.',
+            date: 'Jan 14',
+            priority: 'high',
+            dismissible: true,
+            imageUrl: HOLIDAY_IMAGES['Uttarayan'],
+            imageLayout: 'banner',
+        },
+        {
             id: 'sample-holiday',
             type: 'holiday',
             title: '🎊 Republic Day',
@@ -237,17 +272,6 @@ export const getSampleCalendarEvents = (): Notification[] => {
             priority: 'medium',
             dismissible: true,
             imageUrl: 'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=800&q=80',
-            imageLayout: 'horizontal',
-        },
-        {
-            id: 'sample-birthday-2',
-            type: 'birthday',
-            title: '🎉 Happy Birthday Priya!',
-            message: 'Wish Priya Sharma a wonderful birthday today!',
-            date: 'Today',
-            priority: 'medium',
-            dismissible: true,
-            imageUrl: 'https://images.unsplash.com/photo-1464349095431-e9a21285b5f3?w=800&q=80',
             imageLayout: 'horizontal',
         },
         {

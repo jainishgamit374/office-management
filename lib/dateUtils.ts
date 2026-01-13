@@ -1,67 +1,70 @@
 // lib/dateUtils.ts
+import { parseAPIDateTime } from './attendance';
 
 /**
- * Convert a Date object or date string to backend format
- * Backend expects: "YYYY-MM-DDTHH:mm:ss" (ISO 8601 without Z)
+ * Format working hours between two times
  */
-export const toBackendDateFormat = (date: Date | string): string => {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
+export const formatWorkingHours = (
+    punchInTime: string | null,
+    punchOutTime: string | null
+): string => {
+    if (!punchInTime) return '--';
 
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    const hours = String(dateObj.getHours()).padStart(2, '0');
-    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-    const seconds = String(dateObj.getSeconds()).padStart(2, '0');
+    const inTime = parseAPIDateTime(punchInTime);
+    if (!inTime) return '--';
 
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    let endTime: Date;
+
+    if (punchOutTime) {
+        const outTime = parseAPIDateTime(punchOutTime);
+        if (!outTime) return '--';
+        endTime = outTime;
+    } else {
+        // If not punched out, calculate from now
+        endTime = new Date();
+    }
+
+    const diffMs = endTime.getTime() - inTime.getTime();
+
+    if (diffMs < 0) return '--';
+
+    const totalMinutes = Math.floor(diffMs / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours === 0) {
+        return `${minutes}m`;
+    }
+
+    return `${hours}h ${minutes}m`;
 };
 
 /**
- * Convert a date string in YYYY-MM-DD format to backend format with time
- * Defaults to 00:00:00 for time
+ * Check if a date is today
  */
-export const dateStringToBackendFormat = (dateString: string): string => {
-    // If already in correct format, return as is
-    if (dateString.includes('T')) {
-        return dateString;
-    }
+export const isToday = (dateString: string | null): boolean => {
+    if (!dateString) return false;
 
-    // Add time component (00:00:00)
-    return `${dateString}T00:00:00`;
+    const date = parseAPIDateTime(dateString);
+    if (!date) return false;
+
+    const today = new Date();
+
+    return (
+        date.getDate() === today.getDate() &&
+        date.getMonth() === today.getMonth() &&
+        date.getFullYear() === today.getFullYear()
+    );
 };
 
 /**
- * Calculate working hours between check-in and check-out times
- * Returns format: "Xh Ym Zs" including seconds
+ * Get formatted date string
  */
-export const formatWorkingHours = (checkInTime: string | null, checkOutTime: string | null): string => {
-    if (!checkInTime || !checkOutTime) {
-        return '--';
-    }
-
-    try {
-        const checkIn = new Date(checkInTime);
-        const checkOut = new Date(checkOutTime);
-
-        // Calculate difference in milliseconds
-        const diffMs = checkOut.getTime() - checkIn.getTime();
-
-        if (diffMs < 0) {
-            return '--';
-        }
-
-        // Convert to seconds
-        const totalSeconds = Math.floor(diffMs / 1000);
-
-        // Calculate hours, minutes, and seconds
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-
-        return `${hours}h ${minutes}m ${seconds}s`;
-    } catch (error) {
-        console.error('Error calculating working hours:', error);
-        return '--';
-    }
+export const formatDate = (date: Date): string => {
+    return date.toLocaleDateString('en-IN', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
 };

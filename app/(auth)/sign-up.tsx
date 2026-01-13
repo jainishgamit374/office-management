@@ -161,13 +161,13 @@ const SignUp = () => {
 
         try {
             const response = await register({
-                FName: form.first_name.trim(),
-                LName: form.last_name.trim(),
-                Email: form.email.trim().toLowerCase(),
-                DOB: dateStringToBackendFormat(form.date_of_birth),
-                JoiningDate: dateStringToBackendFormat(form.joining_date),
-                Password: form.password,
-                ConfirmPassword: form.confirm_password,
+                first_name: form.first_name.trim(),
+                last_name: form.last_name.trim(),
+                email: form.email.trim().toLowerCase(),
+                date_of_birth: dateStringToBackendFormat(form.date_of_birth),
+                joining_date: dateStringToBackendFormat(form.joining_date),
+                password: form.password,
+                confirm_password: form.confirm_password,
             });
 
             console.log('✅ Registration successful:', response);

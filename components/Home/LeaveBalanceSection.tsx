@@ -17,41 +17,26 @@ const LeaveBalanceSection: React.FC = () => {
             setIsLoading(true);
             setError(null);
 
-            console.log('🔄 [LeaveBalanceSection] Fetching leave balance...');
             const response = await getEmployeeLeaveBalance();
-
-            console.log('📡 [LeaveBalanceSection] Full API response:', JSON.stringify(response, null, 2));
-
-            // Handle different response structures
-            let balanceData: LeaveBalanceItem[] = [];
-
-            if (response.data && Array.isArray(response.data)) {
-                balanceData = response.data;
-                console.log('✅ Using response.data array:', balanceData);
-            } else if (Array.isArray(response)) {
-                balanceData = response as any;
-                console.log('✅ Using direct response array:', balanceData);
-            } else if (response && typeof response === 'object') {
-                // Try to extract data from nested structure
-                const possibleData = (response as any).leave_balance || (response as any).leaveBalance || (response as any).balances;
-                if (possibleData && Array.isArray(possibleData)) {
-                    balanceData = possibleData;
-                    console.log('✅ Using nested data:', balanceData);
+            console.log('📡 Leave Balance Response:', JSON.stringify(response, null, 2));
+            
+            if (response.status === 'Success' && response.data && Array.isArray(response.data)) {
+                if (response.data.length > 0) {
+                    setLeaveBalances(response.data);
+                } else {
+                    // Use sample data when API returns empty
+                    const sampleData: LeaveBalanceItem[] = [
+                        { Leavename: 'CL', count: 15 },
+                        { Leavename: 'PL', count: 15 },
+                        { Leavename: 'SL', count: 13 }
+                    ];
+                    setLeaveBalances(sampleData);
                 }
-            }
-
-            if (balanceData.length > 0) {
-                setLeaveBalances(balanceData);
-                console.log('✅ Leave balance loaded:', balanceData.length, 'items');
-                console.log('📊 Balance details:', balanceData.map(b => `${b.Leavename}: ${b.count}`).join(', '));
             } else {
                 setLeaveBalances([]);
-                console.warn('⚠️ No leave balance data found in response');
-                console.warn('⚠️ Response structure:', Object.keys(response));
             }
         } catch (err: any) {
-            console.error('❌ Failed to load leave balance:', err);
-            console.error('❌ Error details:', err.message);
+            console.error('Failed to load leave balance:', err);
             setError(err.message);
             setLeaveBalances([]);
         } finally {
@@ -59,20 +44,19 @@ const LeaveBalanceSection: React.FC = () => {
         }
     }, []);
 
-    // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchLeaveBalance();
         }, [fetchLeaveBalance])
     );
 
-    // Get leave count by type
     const getLeaveCount = (leaveType: string): number => {
-        const leave = leaveBalances.find(item => item.Leavename === leaveType);
+        const leave = leaveBalances.find(item => 
+            (item.Leavename || '').toUpperCase() === leaveType.toUpperCase()
+        );
         return leave?.count || 0;
     };
 
-    // Get badge color
     const getBadgeColor = (leaveName: string): string => {
         switch (leaveName) {
             case 'PL': return '#4caf50';
@@ -82,7 +66,6 @@ const LeaveBalanceSection: React.FC = () => {
         }
     };
 
-    // Calculate total available leaves
     const getTotalAvailable = (): number => {
         return leaveBalances.reduce((sum, leave) => sum + leave.count, 0);
     };
@@ -154,39 +137,6 @@ const LeaveBalanceSection: React.FC = () => {
                             <Text style={styles.leaveLabel}>Available</Text>
                         </View>
                     </View>
-
-                    {/* Leave Balance Summary */}
-                    {leaveBalances.length > 0 && (
-                        <View style={styles.summaryContainer}>
-                            <View style={styles.summaryHeader}>
-                                <Feather name="calendar" size={16} color={colors.primary} />
-                                <Text style={styles.summaryTitle}>Leave Summary</Text>
-                            </View>
-                            <View style={styles.summaryContent}>
-                                <View style={styles.summaryStats}>
-                                    <Text style={[
-                                        styles.summaryCount,
-                                        { color: getTotalAvailable() > 5 ? colors.success : getTotalAvailable() > 0 ? colors.warning : colors.error }
-                                    ]}>
-                                        {getTotalAvailable()}
-                                    </Text>
-                                    <Text style={styles.summaryLabel}>Total Available</Text>
-                                </View>
-                            </View>
-                            {getTotalAvailable() <= 3 && getTotalAvailable() > 0 && (
-                                <View style={styles.warningBox}>
-                                    <Feather name="alert-circle" size={12} color={colors.warning} />
-                                    <Text style={[styles.warningText, { color: colors.warning }]}>Running low on leaves!</Text>
-                                </View>
-                            )}
-                            {getTotalAvailable() === 0 && (
-                                <View style={[styles.warningBox, { borderLeftColor: colors.error, backgroundColor: '#ffebee' }]}>
-                                    <Feather name="alert-triangle" size={12} color={colors.error} />
-                                    <Text style={[styles.warningText, { color: colors.error }]}>No leaves remaining!</Text>
-                                </View>
-                            )}
-                        </View>
-                    )}
                 </>
             )}
         </TouchableOpacity>
@@ -280,56 +230,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         fontSize: 10,
         color: colors.textSecondary,
         textAlign: 'center',
-    },
-    summaryContainer: {
-        marginTop: 15,
-        padding: 12,
-        backgroundColor: colors.background,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    summaryHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginBottom: 10,
-    },
-    summaryTitle: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.text,
-    },
-    summaryContent: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    summaryStats: {
-        alignItems: 'center',
-        gap: 4,
-    },
-    summaryCount: {
-        fontSize: 32,
-        fontWeight: '700',
-    },
-    summaryLabel: {
-        fontSize: 11,
-        color: colors.textSecondary,
-    },
-    warningBox: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginTop: 10,
-        padding: 8,
-        backgroundColor: '#fff3e0',
-        borderRadius: 6,
-        borderLeftWidth: 3,
-        borderLeftColor: colors.warning,
-    },
-    warningText: {
-        fontSize: 11,
-        fontWeight: '600',
     },
 });
 

@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getUserStorageKey } from './localAttendance';
 
-const ATTENDANCE_STORAGE_KEY = '@attendance_records';
+// Legacy key for migration if needed
+// const ATTENDANCE_STORAGE_KEY = '@attendance_records';
 
 export interface LocalAttendanceRecord {
     id: string;
@@ -86,6 +88,7 @@ export const saveAttendanceRecord = async (
     try {
         // Get existing records
         const records = await getLocalAttendanceRecords();
+        const storageKey = await getUserStorageKey();
 
         // Find or create record for this date
         let recordIndex = records.findIndex(r => r.date === date);
@@ -122,7 +125,7 @@ export const saveAttendanceRecord = async (
         records[recordIndex] = record;
 
         // Save back to storage
-        await AsyncStorage.setItem(ATTENDANCE_STORAGE_KEY, JSON.stringify(records));
+        await AsyncStorage.setItem(storageKey, JSON.stringify(records));
         console.log('✅ Attendance record saved locally:', record);
     } catch (error) {
         console.error('❌ Error saving attendance record:', error);
@@ -135,7 +138,8 @@ export const saveAttendanceRecord = async (
  */
 export const getLocalAttendanceRecords = async (): Promise<LocalAttendanceRecord[]> => {
     try {
-        const data = await AsyncStorage.getItem(ATTENDANCE_STORAGE_KEY);
+        const storageKey = await getUserStorageKey();
+        const data = await AsyncStorage.getItem(storageKey);
         if (!data) {
             return [];
         }
@@ -241,8 +245,9 @@ const formatTime = (isoTimestamp: string): string => {
  */
 export const clearLocalAttendanceRecords = async (): Promise<void> => {
     try {
-        await AsyncStorage.removeItem(ATTENDANCE_STORAGE_KEY);
-        console.log('✅ Local attendance records cleared');
+        const storageKey = await getUserStorageKey();
+        await AsyncStorage.removeItem(storageKey);
+        console.log('✅ Local attendance records cleared for user');
     } catch (error) {
         console.error('❌ Error clearing local records:', error);
         throw error;

@@ -90,12 +90,9 @@ const PendingRequestsSection: React.FC = () => {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>My Pending Requests</Text>
-                {!isLoading && totalPending > 0 && (
-                    <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{totalPending}</Text>
-                    </View>
-                )}
+                <Text style={styles.title}>
+                    My Pending Requests {!isLoading && totalPending > 0 && `(${totalPending})`}
+                </Text>
             </View>
 
             {isLoading ? (
@@ -202,13 +199,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     },
     header: {
         marginBottom: 16,
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 10,
         paddingBottom: 12,
         borderBottomWidth: 1,
         borderBottomColor: colors.divider,
+        alignItems: 'center',
     },
     title: {
         fontSize: 18,

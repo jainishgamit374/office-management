@@ -652,6 +652,28 @@ export const calculateLeaveDays = (startDate: string, endDate: string, isHalfDay
     return isHalfDay ? 0.5 : diffDays;
 };
 
+// Leave type mapping for display
+export const LEAVE_TYPE_MAP: Record<string, { name: string; color: string; icon: string }> = {
+    CL: { name: 'Casual Leave', color: '#2196f3', icon: 'sun' },
+    PL: { name: 'Privilege Leave', color: '#4caf50', icon: 'calendar' },
+    SL: { name: 'Sick Leave', color: '#ff9800', icon: 'heart' },
+    ML: { name: 'Maternity Leave', color: '#e91e63', icon: 'users' },
+    PAT: { name: 'Paternity Leave', color: '#9c27b0', icon: 'user' },
+    LWP: { name: 'Leave Without Pay', color: '#607d8b', icon: 'dollar-sign' },
+    CO: { name: 'Compensatory Off', color: '#00bcd4', icon: 'refresh-cw' },
+};
+
+/**
+ * Get leave type display info
+ */
+export const getLeaveTypeInfo = (code: string): { name: string; color: string; icon: string } => {
+    return LEAVE_TYPE_MAP[code.toUpperCase()] || {
+        name: code,
+        color: '#9e9e9e',
+        icon: 'help-circle'
+    };
+};
+
 export default {
     getEmployeeLeaveBalance,
     getEmployeeLeaveDataView,
@@ -662,4 +684,5 @@ export default {
     cancelLeaveApplication,
     validateLeaveApplication,
     calculateLeaveDays,
+    getLeaveTypeInfo,
 };

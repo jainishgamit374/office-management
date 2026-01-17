@@ -33,10 +33,11 @@ import {
 // ============ CONSTANTS ============
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CONTAINER_PADDING = 16;
-const SECTION_PADDING = 16;
-const TRACK_WIDTH = SCREEN_WIDTH - (CONTAINER_PADDING * 2) - (SECTION_PADDING * 2);
+const SECTION_PADDING = 20;
+// Subtract 2 for border width compensation
+const TRACK_WIDTH = SCREEN_WIDTH - (CONTAINER_PADDING * 2) - (SECTION_PADDING * 2) - 2;
 const BUTTON_SIZE = 64;
-const BUTTON_MARGIN = 3;
+const BUTTON_MARGIN = 4;
 const MAX_SWIPE_DISTANCE = TRACK_WIDTH - BUTTON_SIZE - (BUTTON_MARGIN * 2);
 const SWIPE_THRESHOLD = MAX_SWIPE_DISTANCE * 0.6;
 
@@ -212,7 +213,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         let hour = parseInt(hours, 10);
         if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
         if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
-        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds));
+        // Treat as UTC
+        return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds)));
       }
 
       const match2 = timeString.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
@@ -221,7 +223,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         let hour = parseInt(hours, 10);
         if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
         if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
-        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds));
+        // Treat as UTC
+        return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds)));
       }
 
       const nativeDate = new Date(timeString);

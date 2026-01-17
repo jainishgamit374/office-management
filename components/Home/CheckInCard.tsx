@@ -288,11 +288,24 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
           const parsedInTime = parsePunchTime(inTimeStr);
           
+          console.log('Loading existing check-in:', {
+            inTimeStr,
+            parsedInTime,
+            currentTime: new Date()
+          });
+          
           // Calculate current progress to set the button color immediately
           if (parsedInTime) {
             const workingHrs = calculateWorkingHours(parsedInTime);
             const progress = workingHrs / TOTAL_WORKING_HOURS;
+            console.log('Setting progress on load:', {
+              workingHours: workingHrs.toFixed(2),
+              progressValue: progress.toFixed(3),
+              progressPercent: (progress * 100).toFixed(1) + '%'
+            });
             progressAnim.setValue(progress);
+          } else {
+            console.warn('Failed to parse punch-in time:', inTimeStr);
           }
           
           pan.setValue(MAX_SWIPE_DISTANCE);
@@ -373,6 +386,24 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       const currentDate = new Date().toISOString().split('T')[0];
       if (currentDate !== lastDate) {
         lastDate = currentDate;
+        console.log('New day detected - resetting check-in state');
+        
+        // Explicitly reset all state for the new day
+        pan.setValue(0);
+        colorAnim.setValue(0);
+        progressAnim.setValue(0);
+        setIsCheckedIn(false);
+        setHasCheckedOut(false);
+        setPunchInTime(null);
+        setPunchOutTime(null);
+        setPunchInDate(null);
+        setPunchOutDate(null);
+        setWorkingMinutes(0);
+        setSlotProgresses([]);
+        setCompletedWorkingHours(0);
+        setPunchType(0);
+        
+        // Fetch fresh status from server
         fetchPunchStatus(true);
       }
     };
@@ -385,14 +416,15 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     tomorrow.setHours(0, 0, 0, 100);
 
     const midnightTimeout = setTimeout(() => {
-      fetchPunchStatus(true);
+      console.log('Midnight reached - resetting for new day');
+      checkNewDay(); // Use the same reset logic
     }, tomorrow.getTime() - now.getTime());
 
     return () => {
       clearInterval(interval);
       clearTimeout(midnightTimeout);
     };
-  }, [fetchPunchStatus]);
+  }, [fetchPunchStatus, pan, colorAnim, progressAnim]);
 
   // ============ PROGRESS UPDATE ============
   useEffect(() => {
@@ -416,8 +448,16 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       const workingHrs = calculateWorkingHours(punchInDate);
       setCompletedWorkingHours(workingHrs);
 
+      const progressValue = workingHrs / TOTAL_WORKING_HOURS;
+      console.log('Progress Update:', {
+        workingHours: workingHrs.toFixed(2),
+        progressPercent: (progressValue * 100).toFixed(1) + '%',
+        isCheckedIn,
+        hasCheckedOut
+      });
+
       Animated.timing(progressAnim, {
-        toValue: workingHrs / TOTAL_WORKING_HOURS,
+        toValue: progressValue,
         duration: 500,
         useNativeDriver: false,
       }).start();
@@ -805,7 +845,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         {/* Swipe Section */}
         <View style={styles.swipeSection}>
           <View style={[styles.swipeTrack, { backgroundColor: trackBg }]}>
-            {/* Progress Background */}
+            {/* Progressive Fill Background - Red to Yellow to Green */}
             {isCheckedIn && !hasCheckedOut && (
               <Animated.View
                 style={[
@@ -818,11 +858,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
                     backgroundColor: progressAnim.interpolate({
                       inputRange: [0, 0.5, 1],
                       outputRange: [
-                        isDark ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.15)',   // Red
-                        isDark ? 'rgba(245,158,11,0.25)' : 'rgba(245,158,11,0.15)', // Yellow
-                        isDark ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.15)'  // Green
+                        '#EF4444',  // Red (start)
+                        '#F59E0B',  // Yellow (mid-day)
+                        '#10B981'   // Green (end of day)
                       ]
                     }),
+                    opacity: 0.6,  // Increased opacity for better visibility
                   },
                 ]}
               />

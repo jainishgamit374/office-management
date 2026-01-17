@@ -316,7 +316,7 @@ const PendingRequestsSection: React.FC = () => {
     }, [fetchData])
   );
 
-  const totalCount = leaves.length + missPunches.length + earlyCheckouts.length + wfh.length;
+  const totalCount = leaves.length + missPunches.length + earlyCheckouts.length + lateArrivals.length + wfh.length;
 
   return (
     <View style={styles.container}>

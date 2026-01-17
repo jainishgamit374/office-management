@@ -204,9 +204,24 @@ const LeaveApplication = () => {
     };
 
     const renderLeaveRequestItem = ({ item }: { item: LeaveApplicationDetails }) => {
+        // DEBUG: Check what data we are actually receiving
+        // console.log(`Item ${item.LeaveApplicationMasterID} Data:`, JSON.stringify(item, null, 2));
+
         const statusStyle = getStatusStyle(item.ApprovalStatus);
         const leaveStyle = getLeaveTypeStyle(item.LeaveType);
         const isPending = item.ApprovalStatus === 'Pending' || item.ApprovalStatus === 'Awaiting Approve';
+
+        // Normalized Rejection Reason (handle case sensitivity and common variations)
+        const rejectionReason = item.RejectionReason || 
+                                (item as any).rejectionReason || 
+                                (item as any).reason_for_rejection ||
+                                (item as any).rejection_reason;
+
+        // Normalized Approval Username
+        const approvalUsername = item.ApprovalUsername || 
+                                 (item as any).approvalUsername || 
+                                 (item as any).approval_username || 
+                                 (item as any).approver_name;
 
         // Calculate days if not provided
         const daysCount = item.TotalDays || calculateLeaveDays(item.StartDate, item.EndDate, item.IsHalfDay);
@@ -222,7 +237,7 @@ const LeaveApplication = () => {
                         </View>
                         <View>
                             <Text style={styles.leaveTypeTitle}>{item.LeaveType}</Text>
-                            <Text style={styles.requestDate}>Applied: {formatDate(item.CreatedAt || item.CreatedDate)}</Text>
+                            <Text style={styles.requestDate}>Applied: {formatDate(item.CreatedAt || item.CreatedDate || '')}</Text>
                         </View>
                     </View>
                     
@@ -266,36 +281,57 @@ const LeaveApplication = () => {
                              </Text>
                          </View>
                     )}
-                </View>
 
-                {/* Footer: Workflow or Actions */}
-                <View style={styles.cardFooter}>
-                     <Pressable
-                        style={({ pressed }) => [styles.historyButton, pressed && { opacity: 0.7 }]}
-                        onPress={() => handleViewHistory(item)}
-                    >
-                         <Feather name="git-merge" size={14} color={colors.primary} />
-                         <Text style={styles.historyButtonText}>Workflow</Text>
-                    </Pressable>
-
-                    {isPending && (
-                        <View style={styles.pendingActions}>
-                             <Pressable
-                                style={[styles.actionBtn, styles.rejectBtn]}
-                                onPress={() => handleReject(item.LeaveApplicationMasterID)}
-                            >
-                                <Feather name="x" size={18} color="#C62828" />
-                                <Text style={styles.rejectBtnText}>Reject</Text>
-                            </Pressable>
-                            <Pressable
-                                style={[styles.actionBtn, styles.approveBtn]}
-                                onPress={() => Alert.alert('Info', 'Approve functionality coming soon')}
-                            >
-                                <Feather name="check" size={18} color="#FFF" />
-                                <Text style={styles.approveBtnText}>Approve</Text>
-                            </Pressable>
+                    {/* Approval Info */}
+                    {approvalUsername && (
+                        <View style={styles.approvalInfo}>
+                            <Feather 
+                                name="user-check" 
+                                size={14} 
+                                color={statusStyle.color} 
+                            />
+                            <Text style={styles.approvalLabel}>
+                                {isPending ? 'Reviewing by:' : `${statusStyle.label} by:`}
+                            </Text>
+                            <Text style={[styles.approvalName, { color: statusStyle.color }]}>
+                                {approvalUsername}
+                            </Text>
                         </View>
                     )}
+
+                    {/* Rejection Reason */}
+                    {(item.ApprovalStatus?.toLowerCase().includes('reject') || 
+                      item.ApprovalStatus?.toLowerCase().includes('disapprove')) && 
+                     rejectionReason && (
+                        <View style={styles.rejectionBlock}>
+                            <View style={styles.rejectionHeader}>
+                                <Feather name="alert-circle" size={14} color="#C62828" />
+                                <Text style={styles.rejectionTitle}>Rejection Reason:</Text>
+                            </View>
+                            <Text style={styles.rejectionText}>{rejectionReason}</Text>
+                        </View>
+                    )}
+                </View>
+
+                {/* Footer: Workflow and Approver */}
+                <View style={styles.cardFooter}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <Pressable
+                            style={({ pressed }) => [styles.historyButton, pressed && { opacity: 0.7 }]}
+                            onPress={() => handleViewHistory(item)}
+                        >
+                            <Feather name="git-merge" size={14} color={colors.primary} />
+                            <Text style={styles.historyButtonText}>View Workflow</Text>
+                        </Pressable>
+
+                        {/* Approver Name beside Workflow */}
+                        {approvalUsername ? (
+                            <View style={styles.approverBadge}>
+                                <Feather name="user" size={12} color={colors.textSecondary} />
+                                <Text style={styles.approverText}>{approvalUsername}</Text>
+                            </View>
+                        ) : null}
+                    </View>
                 </View>
             </View>
         );
@@ -553,6 +589,49 @@ const createStyles = (colors: ThemeColors) =>
             lineHeight: 18,
             fontStyle: 'italic',
         },
+        approvalInfo: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            backgroundColor: colors.background,
+            borderRadius: 8,
+        },
+        approvalLabel: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.textSecondary,
+        },
+        approvalName: {
+            fontSize: 13,
+            fontWeight: '700',
+        },
+        rejectionBlock: {
+            backgroundColor: '#FFEBEE',
+            borderLeftWidth: 3,
+            borderLeftColor: '#C62828',
+            padding: 12,
+            borderRadius: 8,
+            gap: 8,
+        },
+        rejectionHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        rejectionTitle: {
+            fontSize: 12,
+            fontWeight: '700',
+            color: '#C62828',
+            textTransform: 'uppercase',
+        },
+        rejectionText: {
+            fontSize: 13,
+            color: '#B71C1C',
+            lineHeight: 18,
+            fontWeight: '500',
+        },
 
         // Footer
         cardFooter: {
@@ -573,6 +652,22 @@ const createStyles = (colors: ThemeColors) =>
             fontSize: 13,
             fontWeight: '600',
             color: colors.primary,
+        },
+        approverBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            backgroundColor: colors.background,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        approverText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text,
         },
         pendingActions: {
             flexDirection: 'row',

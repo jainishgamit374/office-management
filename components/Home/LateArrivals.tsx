@@ -27,7 +27,7 @@ const LateArrivals: React.FC<LateArrivalsProps> = ({ title }) => {
     const fetchLateArrivals = useCallback(async () => {
         try {
             setIsLoading(true);
-            console.log('🔄 Fetching late arrivals from /early-late-punch/...');
+            console.log('🔄 [LateArrivals] Fetching from /early-late-punch/ with checkoutType=Late');
             
             // Fetch only Late checkout type (which represents late arrivals)
             const response = await getEarlyLatePunchList({
@@ -37,25 +37,42 @@ const LateArrivals: React.FC<LateArrivalsProps> = ({ title }) => {
                 sortOrder: 'desc'
             });
 
-            console.log('📡 Late arrivals response:', JSON.stringify(response, null, 2));
+            console.log('📡 [LateArrivals] Raw API response:', JSON.stringify(response, null, 2));
 
             if (response.status === 'Success' && response.data && response.data.length > 0) {
-                const transformedData: LateArrivalData[] = response.data.map((item: any) => ({
-                    id: item.EarlyLatePunchMasterID,
-                    dateTime: item.DateTime,
-                    reason: item.Reason,
-                    createdDate: item.CreatedDate,
-                    isActive: item.IsActive,
-                }));
+                console.log(`📊 [LateArrivals] Total items received: ${response.data.length}`);
+                
+                // Log each item's CheckoutType for debugging
+                response.data.forEach((item: any, index: number) => {
+                    console.log(`🔍 [LateArrivals] Item ${index}: ID=${item.EarlyLatePunchMasterID}, CheckoutType="${item.CheckoutType}"`);
+                });
 
+                // Strict filtering for Late Arrivals only - case-insensitive comparison
+                const transformedData: LateArrivalData[] = response.data
+                    .filter((item: any) => {
+                        const checkoutType = item.CheckoutType?.toString().toLowerCase();
+                        const isLate = checkoutType === 'late';
+                        if (!isLate) {
+                            console.log(`⚠️ [LateArrivals] Filtering out item ${item.EarlyLatePunchMasterID} with CheckoutType="${item.CheckoutType}"`);
+                        }
+                        return isLate;
+                    })
+                    .map((item: any) => ({
+                        id: item.EarlyLatePunchMasterID,
+                        dateTime: item.DateTime,
+                        reason: item.Reason,
+                        createdDate: item.CreatedDate,
+                        isActive: item.IsActive,
+                    }));
+
+                console.log(`✅ [LateArrivals] Filtered to ${transformedData.length} Late items`);
                 setArrivals(transformedData);
-                console.log('✅ Late arrivals loaded:', transformedData.length);
             } else {
                 setArrivals([]);
-                console.log('ℹ️ No late arrivals found');
+                console.log('ℹ️ [LateArrivals] No data in response');
             }
         } catch (error) {
-            console.error('❌ Failed to fetch late arrivals:', error);
+            console.error('❌ [LateArrivals] Failed to fetch:', error);
             setArrivals([]);
         } finally {
             setIsLoading(false);

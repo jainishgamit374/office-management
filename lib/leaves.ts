@@ -34,6 +34,7 @@ export interface LeaveApplicationDetails {
     ApprovalStatusID: number;
     ApprovalStatus: string;
     ApprovalUsername: string;
+    RejectionReason?: string; // Reason for rejection (if rejected)
     Reason: string;
     StartDate: string;
     StartDateFormatted: string;
@@ -49,7 +50,11 @@ export interface LeaveApplicationDetails {
     EmergencyContact: string;
     Attachments: string[];
     CreatedAt: string;
+    CreatedDate?: string; // Alternative field name from API
     UpdatedAt: string;
+    UpdatedDate?: string; // Alternative field name from API
+    CreatedBy?: number;
+    UpdatedBy?: number;
     CanCancel: boolean;
     CanEdit: boolean;
     CancellationDeadline: string;

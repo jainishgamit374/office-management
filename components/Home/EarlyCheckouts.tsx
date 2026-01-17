@@ -27,7 +27,7 @@ const EarlyCheckouts: React.FC<EarlyCheckoutsProps> = ({ title }) => {
     const fetchEarlyCheckouts = useCallback(async () => {
         try {
             setIsLoading(true);
-            console.log('🔄 Fetching early checkouts from /early-late-punch/...');
+            console.log('🔄 [EarlyCheckouts] Fetching from /early-late-punch/ with checkoutType=Early');
             
             // Fetch early checkout records (CheckoutType='Early')
             const response = await getEarlyLatePunchList({
@@ -37,18 +37,35 @@ const EarlyCheckouts: React.FC<EarlyCheckoutsProps> = ({ title }) => {
                 sortOrder: 'desc'
             });
 
-            console.log('📡 Early checkouts response:', JSON.stringify(response, null, 2));
+            console.log('📡 [EarlyCheckouts] Raw API response:', JSON.stringify(response, null, 2));
 
             if (response.status === 'Success' && response.data && response.data.length > 0) {
+                console.log(`📊 [EarlyCheckouts] Total items received: ${response.data.length}`);
+                
                 // Filter for today's records only
                 const today = new Date();
                 const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
                 
+                // Log each item's CheckoutType for debugging
+                response.data.forEach((item: any, index: number) => {
+                    console.log(`🔍 [EarlyCheckouts] Item ${index}: ID=${item.EarlyLatePunchMasterID}, CheckoutType="${item.CheckoutType}", Date="${item.DateTime.split(' ')[0]}"`);
+                });
+
                 const transformedData: EarlyCheckoutData[] = response.data
                     .filter((item: any) => {
-                        // Check if the DateTime is today
+                        // Check if the DateTime is today AND CheckoutType is Early
                         const itemDate = item.DateTime.split(' ')[0]; // Get date part
-                        return itemDate === todayStr;
+                        const checkoutType = item.CheckoutType?.toString().toLowerCase();
+                        const isToday = itemDate === todayStr;
+                        const isEarly = checkoutType === 'early';
+                        
+                        if (!isEarly) {
+                            console.log(`⚠️ [EarlyCheckouts] Filtering out item ${item.EarlyLatePunchMasterID} with CheckoutType="${item.CheckoutType}"`);
+                        } else if (!isToday) {
+                            console.log(`⚠️ [EarlyCheckouts] Filtering out item ${item.EarlyLatePunchMasterID} - not today (${itemDate} vs ${todayStr})`);
+                        }
+                        
+                        return isToday && isEarly;
                     })
                     .map((item: any) => ({
                         id: item.EarlyLatePunchMasterID,
@@ -58,14 +75,14 @@ const EarlyCheckouts: React.FC<EarlyCheckoutsProps> = ({ title }) => {
                         isActive: item.IsActive,
                     }));
 
+                console.log(`✅ [EarlyCheckouts] Filtered to ${transformedData.length} Early items for today`);
                 setCheckouts(transformedData);
-                console.log(`✅ Early checkouts loaded: ${transformedData.length} (filtered for today)`);
             } else {
                 setCheckouts([]);
-                console.log('ℹ️ No early checkouts found');
+                console.log('ℹ️ [EarlyCheckouts] No data in response');
             }
         } catch (error: any) {
-            console.error('❌ Failed to fetch early checkouts:', error);
+            console.error('❌ [EarlyCheckouts] Failed to fetch:', error);
             setCheckouts([]);
         } finally {
             setIsLoading(false);

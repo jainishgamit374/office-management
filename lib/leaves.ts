@@ -5,7 +5,7 @@ const API_BASE_URL = 'https://karmyog.pythonanywhere.com';
 // ==================== TYPES ====================
 
 export interface LeaveApplicationData {
-    LeaveType: 'CL' | 'SL' | 'PL';
+    LeaveType: 'CL' | 'SL' | 'PL' | 'LWP';
     Reason: string;
     StartDate: string; // Format: YYYY-MM-DD
     EndDate: string; // Format: YYYY-MM-DD
@@ -18,40 +18,8 @@ export interface LeaveApplicationData {
 
 export interface LeaveApplicationResponse {
     status: string;
-    statusCode: number;
     message: string;
-    data: {
-        LeaveApplicationMasterID: number;
-        EmployeeID: number;
-        EmployeeName: string;
-        LeaveType: string;
-        LeaveTypeName: string;
-        StartDate: string;
-        StartDateFormatted: string;
-        EndDate: string;
-        EndDateFormatted: string;
-        TotalDays: number;
-        IsHalfDay: boolean;
-        IsFirstHalf: boolean;
-        Reason: string;
-        ApprovalStatus: string;
-        ApprovalStatusID: number;
-        CreatedAt: string;
-        LeaveBalanceAfterApproval?: {
-            [key: string]: {
-                current: number;
-                afterApproval: number;
-            };
-        };
-        Approvers?: Array<{
-            ApproverID: number;
-            ApproverName: string;
-            Priority: number;
-            Status: string;
-        }>;
-    };
-    timestamp: string;
-    requestId?: string;
+    data?: any; // Made optional as per user example
 }
 
 export interface LeaveApplicationDetails {
@@ -113,18 +81,8 @@ export interface GetLeaveApplicationResponse {
 export interface LeaveApplicationListResponse {
     status: string;
     statusCode: number;
-    message: string;
-    data: {
-        applications: LeaveApplicationDetails[];
-        pagination: {
-            currentPage: number;
-            totalPages: number;
-            totalRecords: number;
-            recordsPerPage: number;
-        };
-    };
-    timestamp: string;
-    requestId?: string;
+    message?: string;
+    data: LeaveApplicationDetails | LeaveApplicationDetails[]; // Flexible to handle single object or array
 }
 
 export interface CancelLeaveResponse {
@@ -203,6 +161,37 @@ export interface LeaveDataViewResponse {
     };
     timestamp?: string;
     requestId?: string;
+}
+
+export interface PendingApproval {
+    Leave_ID: number;
+    employee_name: string;
+    leave_type: string;
+    start_date: string;
+    end_date: string;
+    reason: string;
+    profile_image: string;
+    applied_on: string;
+    IsHalfDay: boolean;
+    IsFirstHalf: boolean;
+}
+
+export interface PendingApprovalsResponse {
+    status: string;
+    total_pending_approvals: number;
+    pending_approvals: PendingApproval[];
+}
+
+export interface ApproveRejectRequest {
+    ProgramID: number;
+    TranID: number;
+    Reason: string;
+}
+
+export interface ApproveRejectResponse {
+    status: string;
+    statusCode: number;
+    message: string;
 }
 
 // ==================== API FUNCTIONS ====================
@@ -577,6 +566,91 @@ export const cancelLeaveApplication = async (id: number): Promise<CancelLeaveRes
 };
 
 /**
+ * Get pending approvals
+ * GET /leaveapprovals/
+ */
+export const getPendingApprovals = async (): Promise<PendingApprovalsResponse> => {
+    try {
+        console.log('⏳ Fetching pending approvals...');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(`${API_BASE_URL}/leaveapprovals/`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+
+        console.log('📡 Response status:', response.status);
+        const data = await response.json();
+        console.log('📡 Response data:', data);
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('Your session has expired. Please login again.');
+            } else {
+                throw new Error(data.message || 'Failed to fetch pending approvals');
+            }
+        }
+
+        console.log('✅ Pending approvals fetched successfully');
+        return data; // Expected to match PendingApprovalsResponse structure
+    } catch (error: any) {
+        console.error('❌ Get pending approvals error:', error);
+        throw new Error(error.message || 'Failed to fetch pending approvals');
+    }
+};
+
+/**
+ * Approve or Reject a leave request
+ * POST /allapprove/
+ */
+export const approveLeave = async (requestData: ApproveRejectRequest): Promise<ApproveRejectResponse> => {
+    try {
+        console.log('⚖️ Processing leave approval/rejection...');
+        console.log('Request data:', requestData);
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+            throw new Error('No access token found. Please login again.');
+        }
+
+        const response = await fetch(`${API_BASE_URL}/allapprove/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(requestData),
+        });
+
+        console.log('📡 Response status:', response.status);
+        const data = await response.json();
+        console.log('📡 Response data:', data);
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('Your session has expired. Please login again.');
+            } else {
+                throw new Error(data.message || 'Failed to process approval');
+            }
+        }
+
+        console.log('✅ Approval processed successfully');
+        return data;
+    } catch (error: any) {
+        console.error('❌ Approval processing error:', error);
+        throw new Error(error.message || 'Failed to process approval');
+    }
+};
+
+/**
  * Validate leave application data
  */
 export const validateLeaveApplication = (data: Partial<LeaveApplicationData>): { valid: boolean; errors: string[] } => {
@@ -585,8 +659,8 @@ export const validateLeaveApplication = (data: Partial<LeaveApplicationData>): {
     // Leave type validation
     if (!data.LeaveType) {
         errors.push('Leave type is required');
-    } else if (!['CL', 'SL', 'PL'].includes(data.LeaveType)) {
-        errors.push('Leave type must be CL, SL, or PL');
+    } else if (!['CL', 'SL', 'PL', 'LWP'].includes(data.LeaveType)) {
+        errors.push('Leave type must be CL, SL, PL, or LWP');
     }
 
     // Reason validation
@@ -685,4 +759,6 @@ export default {
     validateLeaveApplication,
     calculateLeaveDays,
     getLeaveTypeInfo,
+    getPendingApprovals,
+    approveLeave,
 };

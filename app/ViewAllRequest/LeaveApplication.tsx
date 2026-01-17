@@ -1,8 +1,9 @@
-import { getLeaveApplicationsList, LeaveApplicationDetails } from '@/lib/leaves';
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
+import { calculateLeaveDays, getLeaveApplicationsList, LeaveApplicationDetails } from '@/lib/leaves';
 import { disapproveAll } from '@/lib/workflow';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
     Alert,
     FlatList,
@@ -10,7 +11,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    View
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ApprovalHistoryModal from '../../components/Admin/ApprovalHistoryModal';
@@ -20,6 +21,9 @@ type FilterType = 'All' | 'casualLeave' | 'sickLeave' | 'privilegeLeave';
 type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
 
 const LeaveApplication = () => {
+    const { colors } = useTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
+
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('All');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
     const [applications, setApplications] = useState<LeaveApplicationDetails[]>([]);
@@ -41,10 +45,16 @@ const LeaveApplication = () => {
                 setIsLoading(true);
             }
 
+            // Map UI filter to API values
+            let apiLeaveType: 'CL' | 'SL' | 'PL' | 'All' = 'All';
+            if (selectedFilter === 'casualLeave') apiLeaveType = 'CL';
+            else if (selectedFilter === 'sickLeave') apiLeaveType = 'SL';
+            else if (selectedFilter === 'privilegeLeave') apiLeaveType = 'PL';
+
             const response = await getLeaveApplicationsList({
                 page: currentPage,
-                limit: 50,
-                leaveType: selectedFilter as any, // Temporary fix for strict union mismatch
+                limit: 100,
+                leaveType: apiLeaveType,
                 status: statusFilter,
                 sortBy: 'CreatedDate',
                 sortOrder: 'desc',
@@ -72,10 +82,31 @@ const LeaveApplication = () => {
         }, [fetchLeaveApplications])
     );
 
-    // Filtered applications (client-side filtering as backup)
-    const filteredRequests = applications;
+    // Client-side filtering as backup (in case API doesn't filter properly)
+    const filteredRequests = useMemo(() => {
+        if (selectedFilter === 'All') {
+            return applications;
+        }
+
+        return applications.filter(app => {
+            const leaveType = app.LeaveType?.toUpperCase() || '';
+            const leaveTypeCode = app.LeaveTypeCode?.toUpperCase() || '';
+            
+            if (selectedFilter === 'casualLeave') {
+                return leaveType.includes('CASUAL') || leaveTypeCode === 'CL' || leaveType === 'CL';
+            }
+            if (selectedFilter === 'sickLeave') {
+                return leaveType.includes('SICK') || leaveTypeCode === 'SL' || leaveType === 'SL';
+            }
+            if (selectedFilter === 'privilegeLeave') {
+                return leaveType.includes('PRIVILEGE') || leaveTypeCode === 'PL' || leaveType === 'PL';
+            }
+            return true;
+        });
+    }, [applications, selectedFilter]);
 
     const formatDate = (dateString: string) => {
+        if (!dateString) return '';
         const date = new Date(dateString);
         return date.toLocaleDateString('en-US', {
             day: '2-digit',
@@ -84,54 +115,32 @@ const LeaveApplication = () => {
         });
     };
 
-    const getStatusColor = (status: string) => {
+    const getStatusStyle = (status: string) => {
         const statusLower = status?.toLowerCase() || '';
 
+        // Proper modern colors: Amber/Orange for Pending, Green for Approved, Red for Rejected
         if (statusLower.includes('pending') || statusLower.includes('awaiting')) {
-            return '#FFA726'; // Bright Orange for pending/awaiting
+            return { color: '#F57C00', bg: '#FFF3E0', icon: 'clock', label: 'Pending' }; // Darker Orange text
         }
-        if (statusLower.includes('approve') && !statusLower.includes('awaiting')) {
-            return '#66BB6A'; // Bright Green for approved
-        }
+        // Fix: Check for reject/disapprove BEFORE approve, because "disapprove" contains "approve"
         if (statusLower.includes('reject') || statusLower.includes('disapprove')) {
-            return '#EF5350'; // Bright Red for rejected
+            return { color: '#C62828', bg: '#FFEBEE', icon: 'x-circle', label: 'Rejected' }; // Darker Red text
+        }
+        if (statusLower.includes('approve')) {
+            return { color: '#2E7D32', bg: '#E8F5E9', icon: 'check-circle', label: 'Approved' }; // Darker Green text
         }
         if (statusLower.includes('cancel')) {
-            return '#9E9E9E'; // Gray for cancelled
+            return { color: '#616161', bg: '#F5F5F5', icon: 'slash', label: 'Cancelled' };
         }
-        return '#757575'; // Default gray
+        return { color: colors.textSecondary, bg: colors.border, icon: 'info', label: status };
     };
 
-    const getStatusBgColor = (status: string) => {
-        const statusLower = status?.toLowerCase() || '';
-
-        if (statusLower.includes('pending') || statusLower.includes('awaiting')) {
-            return '#FFF3E0'; // Light orange background
-        }
-        if (statusLower.includes('approve') && !statusLower.includes('awaiting')) {
-            return '#E8F5E9'; // Light green background
-        }
-        if (statusLower.includes('reject') || statusLower.includes('disapprove')) {
-            return '#FFEBEE'; // Light red background
-        }
-        if (statusLower.includes('cancel')) {
-            return '#F5F5F5'; // Light gray background
-        }
-        return '#FAFAFA'; // Default light gray
-    };
-
-    const getLeaveTypeColor = (type: string) => {
-        if (type.includes('Casual')) return '#4A90FF';
-        if (type.includes('Sick')) return '#FF9800';
-        if (type.includes('Privilege')) return '#9C27B0';
-        return '#666';
-    };
-
-    const getLeaveTypeIcon = (type: string) => {
-        if (type.includes('Casual')) return 'coffee';
-        if (type.includes('Sick')) return 'activity';
-        if (type.includes('Privilege')) return 'sun';
-        return 'calendar';
+    const getLeaveTypeStyle = (type: string) => {
+        const typeLower = type?.toLowerCase() || '';
+        if (typeLower.includes('casual')) return { color: '#2196F3', icon: 'coffee' }; // Blue
+        if (typeLower.includes('sick')) return { color: '#FF9800', icon: 'activity' }; // Orange
+        if (typeLower.includes('privilege')) return { color: '#9C27B0', icon: 'sun' }; // Purple
+        return { color: colors.secondary, icon: 'calendar' };
     };
 
     const handleViewHistory = (item: LeaveApplicationDetails) => {
@@ -167,243 +176,176 @@ const LeaveApplication = () => {
         );
     };
 
-    const renderLeaveRequestItem = ({ item }: { item: any }) => {
-        // Get approver name from workflow_list
-        const approverName = item.workflow_list?.[0]?.Approve_name || 'N/A';
-        const workflowStatus = item.workflow_list?.[0]?.status || item.ApprovalStatus;
-
+    const renderFilterChip = (label: string, value: FilterType, icon: string, iconColor: string) => {
+        const isActive = selectedFilter === value;
         return (
-            <View style={styles.requestCard}>
-                {/* Header Section */}
-                <View style={styles.requestHeader}>
-                    <View style={styles.employeeInfo}>
-                        <View
-                            style={[
-                                styles.avatarContainer,
-                                { backgroundColor: `${getLeaveTypeColor(item.LeaveType)}20` },
-                            ]}
-                        >
-                            <Text style={[styles.avatarText, { color: getLeaveTypeColor(item.LeaveType) }]}>
-                                {item.ShortName || 'NA'}
-                            </Text>
-                        </View>
-                        <View style={styles.employeeDetails}>
-                            <Text style={styles.employeeName}>Leave Request #{item.LeaveApplicationMasterID}</Text>
-                            <Text style={styles.employeeId}>{item.LeaveType}</Text>
-                        </View>
-                    </View>
-                    <View
-                        style={[
-                            styles.statusBadge,
-                            { backgroundColor: getStatusBgColor(item.ApprovalStatus) },
-                        ]}
-                    >
-                        <Text style={[styles.statusText, { color: getStatusColor(item.ApprovalStatus) }]}>
-                            {item.ApprovalStatus}
-                        </Text>
-                    </View>
-                    <Pressable
-                        style={styles.historyIconButton}
-                        onPress={() => handleViewHistory(item)}
-                    >
-                         <Feather name="clock" size={16} color="#4A90FF" />
-                    </Pressable>
-                </View>
-
-                {/* Leave Type Badge */}
-                <View
+            <Pressable
+                style={[
+                    styles.filterChip,
+                    isActive && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedFilter(value)}
+            >
+                <Feather
+                    name={icon as any}
+                    size={14}
+                    color={isActive ? '#FFF' : colors.textSecondary}
+                />
+                <Text
                     style={[
-                        styles.leaveTypeBadge,
-                        { backgroundColor: `${getLeaveTypeColor(item.LeaveType)}15` },
+                        styles.filterChipText,
+                        isActive && styles.filterChipTextActive,
                     ]}
                 >
-                    <Feather
-                        name={getLeaveTypeIcon(item.LeaveType) as any}
-                        size={16}
-                        color={getLeaveTypeColor(item.LeaveType)}
-                    />
-                    <Text style={[styles.leaveTypeText, { color: getLeaveTypeColor(item.LeaveType) }]}>
-                        {item.LeaveType}
-                    </Text>
+                    {label}
+                </Text>
+            </Pressable>
+        );
+    };
+
+    const renderLeaveRequestItem = ({ item }: { item: LeaveApplicationDetails }) => {
+        const statusStyle = getStatusStyle(item.ApprovalStatus);
+        const leaveStyle = getLeaveTypeStyle(item.LeaveType);
+        const isPending = item.ApprovalStatus === 'Pending' || item.ApprovalStatus === 'Awaiting Approve';
+
+        // Calculate days if not provided
+        const daysCount = item.TotalDays || calculateLeaveDays(item.StartDate, item.EndDate, item.IsHalfDay);
+        
+        return (
+            <View style={styles.requestCard}>
+                
+                {/* Header: Avatar, Name, Status */}
+                <View style={styles.cardHeader}>
+                    <View style={styles.headerLeft}>
+                        <View style={[styles.avatarContainer, { backgroundColor: `${leaveStyle.color}15` }]}>
+                            <Feather name={leaveStyle.icon as any} size={20} color={leaveStyle.color} />
+                        </View>
+                        <View>
+                            <Text style={styles.leaveTypeTitle}>{item.LeaveType}</Text>
+                            <Text style={styles.requestDate}>Applied: {formatDate(item.CreatedAt || item.CreatedDate)}</Text>
+                        </View>
+                    </View>
+                    
+                    <View style={[
+                        styles.statusBadge, 
+                        { backgroundColor: statusStyle.bg, borderColor: `${statusStyle.color}30`, borderWidth: 1 }
+                    ]}>
+                        <Feather name={statusStyle.icon as any} size={12} color={statusStyle.color} />
+                        <Text style={[styles.statusText, { color: statusStyle.color }]}>
+                            {statusStyle.label}
+                        </Text>
+                    </View>
                 </View>
 
-                {/* Workflow Information */}
-                {item.workflow_list && item.workflow_list.length > 0 && (
-                    <View style={styles.reasonContainer}>
-                        <Text style={styles.reasonLabel}>Approval Workflow:</Text>
-                        {item.workflow_list.map((workflow: any, index: number) => (
-                            <View key={index} style={styles.workflowItem}>
-                                <View style={styles.workflowRow}>
-                                    <Feather
-                                        name={workflow.status === 'Approved' ? 'check-circle' :
-                                            workflow.status === 'Rejected' ? 'x-circle' : 'clock'}
-                                        size={14}
-                                        color={getStatusColor(workflow.status)}
-                                    />
-                                    <Text style={styles.workflowText}>
-                                        {workflow.Approve_name} (Priority {workflow.Priority})
-                                    </Text>
-                                </View>
-                                <Text style={[styles.workflowStatus, { color: getStatusColor(workflow.status) }]}>
-                                    {workflow.status}
-                                </Text>
-                            </View>
-                        ))}
+                {/* Body: Dates & Reason */}
+                <View style={styles.cardBody}>
+                    <View style={styles.dateRow}>
+                        <View style={styles.dateItem}>
+                            <Text style={styles.dateLabel}>From</Text>
+                            <Text style={styles.dateValue}>{formatDate(item.StartDate)}</Text>
+                        </View>
+                        <View style={styles.arrowContainer}>
+                            <Feather name="arrow-right" size={16} color={colors.textTertiary} />
+                        </View>
+                        <View style={styles.dateItem}>
+                            <Text style={styles.dateLabel}>To</Text>
+                            <Text style={styles.dateValue}>{formatDate(item.EndDate)}</Text>
+                        </View>
+                        
+                        {/* Days Pill */}
+                        <View style={styles.daysPill}>
+                            <Feather name="clock" size={12} color="#FFF" />
+                            <Text style={styles.daysPillText}>{daysCount} Days</Text>
+                        </View>
                     </View>
-                )}
+                    
+                    {item.Reason && (
+                         <View style={styles.reasonBlock}>
+                             <Text style={styles.reasonText} numberOfLines={2}>
+                                {item.Reason}
+                             </Text>
+                         </View>
+                    )}
+                </View>
 
-                {/* Action Buttons for Pending Requests */}
-                {(item.ApprovalStatus === 'Pending' || item.ApprovalStatus === 'Awaiting Approve') && (
-                    <View style={styles.actionButtons}>
-                        <Pressable
-                            style={[styles.actionButton, styles.approveButton]}
-                            onPress={() => Alert.alert('Info', 'Approve functionality coming soon')}
-                        >
-                            <Feather name="check-circle" size={18} color="#FFF" />
-                            <Text style={styles.actionButtonText}>Approve</Text>
-                        </Pressable>
-                        <Pressable
-                            style={[styles.actionButton, styles.rejectButton]}
-                            onPress={() => handleReject(item.LeaveApplicationMasterID)}
-                        >
-                            <Feather name="x-circle" size={18} color="#FFF" />
-                            <Text style={styles.actionButtonText}>Reject</Text>
-                        </Pressable>
-                    </View>
-                )}
+                {/* Footer: Workflow or Actions */}
+                <View style={styles.cardFooter}>
+                     <Pressable
+                        style={({ pressed }) => [styles.historyButton, pressed && { opacity: 0.7 }]}
+                        onPress={() => handleViewHistory(item)}
+                    >
+                         <Feather name="git-merge" size={14} color={colors.primary} />
+                         <Text style={styles.historyButtonText}>Workflow</Text>
+                    </Pressable>
+
+                    {isPending && (
+                        <View style={styles.pendingActions}>
+                             <Pressable
+                                style={[styles.actionBtn, styles.rejectBtn]}
+                                onPress={() => handleReject(item.LeaveApplicationMasterID)}
+                            >
+                                <Feather name="x" size={18} color="#C62828" />
+                                <Text style={styles.rejectBtnText}>Reject</Text>
+                            </Pressable>
+                            <Pressable
+                                style={[styles.actionBtn, styles.approveBtn]}
+                                onPress={() => Alert.alert('Info', 'Approve functionality coming soon')}
+                            >
+                                <Feather name="check" size={18} color="#FFF" />
+                                <Text style={styles.approveBtnText}>Approve</Text>
+                            </Pressable>
+                        </View>
+                    )}
+                </View>
             </View>
         );
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-            >
-                {/* Filter Tabs */}
-                <View style={styles.filterContainer}>
-                    <Text style={styles.sectionTitle}>Filter by Leave Type</Text>
-                    <View style={styles.filterRow}>
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'All' && styles.filterChipActive,
-                            ]}
-                            onPress={() => setSelectedFilter('All')}
-                        >
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'All' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                All Leaves
-                            </Text>
-                        </Pressable>
+            <View style={styles.header}>
+                 <Text style={styles.screenTitle}>Leave Requests</Text>
+                 <Text style={styles.totalCount}>{totalRecords} Records</Text>
+            </View>
 
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'casualLeave' && styles.filterChipActive,
-                                selectedFilter === 'casualLeave' && { backgroundColor: '#4A90FF', borderColor: '#4A90FF' },
-                            ]}
-                            onPress={() => setSelectedFilter('casualLeave')}
-                        >
-                            <Feather
-                                name="coffee"
-                                size={14}
-                                color={selectedFilter === 'casualLeave' ? '#FFF' : '#666'}
-                                style={{ marginRight: 4 }}
-                            />
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'casualLeave' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                CL
-                            </Text>
-                        </Pressable>
+            <View style={styles.filterScrollContainer}>
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterRow}
+                >
+                    {renderFilterChip('All', 'All', 'layers', '#666')}
+                    {renderFilterChip('Casual', 'casualLeave', 'coffee', '#4A90FF')}
+                    {renderFilterChip('Sick', 'sickLeave', 'activity', '#FF9800')}
+                    {renderFilterChip('Privilege', 'privilegeLeave', 'sun', '#9C27B0')}
+                </ScrollView>
+            </View>
 
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'sickLeave' && styles.filterChipActive,
-                                selectedFilter === 'sickLeave' && { backgroundColor: '#FF9800', borderColor: '#FF9800' },
-                            ]}
-                            onPress={() => setSelectedFilter('sickLeave')}
-                        >
-                            <Feather
-                                name="activity"
-                                size={14}
-                                color={selectedFilter === 'sickLeave' ? '#FFF' : '#666'}
-                                style={{ marginRight: 4 }}
-                            />
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'sickLeave' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                SL
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'privilegeLeave' && styles.filterChipActive,
-                                selectedFilter === 'privilegeLeave' && { backgroundColor: '#9C27B0', borderColor: '#9C27B0' },
-                            ]}
-                            onPress={() => setSelectedFilter('privilegeLeave')}
-                        >
-                            <Feather
-                                name="sun"
-                                size={14}
-                                color={selectedFilter === 'privilegeLeave' ? '#FFF' : '#666'}
-                                style={{ marginRight: 4 }}
-                            />
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'privilegeLeave' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                PL
-                            </Text>
-                        </Pressable>
-
+            {isLoading && !isRefreshing ? (
+                 <View style={styles.centerContainer}>
+                     <Text style={styles.loadingText}>Loading requests...</Text>
+                 </View>
+            ) : filteredRequests.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                    <View style={styles.emptyIconCircle}>
+                        <Feather name="inbox" size={40} color={colors.textSecondary} />
                     </View>
+                    <Text style={styles.emptyTitle}>No Requests Found</Text>
+                    <Text style={styles.emptySubtitle}>
+                        No leave requests match the selected filter.
+                    </Text>
                 </View>
-
-                {/* Requests List */}
-                <View style={styles.requestsContainer}>
-                    <View style={styles.requestsHeader}>
-                        <Text style={styles.sectionTitle}>Leave Requests</Text>
-                        <Text style={styles.recordCount}>{filteredRequests.length} records</Text>
-                    </View>
-
-                    {filteredRequests.length > 0 ? (
-                        <FlatList
-                            data={filteredRequests}
-                            renderItem={renderLeaveRequestItem}
-                            keyExtractor={(item) => item.LeaveApplicationMasterID?.toString() || Math.random().toString()}
-                            scrollEnabled={false}
-                            contentContainerStyle={styles.listContent}
-                            ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                        />
-                    ) : (
-                        <View style={styles.emptyState}>
-                            <Feather name="inbox" size={48} color="#CCC" />
-                            <Text style={styles.emptyStateText}>No leave requests found</Text>
-                            <Text style={styles.emptyStateSubtext}>
-                                There are no {selectedFilter === 'All' ? '' : selectedFilter.replace(/([A-Z])/g, ' $1').toLowerCase()} leave requests at the moment
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            </ScrollView>
+            ) : (
+                <FlatList
+                    data={filteredRequests}
+                    renderItem={renderLeaveRequestItem}
+                    keyExtractor={(item) => item.LeaveApplicationMasterID?.toString() || Math.random().toString()}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    refreshing={isRefreshing}
+                    onRefresh={() => fetchLeaveApplications(true)}
+                />
+            )}
 
             {/* Approval History Modal */}
             {selectedRequest && (
@@ -411,7 +353,7 @@ const LeaveApplication = () => {
                     visible={historyModalVisible}
                     onClose={() => setHistoryModalVisible(false)}
                     tranId={selectedRequest.LeaveApplicationMasterID}
-                    progId={1} // Guessing 1 for Leave. Update if needed.
+                    progId={1} 
                     employeeName={selectedRequest.EmployeeName || 'Unknown'}
                 />
             )}
@@ -419,354 +361,282 @@ const LeaveApplication = () => {
     );
 };
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F5F7FA',
-    },
-    scrollContent: {
-        padding: 16,
-        paddingBottom: 32,
-    },
+const createStyles = (colors: ThemeColors) =>
+    StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: colors.background,
+        },
+        header: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            paddingHorizontal: 20,
+            paddingTop: 10,
+            paddingBottom: 10,
+        },
+        screenTitle: {
+            fontSize: 24,
+            fontWeight: '700',
+            color: colors.text,
+            letterSpacing: -0.5,
+        },
+        totalCount: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.textSecondary,
+        },
+        centerContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        loadingText: {
+            color: colors.textSecondary,
+            fontSize: 15,
+            fontWeight: '600',
+        },
+        
+        // Filter
+        filterScrollContainer: {
+            paddingBottom: 12,
+        },
+        filterRow: {
+            paddingHorizontal: 20,
+            gap: 10,
+        },
+        filterChip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: colors.border,
+            // Subtle shadow for depth
+            shadowColor: colors.shadow,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 4,
+            elevation: 2,
+        },
+        filterChipActive: {
+            backgroundColor: colors.primary,
+            borderColor: colors.primary,
+        },
+        filterChipText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.textSecondary,
+        },
+        filterChipTextActive: {
+            color: '#FFF',
+        },
 
-    // Section Title
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 12,
-    },
+        // List
+        listContent: {
+            paddingHorizontal: 20,
+            paddingBottom: 40,
+            gap: 16,
+        },
+        
+        // Card
+        requestCard: {
+            backgroundColor: colors.card,
+            borderRadius: 16,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: colors.shadow,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.04,
+            shadowRadius: 10,
+            elevation: 3,
+        },
+        cardHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: 16,
+        },
+        headerLeft: {
+            flexDirection: 'row',
+            gap: 12,
+            alignItems: 'center',
+            flex: 1,
+        },
+        avatarContainer: {
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        leaveTypeTitle: {
+            fontSize: 16,
+            fontWeight: '700',
+            color: colors.text,
+            marginBottom: 2,
+        },
+        requestDate: {
+            fontSize: 12,
+            color: colors.textSecondary,
+            fontWeight: '500',
+        },
+        statusBadge: {
+             flexDirection: 'row',
+             alignItems: 'center',
+             gap: 6,
+             paddingHorizontal: 12,
+             paddingVertical: 6,
+             borderRadius: 20,
+        },
+        statusText: {
+            fontSize: 12,
+            fontWeight: '700',
+            textTransform: 'uppercase',
+        },
+        
+        // Body
+        cardBody: {
+            gap: 12,
+            marginBottom: 16,
+        },
+        dateRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: colors.background,
+            padding: 12,
+            borderRadius: 10,
+        },
+        dateItem: {
+            gap: 2,
+        },
+        dateLabel: {
+            fontSize: 11,
+            color: colors.textSecondary,
+            fontWeight: '600',
+        },
+        dateValue: {
+            fontSize: 14,
+            color: colors.text,
+            fontWeight: '700',
+        },
+        arrowContainer: {
+            paddingHorizontal: 8,
+        },
+        daysPill: {
+            backgroundColor: colors.primary,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 12,
+            marginLeft: 8,
+        },
+        daysPillText: {
+            color: '#FFF',
+            fontSize: 12,
+            fontWeight: '700',
+        },
+        reasonBlock: {
+            backgroundColor: `${colors.background}80`, // slightly transparent
+            padding: 2,
+        },
+        reasonText: {
+            fontSize: 13,
+            color: colors.textSecondary,
+            lineHeight: 18,
+            fontStyle: 'italic',
+        },
 
-    // Filter Chips
-    filterContainer: {
-        marginBottom: 24,
-    },
-    filterRow: {
-        flexDirection: 'row',
-        gap: 12,
-        flexWrap: 'wrap',
-    },
-    filterChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 18,
-        paddingVertical: 12,
-        borderRadius: 12,
-        backgroundColor: '#FFF',
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-        elevation: 4,
-    },
-    filterChipActive: {
-        backgroundColor: '#4A90FF',
-        borderColor: '#4A90FF',
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    filterChipText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#666',
-    },
-    filterChipTextActive: {
-        color: '#FFF',
-        fontWeight: '700',
-    },
-
-    // Requests Container
-    requestsContainer: {
-        marginBottom: 20,
-    },
-    requestsHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    recordCount: {
-        fontSize: 13,
-        color: '#999',
-        fontWeight: '600',
-    },
-    listContent: {
-        paddingBottom: 16,
-    },
-
-    // Request Card
-    requestCard: {
-        backgroundColor: '#FFF',
-        borderRadius: 16,
-        padding: 18,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 2,
-        borderWidth: 1,
-        borderColor: '#F0F0F0',
-    },
-
-    // Request Header
-    requestHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 14,
-    },
-    employeeInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 14,
-        flex: 1,
-    },
-    avatarContainer: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    avatarText: {
-        fontSize: 17,
-        fontWeight: '700',
-    },
-    employeeDetails: {
-        flex: 1,
-    },
-    employeeName: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#333',
-        marginBottom: 3,
-    },
-    employeeId: {
-        fontSize: 13,
-        color: '#999',
-        fontWeight: '600',
-    },
-
-    // Status Badge
-    statusBadge: {
-        width: '35%',
-        borderRadius: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '700',
-        width: '100%',
-        textAlign: 'center',
-        paddingVertical: 7,
-        paddingHorizontal: 24,
-        textTransform: 'uppercase',
-
-        letterSpacing: 0.6,
-    },
-    historyIconButton: {
-        marginLeft: 8,
-        padding: 8,
-        borderRadius: 20,
-        backgroundColor: '#E3F2FD',
-    },
-
-    // Leave Type Badge
-    leaveTypeBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 10,
-        alignSelf: 'flex-start',
-        marginBottom: 14,
-    },
-    leaveTypeText: {
-        fontSize: 14,
-        fontWeight: '700',
-    },
-
-    // Date Info
-    dateInfoContainer: {
-        marginBottom: 14,
-    },
-    dateInfoRow: {
-        flexDirection: 'row',
-        gap: 16,
-        marginBottom: 10,
-    },
-    dateInfoItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        flex: 1,
-    },
-    dateInfoLabel: {
-        fontSize: 12,
-        color: '#999',
-        fontWeight: '600',
-    },
-    dateInfoValue: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#333',
-    },
-    daysContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: '#E3F2FD',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        alignSelf: 'flex-start',
-    },
-    daysText: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: '#4A90FF',
-    },
-
-    // Reason
-    reasonContainer: {
-        backgroundColor: '#F8F9FA',
-        borderRadius: 10,
-        padding: 14,
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: '#E8EAED',
-    },
-    reasonLabel: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: '#666',
-        marginBottom: 6,
-    },
-    reasonText: {
-        fontSize: 14,
-        color: '#333',
-        lineHeight: 22,
-        fontWeight: '500',
-    },
-
-    // Submitted Info
-    submittedInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 14,
-    },
-    submittedText: {
-        fontSize: 12,
-        color: '#999',
-        fontWeight: '600',
-    },
-
-    // Workflow Styles
-    workflowItem: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: '#E8EAED',
-    },
-    workflowRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        flex: 1,
-    },
-    workflowText: {
-        fontSize: 13,
-        color: '#333',
-        fontWeight: '600',
-    },
-    workflowStatus: {
-        fontSize: 12,
-        fontWeight: '700',
-        textTransform: 'uppercase',
-    },
-
-    // Pending Info
-    pendingInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        backgroundColor: '#FFF3E0',
-        padding: 12,
-        borderRadius: 8,
-    },
-    pendingText: {
-        fontSize: 13,
-        color: '#FFA726', // Bright orange to match status color
-        fontWeight: '600',
-    },
-
-    // Action Buttons
-    actionButtons: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginTop: 6,
-    },
-    actionButton: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
-        paddingVertical: 14,
-        borderRadius: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
-        width: '60%',
-    },
-    approveButton: {
-        backgroundColor: '#4CAF50',
-    },
-    rejectButton: {
-        backgroundColor: '#FF5252',
-    },
-    actionButtonText: {
-        width: '60%',
-        textAlign: 'center',
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#ffffffff',
-        letterSpacing: 0.5,
-    },
-
-    // Empty State
-    emptyState: {
-        alignItems: 'center',
-        paddingVertical: 60,
-        gap: 14,
-    },
-    emptyStateText: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#999',
-    },
-    emptyStateSubtext: {
-        fontSize: 14,
-        color: '#BBB',
-        textAlign: 'center',
-        paddingHorizontal: 40,
-        lineHeight: 22,
-        fontWeight: '500',
-    },
-});
+        // Footer
+        cardFooter: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: 12,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+        },
+        historyButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            padding: 4,
+        },
+        historyButtonText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.primary,
+        },
+        pendingActions: {
+            flexDirection: 'row',
+            gap: 10,
+        },
+        actionBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderRadius: 20,
+            borderWidth: 1,
+        },
+        rejectBtn: {
+            borderColor: '#C62828',
+            backgroundColor: '#FFEBEE',
+        },
+        rejectBtnText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: '#C62828',
+        },
+        approveBtn: {
+            borderColor: '#2E7D32',
+            backgroundColor: '#4CAF50',
+        },
+        approveBtnText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: '#FFF',
+        },
+        
+        // Empty
+        emptyContainer: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingTop: 80,
+            gap: 12,
+        },
+        emptyIconCircle: {
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: colors.card,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 8,
+            shadowColor: colors.shadow,
+            shadowOpacity: 0.1,
+            shadowRadius: 20,
+        },
+        emptyTitle: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: colors.text,
+        },
+        emptySubtitle: {
+             fontSize: 14,
+             color: colors.textSecondary,
+             textAlign: 'center',
+             maxWidth: '70%',
+        },
+    });
 
 export default LeaveApplication;

@@ -50,81 +50,86 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
 
             // Transform API data to component format
             const applications = response.data || [];
-            const transformedData: LeaveDetail[] = applications.slice(0, 3).map((item: any, index: number) => {
-                // Map approval status
-                let status: 'Pending' | 'Approved' | 'Rejected' = 'Pending';
-                if (item.approval_status?.toLowerCase().includes('approve')) {
-                    status = 'Approved';
-                } else if (item.approval_status?.toLowerCase().includes('reject')) {
-                    status = 'Rejected';
-                }
-
-                // Format dates with error handling (format: "DD-MM-YYYY")
-                const formatDate = (dateStr: string | null | undefined): string => {
-                    if (!dateStr || typeof dateStr !== 'string') return '';
+            const transformedData: LeaveDetail[] = applications
+                .slice(0, 3)
+                .map((item: any, index: number) => {
+                    // Map approval status
+                    let status: 'Pending' | 'Approved' | 'Rejected' = 'Pending';
+                    const statusLower = item.approval_status?.toLowerCase() || '';
                     
-                    try {
-                        const parts = dateStr.trim().split('-');
-                        if (parts.length !== 3) return dateStr;
-                        
-                        const [day, month, year] = parts;
-                        const dayNum = parseInt(day);
-                        const monthNum = parseInt(month);
-                        const yearNum = parseInt(year);
-                        
-                        if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) return dateStr;
-                        if (monthNum < 1 || monthNum > 12) return dateStr;
-                        if (dayNum < 1 || dayNum > 31) return dateStr;
-                        
-                        const date = new Date(yearNum, monthNum - 1, dayNum);
-                        if (isNaN(date.getTime())) return dateStr;
-                        
-                        return date.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
-                    } catch (error) {
-                        console.warn('Date formatting error:', error);
-                        return dateStr || '';
+                    if (statusLower.includes('reject')) {
+                        status = 'Rejected';
+                    } else if (statusLower.includes('approve') && !statusLower.includes('await')) {
+                        status = 'Approved';
                     }
-                };
 
-                // FIXED: Correct date order - start should be leave_application_date
-                const startDate = formatDate(item.leave_application_date);
-                const endDate = formatDate(item.leave_application_enddate);
-                
-                let dates = startDate;
-                if (startDate && endDate && startDate !== endDate) {
-                    dates = `${startDate} - ${endDate}`;
-                } else if (!startDate && endDate) {
-                    dates = endDate;
-                } else if (!startDate && !endDate) {
-                    dates = 'Date not specified';
-                }
+                    // Format dates with error handling (format: "DD-MM-YYYY")
+                    const formatDate = (dateStr: string | null | undefined): string => {
+                        if (!dateStr || typeof dateStr !== 'string') return '';
+                        
+                        try {
+                            const parts = dateStr.trim().split('-');
+                            if (parts.length !== 3) return dateStr;
+                            
+                            const [day, month, year] = parts;
+                            const dayNum = parseInt(day);
+                            const monthNum = parseInt(month);
+                            const yearNum = parseInt(year);
+                            
+                            if (isNaN(dayNum) || isNaN(monthNum) || isNaN(yearNum)) return dateStr;
+                            if (monthNum < 1 || monthNum > 12) return dateStr;
+                            if (dayNum < 1 || dayNum > 31) return dateStr;
+                            
+                            const date = new Date(yearNum, monthNum - 1, dayNum);
+                            if (isNaN(date.getTime())) return dateStr;
+                            
+                            return date.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+                        } catch (error) {
+                            console.warn('Date formatting error:', error);
+                            return dateStr || '';
+                        }
+                    };
 
-                // FIXED: Handle negative total_days properly
-                const totalDays = item.total_days != null ? parseFloat(item.total_days) : null;
-                let duration = '1 day';
-                
-                if (totalDays !== null && !isNaN(totalDays)) {
-                    const absDays = Math.abs(totalDays);
-                    const roundedDays = Math.ceil(absDays);
-                    const days = roundedDays > 0 ? roundedDays : 1;
-                    duration = `${days} day${days > 1 ? 's' : ''}`;
-                } else if (item.leave_duration) {
-                    duration = item.leave_duration;
-                }
+                    // FIXED: Correct date order - start should be leave_application_date
+                    const startDate = formatDate(item.leave_application_date);
+                    const endDate = formatDate(item.leave_application_enddate);
+                    
+                    let dates = startDate;
+                    if (startDate && endDate && startDate !== endDate) {
+                        dates = `${startDate} - ${endDate}`;
+                    } else if (!startDate && endDate) {
+                        dates = endDate;
+                    } else if (!startDate && !endDate) {
+                        dates = 'Date not specified';
+                    }
 
-                return {
-                    id: index + 1,
-                    name: item.employee_name || 'Employee',
-                    leaveType: item.leave_type || 'Leave',
-                    dates: dates,
-                    duration: duration,
-                    reason: item.leave_type || 'Leave application', // FIXED: Use leave_type as reason
-                    status,
-                };
-            });
+                    // FIXED: Handle negative total_days properly
+                    const totalDays = item.total_days != null ? parseFloat(item.total_days) : null;
+                    let duration = '1 day';
+                    
+                    if (totalDays !== null && !isNaN(totalDays)) {
+                        const absDays = Math.abs(totalDays);
+                        const roundedDays = Math.ceil(absDays);
+                        const days = roundedDays > 0 ? roundedDays : 1;
+                        duration = `${days} day${days > 1 ? 's' : ''}`;
+                    } else if (item.leave_duration) {
+                        duration = item.leave_duration;
+                    }
+
+                    return {
+                        id: index + 1,
+                        name: item.employee_name || 'Employee',
+                        leaveType: item.leave_type || 'Leave',
+                        dates: dates,
+                        duration: duration,
+                        reason: item.leave_type || 'Leave application', // FIXED: Use leave_type as reason
+                        status,
+                    };
+                })
+                .filter(leave => leave.status === 'Approved'); // ✅ Only show approved leave requests
 
             setLeaves(transformedData);
-            console.log('✅ Transformed upcoming leaves:', transformedData);
+            console.log('✅ Approved upcoming leaves loaded:', transformedData.length);
         } catch (err: any) {
             console.error('❌ Error fetching upcoming leaves:', err);
             setError(err.message || 'Failed to load upcoming leaves');

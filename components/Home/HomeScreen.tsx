@@ -142,7 +142,7 @@ const HomeScreen: React.FC = () => {
         <MissedPunchSection />
 
         {/* Attendance Irregularities */}
-        <AttendanceIrregularities />
+        {/* <AttendanceIrregularities /> */}
 
   
         {/* My pending requests */}

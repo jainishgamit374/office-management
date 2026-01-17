@@ -43,10 +43,12 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
             const wfhData: WFHDetail[] = response.data.map((item: any, index: number) => {
                 // Map approval status
                 let status: 'Pending' | 'Approved' | 'Awaiting Approve' = 'Pending';
-                if (item.approval_status?.toLowerCase().includes('approve')) {
-                    status = 'Approved';
-                } else if (item.approval_status?.toLowerCase().includes('await')) {
+                const statusLower = item.approval_status?.toLowerCase() || '';
+                
+                if (statusLower.includes('await')) {
                     status = 'Awaiting Approve';
+                } else if (statusLower.includes('approve')) {
+                    status = 'Approved';
                 }
 
                 // Format date (format: "DD-MM-YYYY")
@@ -67,10 +69,11 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
                     reason: 'Work from home', // API doesn't provide reason field
                     status,
                 };
-            });
+            })
+            .filter(wfh => wfh.status === 'Approved'); // ✅ Only show approved WFH requests
 
             setWfhs(wfhData);
-            console.log('✅ WFH applications loaded:', wfhData.length);
+            console.log('✅ Approved WFH applications loaded:', wfhData.length);
         } catch (error) {
             console.error('Failed to fetch WFH applications:', error);
             setWfhs([]);

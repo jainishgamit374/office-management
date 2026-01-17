@@ -1,14 +1,13 @@
-import { getPunchStatus } from '@/lib/attendance';
-import { applyLeave, calculateLeaveDays, validateLeaveApplication } from '@/lib/leaves';
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
+import { applyLeave, calculateLeaveDays, getEmployeeLeaveBalance, validateLeaveApplication } from '@/lib/leaves';
 import Feather from '@expo/vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Modal,
-    Pressable,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -18,23 +17,25 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-type LeaveType = 'PL' | 'CL' | 'SL';
+type LeaveType = 'PL' | 'CL' | 'SL' | 'LWP';
 
 const Leaveapplyreq = () => {
+    const { colors } = useTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
+
     const [selectedLeaveType, setSelectedLeaveType] = useState<LeaveType | null>(null);
     const [reason, setReason] = useState('');
-    const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const [startDate, setStartDate] = useState(new Date());
+    const [endDate, setEndDate] = useState(new Date());
     const [isHalfDay, setIsHalfDay] = useState(false);
     const [isFirstHalf, setIsFirstHalf] = useState(true);
     const [contactNumber, setContactNumber] = useState('');
-    const [emergencyContact, setEmergencyContact] = useState('');
-    const [showCalendar, setShowCalendar] = useState(false);
-    const [calendarType, setCalendarType] = useState<'start' | 'end'>('start');
+    const [showStartPicker, setShowStartPicker] = useState(false);
+    const [showEndPicker, setShowEndPicker] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoadingBalance, setIsLoadingBalance] = useState(true);
 
-    // Leave balance data - will be fetched from API
+    // Leave balance data
     const [leaveBalance, setLeaveBalance] = useState<{
         [key: string]: {
             name: string;
@@ -45,15 +46,25 @@ const Leaveapplyreq = () => {
         };
     }>({});
 
-    // Fetch leave balance from dashboard API
+    // Fetch leave balance
     const fetchLeaveBalance = useCallback(async () => {
         try {
             setIsLoadingBalance(true);
-            const response = await getPunchStatus();
+            const response = await getEmployeeLeaveBalance();
 
-            if (response.data?.leaveBalance) {
-                setLeaveBalance(response.data.leaveBalance);
-                console.log('✅ Leave balance loaded');
+            if (response.data && Array.isArray(response.data)) {
+                const balanceMap: any = {};
+                response.data.forEach((item: any) => {
+                    const key = item.Leavename; 
+                    balanceMap[key] = {
+                        name: item.Leavename,
+                        total: item.count, 
+                        used: 0, 
+                        pending: 0,
+                        available: item.count
+                    };
+                });
+                setLeaveBalance(balanceMap);
             }
         } catch (error) {
             console.error('Failed to fetch leave balance:', error);
@@ -62,36 +73,62 @@ const Leaveapplyreq = () => {
         }
     }, []);
 
-    // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchLeaveBalance();
         }, [fetchLeaveBalance])
     );
 
-    const handleSubmit = async () => {
-        // Validate form
-        const validation = validateLeaveApplication({
-            LeaveType: selectedLeaveType || undefined,
-            Reason: reason,
-            StartDate: startDate,
-            EndDate: endDate,
-            IsHalfDay: isHalfDay,
-            IsFirstHalf: isFirstHalf,
-            ContactNumber: contactNumber || undefined,
-            EmergencyContact: emergencyContact || undefined,
+    const formatDate = (date: Date) => {
+        return date.toLocaleDateString('en-US', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
         });
+    };
 
-        if (!validation.valid) {
-            Alert.alert('Validation Error', validation.errors.join('\n'));
+    const formatDateForAPI = (date: Date) => {
+         const year = date.getFullYear();
+         const month = String(date.getMonth() + 1).padStart(2, '0');
+         const day = String(date.getDate()).padStart(2, '0');
+         return `${year}-${month}-${day}`;
+    };
+
+    const handleStartDateChange = (event: any, selectedDate?: Date) => {
+        setShowStartPicker(Platform.OS === 'ios');
+        if (selectedDate) {
+            setStartDate(selectedDate);
+            if (selectedDate > endDate) {
+                setEndDate(selectedDate);
+            }
+        }
+    };
+
+    const handleEndDateChange = (event: any, selectedDate?: Date) => {
+        setShowEndPicker(Platform.OS === 'ios');
+        if (selectedDate) {
+            if (selectedDate >= startDate) {
+                setEndDate(selectedDate);
+            } else {
+                Alert.alert('Invalid Date', 'End date cannot be before start date');
+            }
+        }
+    };
+
+    const handleSubmit = async () => {
+        if (!selectedLeaveType) {
+            Alert.alert('Error', 'Please select a leave type');
             return;
         }
 
+        const sDateStr = formatDateForAPI(startDate);
+        const eDateStr = formatDateForAPI(endDate);
+
         // Calculate total days
-        const totalDays = calculateLeaveDays(startDate, endDate, isHalfDay);
+        const totalDays = calculateLeaveDays(sDateStr, eDateStr, isHalfDay);
 
         // Check leave balance
-        if (selectedLeaveType && leaveBalance[selectedLeaveType]) {
+        if (leaveBalance[selectedLeaveType]) {
             const balance = leaveBalance[selectedLeaveType];
             if (balance.available < totalDays) {
                 Alert.alert(
@@ -102,49 +139,50 @@ const Leaveapplyreq = () => {
             }
         }
 
+        const validation = validateLeaveApplication({
+            LeaveType: selectedLeaveType,
+            Reason: reason,
+            StartDate: sDateStr,
+            EndDate: eDateStr,
+            IsHalfDay: isHalfDay,
+            IsFirstHalf: isFirstHalf,
+            ContactNumber: contactNumber
+        });
+
+        if (!validation.valid) {
+            Alert.alert('Validation Error', validation.errors.join('\n'));
+            return;
+        }
+
         try {
             setIsSubmitting(true);
-
             const leaveData = {
-                LeaveType: selectedLeaveType!,
+                LeaveType: selectedLeaveType,
                 Reason: reason.trim(),
-                StartDate: startDate,
-                EndDate: endDate,
+                StartDate: sDateStr,
+                EndDate: eDateStr,
                 IsHalfDay: isHalfDay,
                 IsFirstHalf: isFirstHalf,
-                ContactNumber: contactNumber || undefined,
-                EmergencyContact: emergencyContact || undefined,
+                ContactNumber: contactNumber,
             };
 
-            const response = await applyLeave(leaveData);
-
-            // Calculate total days for display
-            const totalDays = calculateLeaveDays(startDate, endDate, isHalfDay);
-
-            // Get leave type name
-            const leaveTypeName = selectedLeaveType === 'PL' ? 'Privilege Leave' :
-                selectedLeaveType === 'CL' ? 'Casual Leave' :
-                    selectedLeaveType === 'SL' ? 'Sick Leave' : selectedLeaveType;
+            await applyLeave(leaveData);
 
             Alert.alert(
                 'Success! ✅',
-                `Leave application submitted successfully!\n\nType: ${leaveTypeName}\nDates: ${formatDate(startDate)} to ${formatDate(endDate)}\nTotal Days: ${totalDays}${isHalfDay ? ' (Half Day)' : ''}\n\nYour leave request has been sent for approval.`,
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => {
-                            // Reset form
-                            setSelectedLeaveType(null);
-                            setReason('');
-                            setIsHalfDay(false);
-                            setIsFirstHalf(true);
-                            setContactNumber('');
-                            setEmergencyContact('');
-                            // Refresh leave balance
-                            fetchLeaveBalance();
-                        },
+                `Leave application submitted successfully!\nType: ${selectedLeaveType}\nDays: ${totalDays}`,
+                [{
+                    text: 'OK',
+                    onPress: () => {
+                        setSelectedLeaveType(null);
+                        setReason('');
+                        setIsHalfDay(false);
+                        setStartDate(new Date());
+                        setEndDate(new Date());
+                        setContactNumber('');
+                        fetchLeaveBalance();
                     },
-                ]
+                }]
             );
         } catch (error: any) {
             Alert.alert('Error', error.message || 'Failed to submit leave application');
@@ -153,363 +191,285 @@ const Leaveapplyreq = () => {
         }
     };
 
-    const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-        });
-    };
-
-    const getLeaveTypeColor = (type: LeaveType) => {
+    const getLeaveTypeColor = (type: string) => {
         switch (type) {
-            case 'PL':
-                return '#4A90FF';
-            case 'CL':
-                return '#FF9800';
-            case 'SL':
-                return '#FF5252';
-            case 'LWP':
-                return '#9E9E9E';
-            default:
-                return '#666';
+            case 'PL': return '#9C27B0';
+            case 'CL': return '#2196F3';
+            case 'SL': return '#FF9800';
+            default: return colors.primary;
         }
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-            >
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                
+                {/* Header */}
+                <View style={styles.header}>
+                    <View style={styles.headerTop}>
+                        <View style={styles.headerIconContainer}>
+                            <Feather name="calendar" size={28} color={colors.primary} />
+                        </View>
+                        <View style={styles.headerTextContainer}>
+                            <Text style={styles.headerTitle}>Apply for Leave</Text>
+                            <Text style={styles.headerSubtitle}>Submit your leave request</Text>
+                        </View>
+                    </View>
+                </View>
+
                 {/* Leave Balance Section */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Your Leave Balance</Text>
+                    <Text style={styles.sectionTitle}>Your Balance</Text>
                     {isLoadingBalance ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#4A90FF" />
-                            <Text style={styles.loadingText}>Loading leave balance...</Text>
-                        </View>
+                        <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
-                        <View style={styles.balanceContainer}>
-                            {Object.entries(leaveBalance).map(([key, value]) => (
-                                <View key={key} style={styles.balanceCard}>
-                                    <View style={styles.balanceHeader}>
-                                        <Text style={styles.balanceType}>{key}</Text>
-                                        <View
-                                            style={[
-                                                styles.balanceIcon,
-                                                { backgroundColor: `${getLeaveTypeColor(key as LeaveType)}20` },
-                                            ]}
-                                        >
-                                            <Feather
-                                                name="calendar"
-                                                size={16}
-                                                color={getLeaveTypeColor(key as LeaveType)}
-                                            />
-                                        </View>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                            {['CL', 'SL', 'PL'].map((key) => {
+                                const value = leaveBalance[key] || { available: 0, total: 0 };
+                                const color = getLeaveTypeColor(key);
+                                return (
+                                    <View key={key} style={styles.balanceCard}>
+                                        <Text style={[styles.balanceCount, { color }]}>{value.available}</Text>
+                                        <Text style={styles.balanceLabel}>{key}</Text>
                                     </View>
-                                    <Text style={styles.balanceCount}>{value.available}</Text>
-                                    <Text style={styles.balanceLabel}>
-                                        of {value.total} available
-                                    </Text>
-                                    <Text style={styles.balanceSubLabel}>{value.name}</Text>
-                                    {value.pending > 0 && (
-                                        <View style={styles.pendingBadge}>
-                                            <Text style={styles.pendingText}>{value.pending} pending</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            ))}
-                        </View>
+                                );
+                            })}
+                        </ScrollView>
                     )}
                 </View>
 
-                {/* Leave Type Selection */}
+                {/* Leave Type Selector */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Leave Type</Text>
-                    <View style={styles.leaveTypeContainer}>
-                        {(['PL', 'CL', 'SL'] as LeaveType[]).map((type) => (
-                            <Pressable
-                                key={type}
-                                style={[
-                                    styles.leaveTypeChip,
-                                    selectedLeaveType === type && {
-                                        backgroundColor: getLeaveTypeColor(type),
-                                        borderColor: getLeaveTypeColor(type),
-                                    },
-                                ]}
-                                onPress={() => setSelectedLeaveType(type)}
-                            >
-                                <Text
+                    <Text style={styles.sectionTitle}>Select Leave Type</Text>
+                    <View style={styles.leaveTypeRow}>
+                        {(['CL', 'SL', 'PL'] as LeaveType[]).map((type) => {
+                            const isSelected = selectedLeaveType === type;
+                            const color = getLeaveTypeColor(type);
+                            return (
+                                <TouchableOpacity
+                                    key={type}
                                     style={[
-                                        styles.leaveTypeText,
-                                        selectedLeaveType === type && styles.leaveTypeTextActive,
+                                        styles.leaveTypeChip,
+                                        isSelected && { backgroundColor: color, borderColor: color },
                                     ]}
+                                    onPress={() => setSelectedLeaveType(type)}
                                 >
-                                    {type}
-                                </Text>
-                                {selectedLeaveType === type && (
-                                    <Feather name="check-circle" size={16} color="#FFF" />
-                                )}
-                            </Pressable>
-                        ))}
+                                    <Feather 
+                                        name={isSelected ? "check-circle" : "circle"} 
+                                        size={18} 
+                                        color={isSelected ? "#FFF" : colors.textSecondary} 
+                                    />
+                                    <Text style={[
+                                        styles.leaveTypeText, 
+                                        isSelected && styles.leaveTypeTextActive
+                                    ]}>
+                                        {type}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
                 </View>
 
-                {/* Reason Section */}
+                {/* Dates Section */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Reason for Leave</Text>
-                    <TextInput
-                        style={styles.reasonInput}
-                        placeholder="Enter your reason for taking leave..."
-                        placeholderTextColor="#999"
-                        multiline
-                        numberOfLines={4}
-                        value={reason}
-                        onChangeText={setReason}
-                        textAlignVertical="top"
-                    />
-                    <Text style={styles.characterCount}>{reason.length}/500 characters</Text>
-                </View>
+                    <Text style={styles.sectionTitle}>Select Dates</Text>
 
-                {/* Date Range Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Leave Duration</Text>
-                    <View style={styles.dateRangeRow}>
-                        {/* Start Date */}
-                        <TouchableOpacity
-                            style={styles.dateInput}
-                            onPress={() => {
-                                setCalendarType('start');
-                                setShowCalendar(true);
-                            }}
-                        >
-                            <View style={styles.dateIconContainer}>
-                                <Feather name="calendar" size={20} color="#4A90FF" />
-                            </View>
-                            <View style={styles.dateTextContainer}>
-                                <Text style={styles.dateLabel}>Starting Date</Text>
-                                <Text style={styles.dateValue}>{formatDate(startDate)}</Text>
-                            </View>
-                        </TouchableOpacity>
-
-                        {/* Arrow */}
-                        <View style={styles.dateArrow}>
-                            <Feather name="arrow-right" size={20} color="#999" />
-                        </View>
-
-                        {/* End Date */}
-                        <TouchableOpacity
-                            style={styles.dateInput}
-                            onPress={() => {
-                                setCalendarType('end');
-                                setShowCalendar(true);
-                            }}
-                        >
-                            <View style={styles.dateIconContainer}>
-                                <Feather name="calendar" size={20} color="#4A90FF" />
-                            </View>
-                            <View style={styles.dateTextContainer}>
-                                <Text style={styles.dateLabel}>Ending Date</Text>
-                                <Text style={styles.dateValue}>{formatDate(endDate)}</Text>
-                            </View>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                {/* Half Day Option */}
-                <View style={styles.section}>
-                    <Pressable
-                        style={styles.halfDayContainer}
-                        onPress={() => setIsHalfDay(!isHalfDay)}
+                    {/* Start Date */}
+                    <TouchableOpacity
+                        style={styles.dateBox}
+                        onPress={() => setShowStartPicker(true)}
                     >
-                        <View style={styles.halfDayLeft}>
-                            <View
-                                style={[
-                                    styles.checkbox,
-                                    isHalfDay && styles.checkboxActive,
-                                ]}
-                            >
-                                {isHalfDay && (
-                                    <Feather name="check" size={16} color="#FFF" />
-                                )}
-                            </View>
-                            <View>
-                                <Text style={styles.halfDayTitle}>Apply for Half-Day Leave</Text>
-                                <Text style={styles.halfDaySubtitle}>
-                                    Check this if you need only half day off
-                                </Text>
-                            </View>
+                        <View style={styles.dateIconContainer}>
+                            <Feather name="calendar" size={20} color={colors.primary} />
                         </View>
-                        <Feather
-                            name={isHalfDay ? 'toggle-right' : 'toggle-left'}
-                            size={32}
-                            color={isHalfDay ? '#4A90FF' : '#CCC'}
-                        />
-                    </Pressable>
+                        <View style={styles.dateTextContainer}>
+                            <Text style={styles.dateLabel}>Start Date</Text>
+                            <Text style={styles.dateValue}>{formatDate(startDate)}</Text>
+                        </View>
+                        <Feather name="chevron-right" size={20} color={colors.textTertiary} />
+                    </TouchableOpacity>
 
-                    {/* Half Day Selection */}
+                    {/* End Date */}
+                    <TouchableOpacity
+                        style={[styles.dateBox, { marginTop: 12 }]}
+                        onPress={() => setShowEndPicker(true)}
+                    >
+                        <View style={styles.dateIconContainer}>
+                            <Feather name="calendar" size={20} color={colors.primary} />
+                        </View>
+                        <View style={styles.dateTextContainer}>
+                            <Text style={styles.dateLabel}>End Date</Text>
+                            <Text style={styles.dateValue}>{formatDate(endDate)}</Text>
+                        </View>
+                        <Feather name="chevron-right" size={20} color={colors.textTertiary} />
+                    </TouchableOpacity>
+
+                    {/* Total Days */}
+                    <View style={styles.totalDaysContainer}>
+                        <Feather name="clock" size={16} color={colors.primary} />
+                        <Text style={styles.totalDaysText}>
+                            Total: {calculateLeaveDays(formatDateForAPI(startDate), formatDateForAPI(endDate), isHalfDay)} Days
+                        </Text>
+                    </View>
+                </View>
+
+                {showStartPicker && (
+                    <DateTimePicker
+                        value={startDate}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={handleStartDateChange}
+                        minimumDate={new Date()}
+                    />
+                )}
+
+                {showEndPicker && (
+                    <DateTimePicker
+                        value={endDate}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={handleEndDateChange}
+                        minimumDate={startDate}
+                    />
+                )}
+
+                {/* Half Day Checkbox */}
+                <View style={styles.section}>
+                    <TouchableOpacity
+                        style={styles.checkboxContainer}
+                        onPress={() => setIsHalfDay(!isHalfDay)}
+                        activeOpacity={0.7}
+                    >
+                        <View style={[styles.checkbox, isHalfDay && styles.checkboxActive]}>
+                            {isHalfDay && (
+                                <Feather name="check" size={18} color="#FFF" />
+                            )}
+                        </View>
+                        <View style={styles.checkboxTextContainer}>
+                            <Text style={styles.checkboxLabel}>Half-Day Leave</Text>
+                            <Text style={styles.checkboxSubtext}>Check if applying for half day</Text>
+                        </View>
+                    </TouchableOpacity>
+
                     {isHalfDay && (
-                        <View style={styles.halfDaySelection}>
-                            <Text style={styles.halfDaySelectionLabel}>Select Half</Text>
+                        <View style={styles.halfDaySelector}>
+                            <Text style={styles.halfDayLabel}>Select Half:</Text>
                             <View style={styles.halfDayButtons}>
-                                <Pressable
+                                <TouchableOpacity
                                     style={[
                                         styles.halfDayButton,
                                         isFirstHalf && styles.halfDayButtonActive,
                                     ]}
                                     onPress={() => setIsFirstHalf(true)}
                                 >
-                                    <Feather
-                                        name="sunrise"
-                                        size={18}
-                                        color={isFirstHalf ? '#FFF' : '#666'}
-                                    />
-                                    <Text
-                                        style={[
-                                            styles.halfDayButtonText,
-                                            isFirstHalf && styles.halfDayButtonTextActive,
-                                        ]}
-                                    >
-                                        First Half
-                                    </Text>
-                                </Pressable>
-                                <Pressable
+                                    <Feather name="sunrise" size={18} color={isFirstHalf ? '#FFF' : colors.primary} />
+                                    <Text style={[styles.halfDayButtonText, isFirstHalf && styles.halfDayButtonTextActive]}>First Half</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
                                     style={[
                                         styles.halfDayButton,
                                         !isFirstHalf && styles.halfDayButtonActive,
                                     ]}
                                     onPress={() => setIsFirstHalf(false)}
                                 >
-                                    <Feather
-                                        name="sunset"
-                                        size={18}
-                                        color={!isFirstHalf ? '#FFF' : '#666'}
-                                    />
-                                    <Text
-                                        style={[
-                                            styles.halfDayButtonText,
-                                            !isFirstHalf && styles.halfDayButtonTextActive,
-                                        ]}
-                                    >
-                                        Second Half
-                                    </Text>
-                                </Pressable>
+                                    <Feather name="sunset" size={18} color={!isFirstHalf ? '#FFF' : colors.primary} />
+                                    <Text style={[styles.halfDayButtonText, !isFirstHalf && styles.halfDayButtonTextActive]}>Second Half</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
                     )}
                 </View>
 
-                {/* Contact Information */}
+                {/* Reason */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Contact Information (Optional)</Text>
+                    <Text style={styles.sectionTitle}>Reason *</Text>
                     <TextInput
-                        style={styles.contactInput}
-                        placeholder="Contact Number (10 digits)"
-                        placeholderTextColor="#999"
-                        value={contactNumber}
-                        onChangeText={setContactNumber}
-                        keyboardType="phone-pad"
-                        maxLength={10}
-                    />
-                    <TextInput
-                        style={styles.contactInput}
-                        placeholder="Emergency Contact (10 digits)"
-                        placeholderTextColor="#999"
-                        value={emergencyContact}
-                        onChangeText={setEmergencyContact}
-                        keyboardType="phone-pad"
-                        maxLength={10}
+                        style={styles.reasonInput}
+                        placeholder="Reason for leave..."
+                        placeholderTextColor={colors.textTertiary}
+                        multiline
+                        numberOfLines={4}
+                        value={reason}
+                        onChangeText={setReason}
+                        textAlignVertical="top"
                     />
                 </View>
 
-                {/* Submit Button */}
+                {/* Contact Number (Optional) */}
+                <View style={styles.section}>
+                     <Text style={styles.sectionTitle}>Contact Number (Optional)</Text>
+                     <TextInput
+                        style={[styles.reasonInput, { minHeight: 50 }]}
+                        numberOfLines={1}
+                        placeholder="Emergency contact..."
+                        placeholderTextColor={colors.textTertiary}
+                        value={contactNumber}
+                        onChangeText={setContactNumber}
+                        keyboardType="phone-pad"
+                    />
+                </View>
+
+                {/* Submit */}
                 <TouchableOpacity
                     style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
                     onPress={handleSubmit}
                     disabled={isSubmitting}
                 >
                     {isSubmitting ? (
-                        <>
-                            <ActivityIndicator size="small" color="#FFF" />
-                            <Text style={styles.submitButtonText}>Submitting...</Text>
-                        </>
+                        <ActivityIndicator color="#FFF" size="small" />
                     ) : (
-                        <>
-                            <Feather name="send" size={20} color="#FFF" />
-                            <Text style={styles.submitButtonText}>Submit Leave Request</Text>
-                        </>
+                        <Feather name="send" size={20} color="#FFF" />
                     )}
+                    <Text style={styles.submitButtonText}>
+                        {isSubmitting ? 'Submitting...' : 'Submit Application'}
+                    </Text>
                 </TouchableOpacity>
+
             </ScrollView>
-
-            {/* Calendar Modal */}
-            <Modal
-                visible={showCalendar}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowCalendar(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>
-                                Select {calendarType === 'start' ? 'Starting' : 'Ending'} Date
-                            </Text>
-                            <TouchableOpacity onPress={() => setShowCalendar(false)}>
-                                <Feather name="x" size={24} color="#333" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.calendarContainer}>
-                            <DateTimePicker
-                                value={new Date(calendarType === 'start' ? startDate : endDate)}
-                                mode="date"
-                                display="spinner"
-                                onChange={(event, selectedDate) => {
-                                    if (event.type === 'set' && selectedDate) {
-                                        const formattedDate = selectedDate.toISOString().split('T')[0];
-                                        if (calendarType === 'start') {
-                                            setStartDate(formattedDate);
-                                            // Auto-update end date if it's before the new start date
-                                            if (new Date(endDate) < selectedDate) {
-                                                setEndDate(formattedDate);
-                                            }
-                                        } else {
-                                            setEndDate(formattedDate);
-                                        }
-                                    }
-                                }}
-                                minimumDate={calendarType === 'start' ? new Date() : new Date(startDate)}
-                                textColor="#333"
-                                style={styles.dateTimePicker}
-                            />
-                        </View>
-
-                        <TouchableOpacity
-                            style={styles.modalButton}
-                            onPress={() => setShowCalendar(false)}
-                        >
-                            <Feather name="check" size={20} color="#FFF" style={{ marginRight: 8 }} />
-                            <Text style={styles.modalButtonText}>Confirm</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
         </SafeAreaView>
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F7FA',
+        backgroundColor: colors.background,
     },
     scrollContent: {
         padding: 16,
         paddingBottom: 32,
+    },
+
+    // Header
+    header: {
+        marginBottom: 24,
+    },
+    headerTop: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    headerIconContainer: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: `${colors.primary}20`,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerTextContainer: {
+        flex: 1,
+    },
+    headerTitle: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: colors.text,
+        marginBottom: 4,
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        color: colors.textSecondary,
     },
 
     // Section
@@ -519,167 +479,78 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         marginBottom: 12,
     },
 
-    // Loading
-    loadingContainer: {
-        paddingVertical: 40,
-        alignItems: 'center',
-        gap: 12,
-    },
-    loadingText: {
-        fontSize: 14,
-        color: '#999',
-    },
-
-    // Leave Balance
-    balanceContainer: {
-        flexDirection: 'row',
-        gap: 12,
-    },
+    // Balance Card
     balanceCard: {
-        flex: 1,
-        backgroundColor: '#FFF',
-        borderRadius: 16,
-        padding: 16,
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        elevation: 3,
+        backgroundColor: colors.card,
+        borderRadius: 12,
+        padding: 12,
         borderWidth: 1,
-        borderColor: '#F0F0F0',
-    },
-    balanceHeader: {
-        flexDirection: 'row',
+        borderColor: colors.border,
         alignItems: 'center',
-        justifyContent: 'space-between',
-        width: '100%',
-        marginBottom: 12,
-    },
-    balanceType: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#333',
-        letterSpacing: 0.5,
-    },
-    balanceIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
+        minWidth: 80,
     },
     balanceCount: {
-        fontSize: 32,
+        fontSize: 18,
         fontWeight: '700',
-        color: '#333',
         marginBottom: 4,
     },
     balanceLabel: {
-        fontSize: 11,
-        color: '#999',
-        marginBottom: 2,
-    },
-    balanceSubLabel: {
-        fontSize: 10,
-        color: '#BBB',
-        textAlign: 'center',
-    },
-    pendingBadge: {
-        marginTop: 8,
-        backgroundColor: '#FFF3E0',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    pendingText: {
-        fontSize: 10,
-        color: '#FF9800',
+        fontSize: 12,
+        color: colors.textSecondary,
         fontWeight: '600',
     },
 
-    // Leave Type
-    leaveTypeContainer: {
+    // Leave Types
+    leaveTypeRow: {
         flexDirection: 'row',
-        gap: 12,
-        flexWrap: 'wrap',
+        gap: 10,
     },
     leaveTypeChip: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 24,
-        backgroundColor: '#FFF',
-        borderWidth: 2,
-        borderColor: '#E0E0E0',
-        gap: 8,
-        minWidth: 80,
         justifyContent: 'center',
+        gap: 6,
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     leaveTypeText: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#666',
+        color: colors.textSecondary,
     },
     leaveTypeTextActive: {
         color: '#FFF',
     },
 
-    // Reason Input
-    reasonInput: {
-        backgroundColor: '#FFF',
-        borderRadius: 12,
-        padding: 16,
-        fontSize: 15,
-        color: '#333',
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
-        minHeight: 120,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    characterCount: {
-        fontSize: 12,
-        color: '#999',
-        textAlign: 'right',
-        marginTop: 8,
-    },
-
-    // Date Range
-    dateRangeRow: {
+    // Date Box
+    dateBox: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-    },
-    dateInput: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 14,
         gap: 12,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
-        shadowColor: '#000',
+        borderColor: colors.border,
+        shadowColor: colors.shadow,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
         elevation: 2,
     },
     dateIconContainer: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#E3F2FD',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: `${colors.primary}15`,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -688,76 +559,89 @@ const styles = StyleSheet.create({
     },
     dateLabel: {
         fontSize: 11,
-        color: '#999',
+        color: colors.textSecondary,
         marginBottom: 4,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
+        fontWeight: '600',
     },
     dateValue: {
         fontSize: 14,
-        fontWeight: '600',
-        color: '#333',
+        fontWeight: '700',
+        color: colors.text,
     },
-    dateArrow: {
-        width: 24,
-        alignItems: 'center',
-    },
-
-    // Half Day
-    halfDayContainer: {
+    totalDaysContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: '#FFF',
+        gap: 8,
+        marginTop: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        backgroundColor: `${colors.primary}15`,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+    },
+    totalDaysText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: colors.primary,
+    },
+
+    // Checkbox
+    checkboxContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
+        gap: 14,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
-        shadowColor: '#000',
+        borderColor: colors.border,
+        shadowColor: colors.shadow,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
         elevation: 2,
     },
-    halfDayLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        flex: 1,
-    },
     checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 6,
+        width: 28,
+        height: 28,
+        borderRadius: 8,
         borderWidth: 2,
-        borderColor: '#CCC',
+        borderColor: colors.border,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: colors.card,
     },
     checkboxActive: {
-        backgroundColor: '#4A90FF',
-        borderColor: '#4A90FF',
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
     },
-    halfDayTitle: {
+    checkboxTextContainer: {
+        flex: 1,
+    },
+    checkboxLabel: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#333',
-        marginBottom: 2,
+        color: colors.text,
+        marginBottom: 4,
     },
-    halfDaySubtitle: {
+    checkboxSubtext: {
         fontSize: 12,
-        color: '#999',
+        color: colors.textSecondary,
     },
-    halfDaySelection: {
+    halfDaySelector: {
         marginTop: 16,
-        backgroundColor: '#F8F9FA',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
-    halfDaySelectionLabel: {
-        fontSize: 13,
+    halfDayLabel: {
+        fontSize: 14,
         fontWeight: '600',
-        color: '#666',
+        color: colors.text,
         marginBottom: 12,
     },
     halfDayButtons: {
@@ -769,62 +653,58 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FFF',
-        borderRadius: 10,
-        padding: 12,
         gap: 8,
-        borderWidth: 2,
-        borderColor: '#E0E0E0',
+        backgroundColor: colors.background,
+        borderRadius: 10,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     halfDayButtonActive: {
-        backgroundColor: '#4A90FF',
-        borderColor: '#4A90FF',
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
     },
     halfDayButtonText: {
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '600',
-        color: '#666',
+        color: colors.primary,
     },
     halfDayButtonTextActive: {
         color: '#FFF',
     },
 
-    // Contact Input
-    contactInput: {
-        backgroundColor: '#FFF',
+    // Inputs
+    reasonInput: {
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
         fontSize: 15,
-        color: '#333',
+        color: colors.text,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
-        marginBottom: 12,
-        shadowColor: '#000',
+        borderColor: colors.border,
+        minHeight: 120,
+        shadowColor: colors.shadow,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
         elevation: 2,
     },
 
-    // Submit Button
+    // Submit
     submitButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#4A90FF',
+        backgroundColor: colors.primary,
         borderRadius: 12,
         padding: 18,
         gap: 10,
-        shadowColor: '#4A90FF',
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 6,
-        marginTop: 8,
-    },
-    submitButtonDisabled: {
-        backgroundColor: '#CCC',
-        shadowColor: '#999',
+        marginBottom: 24,
     },
     submitButtonText: {
         fontSize: 16,
@@ -832,62 +712,9 @@ const styles = StyleSheet.create({
         color: '#FFF',
         letterSpacing: 0.5,
     },
-
-    // Modal
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    modalContent: {
-        backgroundColor: '#FFF',
-        borderRadius: 20,
-        padding: 24,
-        width: '100%',
-        maxWidth: 400,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 16,
-        elevation: 8,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 24,
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#333',
-    },
-    calendarContainer: {
-        alignItems: 'center',
-        paddingVertical: 20,
-        backgroundColor: '#F8F9FA',
-        borderRadius: 12,
-        marginBottom: 16,
-    },
-    dateTimePicker: {
-        width: '100%',
-        height: 200,
-    },
-    modalButton: {
-        flexDirection: 'row',
-        backgroundColor: '#4A90FF',
-        borderRadius: 12,
-        padding: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 8,
-    },
-    modalButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#FFF',
+    submitButtonDisabled: {
+        backgroundColor: colors.border,
+        shadowOpacity: 0.1,
     },
 });
 

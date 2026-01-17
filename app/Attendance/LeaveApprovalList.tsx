@@ -1,16 +1,21 @@
-import { LeaveApprovalRequest, getLeaveApprovals } from '@/lib/leaveApprovalList';
+import { approveRequest, disapproveRequest, PROGRAM_IDS } from '@/lib/approvals';
+import { getLeaveApprovals, LeaveApprovalRequest } from '@/lib/leaveApprovalList';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
+    Modal,
     RefreshControl,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const LeaveApprovalList = () => {
@@ -19,6 +24,11 @@ const LeaveApprovalList = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [actionModalVisible, setActionModalVisible] = useState(false);
+    const [actionReason, setActionReason] = useState('');
+    const [selectedRequest, setSelectedRequest] = useState<LeaveApprovalRequest | null>(null);
+    const [actionType, setActionType] = useState<'approve' | 'reject' | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Fetch leave approval requests
     const fetchRequests = async (isRefresh = false) => {
@@ -61,6 +71,63 @@ const LeaveApprovalList = () => {
     // Handle pull to refresh
     const handleRefresh = () => {
         fetchRequests(true);
+    };
+
+    const initiateAction = (request: LeaveApprovalRequest, type: 'approve' | 'reject') => {
+        setSelectedRequest(request);
+        setActionType(type);
+        setActionReason('');
+        
+        if (type === 'approve') {
+            // Approval requires a reason
+            setActionModalVisible(true);
+        } else {
+            // Rejection might not require a reason based on API, but let's confirm
+            Alert.alert(
+                'Reject Request',
+                'Are you sure you want to reject this leave request?',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { 
+                        text: 'Reject', 
+                        style: 'destructive',
+                        onPress: () => submitAction(request, 'reject')
+                    }
+                ]
+            );
+        }
+    };
+
+    const submitAction = async (request: LeaveApprovalRequest, type: 'approve' | 'reject', reason?: string) => {
+        try {
+            setIsSubmitting(true);
+            
+            if (type === 'approve') {
+                await approveRequest({
+                    ProgramID: PROGRAM_IDS.Leave, // 2
+                    TranID: request.Leave_ID,
+                    Reason: reason || 'Approved',
+                });
+                Alert.alert('Success', 'Leave request approved successfully');
+            } else {
+                await disapproveRequest({
+                    ProgramID: PROGRAM_IDS.Leave, // 2
+                    TranID: request.Leave_ID,
+                });
+                Alert.alert('Success', 'Leave request rejected successfully');
+            }
+
+            // Close modal if open
+            setActionModalVisible(false);
+            
+            // Refresh list
+            fetchRequests();
+
+        } catch (err: any) {
+            Alert.alert('Error', err.message || 'Failed to process request');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
 
@@ -153,6 +220,26 @@ const LeaveApprovalList = () => {
                         <Text style={styles.reasonText}>{item.reason}</Text>
                     </View>
                 )}
+
+                
+                {/* Action Buttons */}
+                <View style={styles.actionButtonsContainer}>
+                    <TouchableOpacity
+                        style={[styles.actionButton, styles.rejectButton]}
+                        onPress={() => initiateAction(item, 'reject')}
+                    >
+                        <Feather name="x" size={18} color="#FF5252" />
+                        <Text style={[styles.actionButtonText, { color: '#FF5252' }]}>Reject</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                        style={[styles.actionButton, styles.approveButton]}
+                        onPress={() => initiateAction(item, 'approve')}
+                    >
+                        <Feather name="check" size={18} color="#FFF" />
+                        <Text style={[styles.actionButtonText, { color: '#FFF' }]}>Approve</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
         );
     };
@@ -232,6 +319,56 @@ const LeaveApprovalList = () => {
                     }
                 />
             )}
+
+
+            {/* Approval Reason Modal */}
+            <Modal
+                visible={actionModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setActionModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Approve Request</Text>
+                        <Text style={styles.modalSubtitle}>
+                            Please enter a remark for approval
+                        </Text>
+                        
+                        <TextInput
+                            style={styles.modalInput}
+                            placeholder="Approval remarks..."
+                            value={actionReason}
+                            onChangeText={setActionReason}
+                            multiline
+                            numberOfLines={3}
+                            textAlignVertical="top"
+                        />
+                        
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.modalCancelButton]}
+                                onPress={() => setActionModalVisible(false)}
+                                disabled={isSubmitting}
+                            >
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.modalApproveButton]}
+                                onPress={() => selectedRequest && submitAction(selectedRequest, 'approve', actionReason)}
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? (
+                                    <ActivityIndicator size="small" color="#FFF" />
+                                ) : (
+                                    <Text style={styles.modalApproveText}>Approve</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -479,6 +616,104 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#666',
         lineHeight: 20,
+    },
+    actionButtonsContainer: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#F5F5F5',
+    },
+    actionButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 12,
+        gap: 8,
+    },
+    rejectButton: {
+        backgroundColor: '#FFF',
+        borderWidth: 1,
+        borderColor: '#FFEBEE',
+    },
+    approveButton: {
+        backgroundColor: '#4CAF50',
+        shadowColor: '#4CAF50',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    actionButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        backgroundColor: '#FFF',
+        borderRadius: 20,
+        padding: 24,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#333',
+        marginBottom: 8,
+    },
+    modalSubtitle: {
+        fontSize: 14,
+        color: '#666',
+        marginBottom: 16,
+    },
+    modalInput: {
+        backgroundColor: '#F5F7FA',
+        borderRadius: 12,
+        padding: 12,
+        minHeight: 100,
+        textAlignVertical: 'top',
+        marginBottom: 20,
+        fontSize: 15,
+        color: '#333',
+    },
+    modalActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    modalButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalCancelButton: {
+        backgroundColor: '#F5F5F5',
+    },
+    modalApproveButton: {
+        backgroundColor: '#4CAF50',
+    },
+    modalCancelText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#666',
+    },
+    modalApproveText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#FFF',
     },
 });
 

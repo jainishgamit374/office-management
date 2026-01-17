@@ -126,9 +126,17 @@ const Wfhapplyreq = () => {
             }
         } catch (error: any) {
             console.error('❌ WFH Request Error:', error);
+            
+            // Check if this is a workflow configuration error
+            const errorMessage = error.message || 'Failed to submit WFH request. Please try again.';
+            const isWorkflowError = errorMessage.toLowerCase().includes('workflow');
+            
             Alert.alert(
-                'Error',
-                error.message || 'Failed to submit WFH request. Please try again.'
+                isWorkflowError ? 'Setup Required' : 'Error',
+                isWorkflowError 
+                    ? `${errorMessage}\n\n📋 What this means:\nYour WFH approval workflow needs to be configured by the HR team before you can submit requests.\n\n👉 Next Steps:\n1. Contact your HR department\n2. Request them to set up your WFH approval workflow\n3. Once configured, you'll be able to submit WFH requests`
+                    : errorMessage,
+                [{ text: 'OK' }]
             );
         } finally {
             setIsLoading(false);

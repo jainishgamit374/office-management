@@ -268,6 +268,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
       switch (punch.PunchType) {
         case 0:
+          // Not checked in - reset everything
+          pan.setValue(0);
+          colorAnim.setValue(0);
+          progressAnim.setValue(0);
           setIsCheckedIn(false);
           setHasCheckedOut(false);
           setPunchInTime(null);
@@ -277,28 +281,39 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           setWorkingMinutes(0);
           setSlotProgresses([]);
           setCompletedWorkingHours(0);
-          pan.setValue(0);
-          colorAnim.setValue(0);
-          progressAnim.setValue(0);
           break;
 
         case 1:
+          // Checked in - set slider to end position FIRST
+          const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
+          const parsedInTime = parsePunchTime(inTimeStr);
+          
+          // Calculate current progress to set the button color immediately
+          if (parsedInTime) {
+            const workingHrs = calculateWorkingHours(parsedInTime);
+            const progress = workingHrs / TOTAL_WORKING_HOURS;
+            progressAnim.setValue(progress);
+          }
+          
+          pan.setValue(MAX_SWIPE_DISTANCE);
+          colorAnim.setValue(1);
+          
+          // Now update state
           setIsCheckedIn(true);
           setHasCheckedOut(false);
-          const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
           setPunchInTime(inTimeStr);
-          const parsedInTime = parsePunchTime(inTimeStr);
           setPunchInDate(parsedInTime);
           setPunchOutTime(null);
           setPunchOutDate(null);
           setWorkingMinutes(punch.WorkingMinutes || 0);
-          pan.setValue(MAX_SWIPE_DISTANCE);
-          Animated.timing(colorAnim, { toValue: 1, duration: 300, useNativeDriver: false }).start();
           break;
 
         case 2:
-          setIsCheckedIn(false);
-          setHasCheckedOut(true);
+          // Checked out - reset slider position
+          pan.setValue(0);
+          colorAnim.setValue(2);
+          progressAnim.setValue(0);
+          
           const outTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
           setPunchOutTime(outTimeStr);
           const parsedOutTime = parsePunchTime(outTimeStr);
@@ -308,8 +323,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
             setPunchInDate(parsePunchTime(punch.PunchInTime));
           }
           setWorkingMinutes(punch.WorkingMinutes || 0);
-          pan.setValue(0);
-          Animated.timing(colorAnim, { toValue: 2, duration: 300, useNativeDriver: false }).start();
+          setIsCheckedIn(false);
+          setHasCheckedOut(true);
           break;
       }
 
@@ -622,14 +637,15 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
   const getButtonColor = () => {
     if (isCheckedIn && !hasCheckedOut) {
+      // Color transition: Red (0%) → Yellow (50%) → Green (100%)
       return progressAnim.interpolate({
         inputRange: [0, 0.5, 1],
-        outputRange: [colors.primary, '#818CF8', '#A5B4FC']
+        outputRange: ['#EF4444', '#F59E0B', '#10B981'] // Red → Yellow → Green
       });
     }
     return colorAnim.interpolate({
       inputRange: [0, 1, 2],
-      outputRange: [colors.primary, colors.primary, '#9CA3AF']
+      outputRange: [colors.primary, colors.primary, '#9CA3AF'] // Blue → Blue → Gray
     });
   };
 
@@ -673,9 +689,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const getPillarColor = (index: number, isBreak: boolean, filled: boolean, current: boolean): string => {
     if (isBreak) return filled || current ? '#F59E0B' : 'transparent';
     if (!filled && !current) return 'transparent';
-    if (index < 4) return colors.primary;
-    if (index < 7) return '#818CF8';
-    return '#A5B4FC';
+    // Red for early slots (0-3), Yellow for mid slots (4-6), Green for late slots (7-8)
+    if (index < 4) return '#EF4444';  // Red
+    if (index < 7) return '#F59E0B';  // Yellow
+    return '#10B981';                 // Green
   };
 
   // ============ LOADING STATE ============
@@ -801,9 +818,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
                     backgroundColor: progressAnim.interpolate({
                       inputRange: [0, 0.5, 1],
                       outputRange: [
-                        isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.12)',
-                        isDark ? 'rgba(129,140,248,0.25)' : 'rgba(129,140,248,0.12)',
-                        isDark ? 'rgba(165,180,252,0.25)' : 'rgba(165,180,252,0.12)'
+                        isDark ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.15)',   // Red
+                        isDark ? 'rgba(245,158,11,0.25)' : 'rgba(245,158,11,0.15)', // Yellow
+                        isDark ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.15)'  // Green
                       ]
                     }),
                   },
@@ -961,8 +978,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
                     styles.progressBarFill,
                     {
                       width: `${(completedWorkingHours / TOTAL_WORKING_HOURS) * 100}%`,
-                      backgroundColor: completedWorkingHours >= 8 ? '#A5B4FC' :
-                        completedWorkingHours >= 4 ? '#818CF8' : colors.primary
+                      backgroundColor: completedWorkingHours >= 8 ? '#10B981' :      // Green
+                        completedWorkingHours >= 4 ? '#F59E0B' : '#EF4444'           // Yellow : Red
                     }
                   ]}
                 />

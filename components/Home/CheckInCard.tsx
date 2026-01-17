@@ -181,7 +181,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     const checkInHour = checkInTime.getHours() + checkInTime.getMinutes() / 60;
 
     let workingHours = 0;
-    const effectiveStart = Math.max(checkInHour, OFFICE_START_HOUR + OFFICE_START_MINUTE / 60);
+    const effectiveStart = checkInHour; // Use actual punch-in time
 
     if (currentHour <= effectiveStart) return 0;
 
@@ -398,13 +398,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       const workingHrs = calculateWorkingHours(punchInDate);
       setCompletedWorkingHours(workingHrs);
 
-      // Simple elapsed time for slider progress bar (0-9 hours)
-      const elapsedMs = now.getTime() - punchInDate.getTime();
-      const elapsedHours = elapsedMs / (1000 * 60 * 60);
-      const clampedElapsed = Math.min(Math.max(elapsedHours, 0), 9);
-
       Animated.timing(progressAnim, {
-        toValue: clampedElapsed / 9,
+        toValue: workingHrs / TOTAL_WORKING_HOURS,
         duration: 500,
         useNativeDriver: false,
       }).start();
@@ -600,14 +595,24 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   ).current;
 
   // ============ UI HELPERS ============
+  const formatCheckInDateTime = (): string => {
+    if (!punchInDate) return '';
+    const date = punchInDate.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+    const time = formatTime(punchInDate);
+    return `${date} • ${time}`;
+  };
+
   const getSwipeText = (): string => {
     if (hasCheckedOut) return 'Checked Out for Today ✓';
     if (isOnBreak) return '🍽️ Lunch Break';
     if (isCheckedIn) {
       const remaining = TOTAL_WORKING_HOURS - completedWorkingHours;
       if (remaining <= 0) return '🎉 Full Day Complete!';
-      if (completedWorkingHours >= 4) return `${remaining.toFixed(1)}h remaining`;
-      return `${(4 - completedWorkingHours).toFixed(1)}h to Half Day`;
+      return formatCheckInDateTime();
     }
     return 'Swipe to Check-In →';
   };
@@ -616,12 +621,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     if (isCheckedIn && !hasCheckedOut) {
       return progressAnim.interpolate({
         inputRange: [0, 0.5, 1],
-        outputRange: ['#EF4444', '#F59E0B', '#10B981']
+        outputRange: [colors.primary, '#818CF8', '#A5B4FC']
       });
     }
     return colorAnim.interpolate({
       inputRange: [0, 1, 2],
-      outputRange: ['#6366F1', '#EF4444', '#9CA3AF']
+      outputRange: [colors.primary, colors.primary, '#9CA3AF']
     });
   };
 
@@ -642,7 +647,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         mins -= Math.max(0, breakMins);
       }
 
-      if (mins > 0) {
+      if (mins >= 0) {
         const h = Math.floor(mins / 60);
         const m = mins % 60;
         return `${h}h ${m}m`;
@@ -665,9 +670,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const getPillarColor = (index: number, isBreak: boolean, filled: boolean, current: boolean): string => {
     if (isBreak) return filled || current ? '#F59E0B' : 'transparent';
     if (!filled && !current) return 'transparent';
-    if (index < 4) return '#3B82F6';
-    if (index < 7) return '#06B6D4';
-    return '#10B981';
+    if (index < 4) return colors.primary;
+    if (index < 7) return '#818CF8';
+    return '#A5B4FC';
   };
 
   // ============ LOADING STATE ============
@@ -793,9 +798,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
                     backgroundColor: progressAnim.interpolate({
                       inputRange: [0, 0.5, 1],
                       outputRange: [
-                        isDark ? 'rgba(239,68,68,0.45)' : 'rgba(239,68,68,0.30)',
-                        isDark ? 'rgba(245,158,11,0.45)' : 'rgba(245,158,11,0.30)',
-                        isDark ? 'rgba(16,185,129,0.45)' : 'rgba(16,185,129,0.30)'
+                        isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.12)',
+                        isDark ? 'rgba(129,140,248,0.25)' : 'rgba(129,140,248,0.12)',
+                        isDark ? 'rgba(165,180,252,0.25)' : 'rgba(165,180,252,0.12)'
                       ]
                     }),
                   },
@@ -807,7 +812,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
             <View style={styles.swipeTextWrapper}>
               <Text style={[
                 styles.swipeText,
-                { color: hasCheckedOut ? colors.textSecondary : (isDark ? '#A5B4FC' : '#4245f3ff') }
+                { color: hasCheckedOut ? colors.textSecondary : (isDark ? '#A5B4FC' : '#6366F1') }
               ]}>
                 {getSwipeText()}
               </Text>
@@ -839,7 +844,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
               {isPunching ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.buttonText}>
+                <Text style={styles.swipeButtonText}>
                   {hasCheckedOut ? '✓' : isCheckedIn ? 'OUT' : 'IN'}
                 </Text>
               )}
@@ -852,31 +857,31 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           <View style={[styles.timeSection, { borderTopColor: dividerColor }]}>
             <View style={styles.timeRow}>
               <View style={[styles.timeBox, { backgroundColor: timeBoxBg }]}>
-                <View style={[styles.timeIconWrapper, { backgroundColor: isDark ? '#1A2E1A' : '#DCFCE7' }]}>
-                  <Feather name="log-in" size={12} color="#10B981" />
+                <View style={[styles.timeIconWrapper, { backgroundColor: isDark ? '#1E1E3F' : '#EEF2FF' }]}>
+                  <Feather name="log-in" size={12} color={colors.primary} />
                 </View>
                 <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Check In</Text>
-                <Text style={[styles.timeValue, { color: '#10B981' }]}>
+                <Text style={[styles.timeValue, { color: colors.primary }]}>
                   {formatTime(punchInDate)}
                 </Text>
               </View>
 
               <View style={[styles.timeBox, { backgroundColor: timeBoxBg }]}>
-                <View style={[styles.timeIconWrapper, { backgroundColor: isDark ? '#1A1A2E' : '#DBEAFE' }]}>
-                  <Feather name="clock" size={12} color="#3B82F6" />
+                <View style={[styles.timeIconWrapper, { backgroundColor: isDark ? '#1E1E3F' : '#EEF2FF' }]}>
+                  <Feather name="clock" size={12} color="#818CF8" />
                 </View>
                 <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Working</Text>
-                <Text style={[styles.timeValue, { color: '#3B82F6' }]}>
+                <Text style={[styles.timeValue, { color: '#818CF8' }]}>
                   {getDisplayWorkingHours()}
                 </Text>
               </View>
 
               <View style={[styles.timeBox, { backgroundColor: timeBoxBg }]}>
-                <View style={[styles.timeIconWrapper, { backgroundColor: isDark ? '#2E1A1A' : '#FEE2E2' }]}>
-                  <Feather name="log-out" size={12} color={hasCheckedOut ? '#EF4444' : colors.textSecondary} />
+                <View style={[styles.timeIconWrapper, { backgroundColor: isDark ? '#1E1E3F' : '#EEF2FF' }]}>
+                  <Feather name="log-out" size={12} color={hasCheckedOut ? '#A5B4FC' : colors.textSecondary} />
                 </View>
                 <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Check Out</Text>
-                <Text style={[styles.timeValue, { color: hasCheckedOut ? '#EF4444' : colors.textSecondary }]}>
+                <Text style={[styles.timeValue, { color: hasCheckedOut ? '#A5B4FC' : colors.textSecondary }]}>
                   {formatTime(punchOutDate)}
                 </Text>
               </View>
@@ -953,8 +958,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
                     styles.progressBarFill,
                     {
                       width: `${(completedWorkingHours / TOTAL_WORKING_HOURS) * 100}%`,
-                      backgroundColor: completedWorkingHours >= 8 ? '#10B981' :
-                        completedWorkingHours >= 4 ? '#F59E0B' : '#3B82F6'
+                      backgroundColor: completedWorkingHours >= 8 ? '#A5B4FC' :
+                        completedWorkingHours >= 4 ? '#818CF8' : colors.primary
                     }
                   ]}
                 />
@@ -1007,7 +1012,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 // ============ STYLES ============
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
     paddingVertical: 8,
   },
   lastUpdatedWrapper: {
@@ -1110,11 +1115,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  buttonText: {
+  swipeButtonText: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
 
   // Time Section

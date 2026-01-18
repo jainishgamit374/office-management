@@ -32,6 +32,14 @@ type ApprovalItem = {
 
   // used to call approve/disapprove
   programId: number;
+  
+  // Additional leave-specific fields
+  leaveType?: string;
+  startDate?: string;
+  endDate?: string;
+  appliedOn?: string;
+  isHalfDay?: boolean;
+  isFirstHalf?: boolean;
 };
 
 // ---------- Accordion ----------
@@ -146,6 +154,13 @@ const PendingRequestsSection: React.FC = () => {
       status: item.status,
       programId: item.programId,
       tranId: item.id,
+      // Additional leave fields
+      leaveType: item.leaveType,
+      startDate: item.startDate,
+      endDate: item.endDate,
+      appliedOn: item.appliedOn,
+      isHalfDay: item.isHalfDay,
+      isFirstHalf: item.isFirstHalf,
     });
     setDetailsOpen(true);
   };
@@ -217,6 +232,13 @@ const PendingRequestsSection: React.FC = () => {
             status: 'Awaiting Approve',
             date: i.applied_on || i.start_date,
             profileImage: i.profile_image ? `${BASE}${i.profile_image}` : undefined,
+            // Additional leave fields
+            leaveType: i.leave_type,
+            startDate: i.start_date,
+            endDate: i.end_date,
+            appliedOn: i.applied_on,
+            isHalfDay: i.IsHalfDay,
+            isFirstHalf: i.IsFirstHalf,
           }))
         );
       } else {

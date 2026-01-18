@@ -1,13 +1,14 @@
 import { ThemeColors } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import React, { useMemo, useRef } from 'react';
-import { Animated, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type Props = {
   title: string;
   subtitle?: string;
   date?: string;
   status?: string;
+  profileImage?: string; // New prop
   colors: ThemeColors;
 
   onPress?: () => void;
@@ -23,6 +24,7 @@ export default function SwipeApprovalRow({
   subtitle,
   date,
   status,
+  profileImage,
   colors,
   onPress,
   onApprove,
@@ -108,30 +110,35 @@ export default function SwipeApprovalRow({
         ]}
         {...panResponder.panHandlers}
       >
-        <TouchableOpacity activeOpacity={0.75} onPress={onPress}>
-          <View style={styles.top}>
-            <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-              {title}
-            </Text>
-            {!!date && (
-              <Text style={[styles.date, { color: colors.textSecondary }]} numberOfLines={1}>
-                {date}
+        <TouchableOpacity activeOpacity={0.75} onPress={onPress} style={styles.mainRow}>
+          {/* Profile Image */}
+          {!!profileImage && <Image source={{ uri: profileImage }} style={styles.profileImage} />}
+          
+          <View style={styles.textColumn}>
+            <View style={styles.top}>
+              <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+                {title}
+              </Text>
+              {!!date && (
+                <Text style={[styles.date, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {date}
+                </Text>
+              )}
+            </View>
+
+            {!!subtitle && (
+              <Text style={[styles.sub, { color: colors.textSecondary }]} numberOfLines={2}>
+                {subtitle}
               </Text>
             )}
+
+            {!!status && (
+              <View style={styles.statusRow}>
+                <View style={[styles.dot, { backgroundColor: '#F59E0B' }]} />
+                <Text style={[styles.status, { color: '#F59E0B' }]}>{status}</Text>
+              </View>
+            )}
           </View>
-
-          {!!subtitle && (
-            <Text style={[styles.sub, { color: colors.textSecondary }]} numberOfLines={2}>
-              {subtitle}
-            </Text>
-          )}
-
-          {!!status && (
-            <View style={styles.statusRow}>
-              <View style={[styles.dot, { backgroundColor: '#F59E0B' }]} />
-              <Text style={[styles.status, { color: '#F59E0B' }]}>{status}</Text>
-            </View>
-          )}
         </TouchableOpacity>
       </Animated.View>
     </Animated.View>
@@ -156,6 +163,10 @@ const styles = StyleSheet.create({
   hintText: { color: '#fff', fontWeight: '900', fontSize: 12 },
 
   card: { padding: 12 },
+  mainRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  profileImage: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#E5E7EB' },
+  textColumn: { flex: 1 },
+  
   top: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' },
   title: { fontSize: 14, fontWeight: '900', flex: 1 },
   date: { fontSize: 11, fontWeight: '700' },

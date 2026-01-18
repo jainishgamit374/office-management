@@ -67,6 +67,7 @@ export interface LeaveApplicationDetails {
         ActionDate: string | null;
         Comments: string | null;
     }>;
+    workflow_list?: WorkflowItem[]; // Alternative workflow format from list endpoint
     LeaveBalanceInfo: {
         BeforeApplication: number;
         AfterApproval: number;
@@ -111,10 +112,32 @@ export interface WorkflowItem {
 
 export interface LeaveApplicationSummary {
     LeaveApplicationMasterID: number;
+    EmployeeID: number;
     LeaveType: string;
-    ShortName: string;
+    LeaveTypeCode?: string;
+    ShortName?: string;
+    ApprovalStatusID: number;
     ApprovalStatus: string;
-    workflow_list: WorkflowItem[];
+    ApprovalUsername: string; // ✅ Added - this is the approver's name
+    RejectionReason?: string;
+    Reason: string;
+    StartDate: string;
+    StartDateFormatted?: string;
+    StartDayName?: string;
+    EndDate: string;
+    EndDateFormatted?: string;
+    EndDayName?: string;
+    TotalDays?: number;
+    IsHalfDay: boolean;
+    IsFirstHalf: boolean;
+    HalfDayType?: string | null;
+    CreatedBy?: number;
+    UpdatedBy?: number;
+    CreatedDate?: string;
+    UpdatedDate?: string;
+    CreatedAt?: string;
+    UpdatedAt?: string;
+    workflow_list?: WorkflowItem[];
 }
 
 export interface LeaveApplicationsListParams {

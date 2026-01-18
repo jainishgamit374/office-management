@@ -1,6 +1,6 @@
 import { getAccessToken } from './api';
 
-const BASE = 'https://karmyog.pythonanywhere.com';
+export const BASE = 'https://karmyog.pythonanywhere.com';
 
 async function getJSON<T>(path: string): Promise<T> {
     const token = await getAccessToken();
@@ -59,6 +59,7 @@ export type LeaveApprovalsResponse = {
         start_date: string;
         end_date: string;
         reason: string;
+        profile_image?: string;
         applied_on?: string;
         IsHalfDay: boolean;
         IsFirstHalf: boolean;

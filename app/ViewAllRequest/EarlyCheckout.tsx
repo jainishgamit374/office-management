@@ -1,8 +1,9 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { getEarlyLatePunchList, type EarlyLatePunchDetails } from '@/lib/earlyLatePunch';
 import { disapproveAll } from '@/lib/workflow';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -22,6 +23,9 @@ type FilterType = 'All' | 'Early' | 'Late';
 type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Rejected';
 
 const EarlyCheckoutt = () => {
+    const { colors } = useTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
+
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('All');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
     const [requests, setRequests] = useState<EarlyLatePunchDetails[]>([]);
@@ -264,6 +268,21 @@ const EarlyCheckoutt = () => {
                 </Text>
             </View>
 
+            {/* Workflow Approvers */}
+            {item.workflow_list && item.workflow_list.length > 0 && (
+                <View style={styles.workflowContainer}>
+                    <Text style={styles.workflowLabel}>Approvers:</Text>
+                    <View style={styles.approversList}>
+                        {item.workflow_list.map((approver, index) => (
+                            <View key={index} style={styles.approverChip}>
+                                <Feather name="user-check" size={12} color="#4A90FF" />
+                                <Text style={styles.approverText}>{approver.Approve_name}</Text>
+                            </View>
+                        ))}
+                    </View>
+                </View>
+            )}
+
             {/* Action Buttons (only for pending requests and if user can edit) */}
             {item.ApprovalStatus === 'Pending' && item.CanEdit && (
                 <View style={styles.actionButtons}>
@@ -424,10 +443,11 @@ const EarlyCheckoutt = () => {
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) =>
+    StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F7FA',
+        backgroundColor: colors.background,
     },
     scrollContent: {
         padding: 16,
@@ -438,7 +458,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         marginBottom: 12,
     },
 
@@ -457,18 +477,18 @@ const styles = StyleSheet.create({
         paddingHorizontal: 18,
         paddingVertical: 12,
         borderRadius: 12,
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
-        shadowColor: '#000',
+        borderColor: colors.border,
+        shadowColor: colors.shadow,
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.08,
         shadowRadius: 6,
         elevation: 4,
     },
     filterChipActive: {
-        backgroundColor: '#4A90FF',
-        borderColor: '#4A90FF',
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
         shadowOpacity: 0.15,
         shadowRadius: 8,
         elevation: 6,
@@ -476,7 +496,7 @@ const styles = StyleSheet.create({
     filterChipText: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#666',
+        color: colors.textSecondary,
     },
     filterChipTextActive: {
         color: '#FFF',
@@ -495,7 +515,7 @@ const styles = StyleSheet.create({
     },
     recordCount: {
         fontSize: 13,
-        color: '#999',
+        color: colors.textSecondary,
         fontWeight: '600',
     },
     listContent: {
@@ -504,16 +524,16 @@ const styles = StyleSheet.create({
 
     // Request Card
     requestCard: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 16,
         padding: 18,
-        shadowColor: '#000',
+        shadowColor: colors.shadow,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
         elevation: 2,
         borderWidth: 1,
-        borderColor: '#F0F0F0',
+        borderColor: colors.border,
     },
 
     // Request Header
@@ -546,12 +566,12 @@ const styles = StyleSheet.create({
     employeeName: {
         fontSize: 17,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
         marginBottom: 3,
     },
     employeeId: {
         fontSize: 13,
-        color: '#999',
+        color: colors.textSecondary,
         fontWeight: '600',
     },
 
@@ -626,33 +646,33 @@ const styles = StyleSheet.create({
     },
     infoLabel: {
         fontSize: 12,
-        color: '#999',
+        color: colors.textSecondary,
         fontWeight: '600',
     },
     infoValue: {
         fontSize: 14,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
     },
 
     // Reason
     reasonContainer: {
-        backgroundColor: '#F8F9FA',
+        backgroundColor: colors.background,
         borderRadius: 10,
         padding: 14,
         marginBottom: 14,
         borderWidth: 1,
-        borderColor: '#E8EAED',
+        borderColor: colors.border,
     },
     reasonLabel: {
         fontSize: 13,
         fontWeight: '700',
-        color: '#666',
+        color: colors.textSecondary,
         marginBottom: 6,
     },
     reasonText: {
         fontSize: 14,
-        color: '#333',
+        color: colors.text,
         lineHeight: 22,
         fontWeight: '500',
     },
@@ -666,7 +686,7 @@ const styles = StyleSheet.create({
     },
     submittedText: {
         fontSize: 12,
-        color: '#999',
+        color: colors.textSecondary,
         fontWeight: '600',
     },
 
@@ -716,11 +736,11 @@ const styles = StyleSheet.create({
     emptyStateText: {
         fontSize: 17,
         fontWeight: '700',
-        color: '#999',
+        color: colors.textSecondary,
     },
     emptyStateSubtext: {
         fontSize: 14,
-        color: '#BBB',
+        color: colors.textTertiary,
         textAlign: 'center',
         paddingHorizontal: 40,
         lineHeight: 22,
@@ -736,7 +756,44 @@ const styles = StyleSheet.create({
     loadingText: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#999',
+        color: colors.textSecondary,
+    },
+
+    // Workflow Approvers
+    workflowContainer: {
+        backgroundColor: '#F0F4FF',
+        borderRadius: 10,
+        padding: 14,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: '#D6E4FF',
+    },
+    workflowLabel: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#4A90FF',
+        marginBottom: 10,
+    },
+    approversList: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    approverChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: '#FFF',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#4A90FF',
+    },
+    approverText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#4A90FF',
     },
 
     // Retry Button

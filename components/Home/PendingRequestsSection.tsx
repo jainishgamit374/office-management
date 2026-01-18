@@ -6,6 +6,7 @@ import { Alert, Animated, Easing, LayoutAnimation, Modal, Platform, StyleSheet, 
 
 import {
   approveAny,
+  BASE,
   disapproveAny,
   getEarlyCheckoutDetails,
   getLeaveApprovals,
@@ -27,6 +28,7 @@ type ApprovalItem = {
   status?: string;
   date?: string;
   employeeName?: string;
+  profileImage?: string;
 
   // used to call approve/disapprove
   programId: number;
@@ -138,6 +140,7 @@ const PendingRequestsSection: React.FC = () => {
     setDetails({
       title: item.title,
       employeeName: item.employeeName,
+      profileImage: item.profileImage,
       date: item.date,
       reason: item.subtitle,
       status: item.status,
@@ -213,6 +216,7 @@ const PendingRequestsSection: React.FC = () => {
             subtitle: `${i.start_date} → ${i.end_date}\n${i.reason}`,
             status: 'Awaiting Approve',
             date: i.applied_on || i.start_date,
+            profileImage: i.profile_image ? `${BASE}${i.profile_image}` : undefined,
           }))
         );
       } else {
@@ -349,6 +353,7 @@ const PendingRequestsSection: React.FC = () => {
                 subtitle={item.subtitle}
                 date={item.date}
                 status={item.status}
+                profileImage={item.profileImage}
                 colors={colors}
                 onPress={() => openDetails(item)}
                 onApprove={() => approve(item.programId, item.id)}
@@ -379,6 +384,7 @@ const PendingRequestsSection: React.FC = () => {
                 subtitle={item.subtitle}
                 date={item.date}
                 status={item.status}
+                profileImage={item.profileImage}
                 colors={colors}
                 onPress={() => openDetails(item)}
                 onApprove={() => approve(item.programId, item.id)}
@@ -409,6 +415,7 @@ const PendingRequestsSection: React.FC = () => {
                 subtitle={item.subtitle}
                 date={item.date}
                 status={item.status}
+                profileImage={item.profileImage}
                 colors={colors}
                 onPress={() => openDetails(item)}
                 onApprove={() => approve(item.programId, item.id)}
@@ -439,6 +446,7 @@ const PendingRequestsSection: React.FC = () => {
                 subtitle={item.subtitle}
                 date={item.date}
                 status={item.status}
+                profileImage={item.profileImage}
                 colors={colors}
                 onPress={() => openDetails(item)}
                 onApprove={() => approve(item.programId, item.id)}
@@ -469,6 +477,7 @@ const PendingRequestsSection: React.FC = () => {
                 subtitle={item.subtitle}
                 date={item.date}
                 status={item.status}
+                profileImage={item.profileImage}
                 colors={colors}
                 onPress={() => openDetails(item)}
                 onApprove={() => approve(item.programId, item.id)}

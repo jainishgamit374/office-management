@@ -14,7 +14,16 @@
     "test:coverage": "jest --coverage",
     "test:auth": "jest __tests__/api/auth",
     "test:attendance": "jest __tests__/api/attendance",
-    "test:leaves": "jest __tests__/api/leaves"
+    "test:leaves": "jest __tests__/api/leaves",
+    "build:android:preview": "eas build --platform android --profile preview",
+    "build:android:production": "eas build --platform android --profile production",
+    "build:ios:preview": "eas build --platform ios --profile preview",
+    "build:ios:production": "eas build --platform ios --profile production",
+    "build:all": "eas build --platform all --profile production",
+    "submit:android": "eas submit --platform android --latest",
+    "submit:ios": "eas submit --platform ios --latest",
+    "build:status": "eas build:list",
+    "build:menu": "./build-upload.sh"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

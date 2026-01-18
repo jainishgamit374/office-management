@@ -1,6 +1,5 @@
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
-import { calculateLeaveDays, getLeaveApplicationsList, LeaveApplicationDetails } from '@/lib/leaves';
-import { disapproveAll } from '@/lib/workflow';
+import { calculateLeaveDays, getLeaveApplicationsList, LeaveApplicationDetails, LeaveApplicationSummary } from '@/lib/leaves';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
@@ -14,7 +13,6 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import ApprovalHistoryModal from '../../components/Admin/ApprovalHistoryModal';
 
 // Types
 type FilterType = 'All' | 'casualLeave' | 'sickLeave' | 'privilegeLeave';
@@ -26,15 +24,11 @@ const LeaveApplication = () => {
 
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('All');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
-    const [applications, setApplications] = useState<LeaveApplicationDetails[]>([]);
+    const [applications, setApplications] = useState<(LeaveApplicationDetails | LeaveApplicationSummary)[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalRecords, setTotalRecords] = useState(0);
-
-    // History Modal State
-    const [historyModalVisible, setHistoryModalVisible] = useState(false);
-    const [selectedRequest, setSelectedRequest] = useState<LeaveApplicationDetails | null>(null);
 
     // Fetch leave applications from API
     const fetchLeaveApplications = useCallback(async (refresh: boolean = false) => {
@@ -45,7 +39,6 @@ const LeaveApplication = () => {
                 setIsLoading(true);
             }
 
-            // Map UI filter to API values
             let apiLeaveType: 'CL' | 'SL' | 'PL' | 'All' = 'All';
             if (selectedFilter === 'casualLeave') apiLeaveType = 'CL';
             else if (selectedFilter === 'sickLeave') apiLeaveType = 'SL';
@@ -60,12 +53,17 @@ const LeaveApplication = () => {
                 sortOrder: 'desc',
             });
 
+            // Debug logging
+            if (response.data && response.data.length > 0) {
+                console.log('✅ Leave applications loaded:', response.data.length);
+                console.log('� First item approver:', response.data[0].workflow_list?.[0]?.Approve_name || 'None');
+            }
+
             setApplications(response.data);
             if (response.pagination) {
                 setTotalRecords(response.pagination.totalRecords);
             }
 
-            console.log('✅ Leave applications loaded:', response.data.length);
         } catch (error: any) {
             console.error('Failed to fetch leave applications:', error);
             Alert.alert('Error', error.message || 'Failed to load leave applications');
@@ -75,14 +73,12 @@ const LeaveApplication = () => {
         }
     }, [selectedFilter, statusFilter, currentPage]);
 
-    // Fetch data on mount and when filters change
     useFocusEffect(
         useCallback(() => {
             fetchLeaveApplications();
         }, [fetchLeaveApplications])
     );
 
-    // Client-side filtering as backup (in case API doesn't filter properly)
     const filteredRequests = useMemo(() => {
         if (selectedFilter === 'All') {
             return applications;
@@ -91,7 +87,7 @@ const LeaveApplication = () => {
         return applications.filter(app => {
             const leaveType = app.LeaveType?.toUpperCase() || '';
             const leaveTypeCode = app.LeaveTypeCode?.toUpperCase() || '';
-            
+
             if (selectedFilter === 'casualLeave') {
                 return leaveType.includes('CASUAL') || leaveTypeCode === 'CL' || leaveType === 'CL';
             }
@@ -118,65 +114,55 @@ const LeaveApplication = () => {
     const getStatusStyle = (status: string) => {
         const statusLower = status?.toLowerCase() || '';
 
-        // Proper modern colors: Amber/Orange for Pending, Green for Approved, Red for Rejected
         if (statusLower.includes('pending') || statusLower.includes('awaiting')) {
-            return { color: '#F57C00', bg: '#FFF3E0', icon: 'clock', label: 'Pending' }; // Darker Orange text
+            return {
+                color: '#F57C00',
+                bg: '#FFF3E0',
+                icon: 'clock' as const,
+                label: 'Pending'
+            };
         }
-        // Fix: Check for reject/disapprove BEFORE approve, because "disapprove" contains "approve"
         if (statusLower.includes('reject') || statusLower.includes('disapprove')) {
-            return { color: '#C62828', bg: '#FFEBEE', icon: 'x-circle', label: 'Rejected' }; // Darker Red text
+            return {
+                color: '#C62828',
+                bg: '#FFEBEE',
+                icon: 'x-circle' as const,
+                label: 'Rejected'
+            };
         }
         if (statusLower.includes('approve')) {
-            return { color: '#2E7D32', bg: '#E8F5E9', icon: 'check-circle', label: 'Approved' }; // Darker Green text
+            return {
+                color: '#2E7D32',
+                bg: '#E8F5E9',
+                icon: 'check-circle' as const,
+                label: 'Approved'
+            };
         }
         if (statusLower.includes('cancel')) {
-            return { color: '#616161', bg: '#F5F5F5', icon: 'slash', label: 'Cancelled' };
+            return {
+                color: '#616161',
+                bg: '#F5F5F5',
+                icon: 'slash' as const,
+                label: 'Cancelled'
+            };
         }
-        return { color: colors.textSecondary, bg: colors.border, icon: 'info', label: status };
+        return {
+            color: colors.textSecondary,
+            bg: colors.border,
+            icon: 'info' as const,
+            label: status
+        };
     };
 
     const getLeaveTypeStyle = (type: string) => {
         const typeLower = type?.toLowerCase() || '';
-        if (typeLower.includes('casual')) return { color: '#2196F3', icon: 'coffee' }; // Blue
-        if (typeLower.includes('sick')) return { color: '#FF9800', icon: 'activity' }; // Orange
-        if (typeLower.includes('privilege')) return { color: '#9C27B0', icon: 'sun' }; // Purple
-        return { color: colors.secondary, icon: 'calendar' };
+        if (typeLower.includes('casual')) return { color: '#2196F3', icon: 'coffee' as const };
+        if (typeLower.includes('sick')) return { color: '#FF9800', icon: 'activity' as const };
+        if (typeLower.includes('privilege')) return { color: '#9C27B0', icon: 'sun' as const };
+        return { color: colors.secondary, icon: 'calendar' as const };
     };
 
-    const handleViewHistory = (item: LeaveApplicationDetails) => {
-        setSelectedRequest(item);
-        setHistoryModalVisible(true);
-    };
-
-    const handleReject = (requestId: number) => {
-        Alert.alert(
-            'Reject Leave Request',
-            'Are you sure you want to reject this leave request?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Reject',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            setIsLoading(true);
-                            // PROGRAM ID 1 for Leave
-                            await disapproveAll({ ProgramID: 1, TranID: requestId });
-                            Alert.alert('Success', 'Request rejected successfully');
-                            // Refresh list
-                            fetchLeaveApplications();
-                        } catch (error: any) {
-                            Alert.alert('Error', error.message || 'Failed to reject request');
-                        } finally {
-                            setIsLoading(false);
-                        }
-                    },
-                },
-            ]
-        );
-    };
-
-    const renderFilterChip = (label: string, value: FilterType, icon: string, iconColor: string) => {
+    const renderFilterChip = (label: string, value: FilterType, icon: string) => {
         const isActive = selectedFilter === value;
         return (
             <Pressable
@@ -203,57 +189,79 @@ const LeaveApplication = () => {
         );
     };
 
-    const renderLeaveRequestItem = ({ item }: { item: LeaveApplicationDetails }) => {
-        // DEBUG: Check what data we are actually receiving
-        // console.log(`Item ${item.LeaveApplicationMasterID} Data:`, JSON.stringify(item, null, 2));
-
+    // Render Leave Request Item
+    const renderLeaveRequestItem = ({ item }: { item: LeaveApplicationDetails | LeaveApplicationSummary }) => {
         const statusStyle = getStatusStyle(item.ApprovalStatus);
         const leaveStyle = getLeaveTypeStyle(item.LeaveType);
-        const isPending = item.ApprovalStatus === 'Pending' || item.ApprovalStatus === 'Awaiting Approve';
 
-        // Normalized Rejection Reason (handle case sensitivity and common variations)
-        const rejectionReason = item.RejectionReason || 
-                                (item as any).rejectionReason || 
-                                (item as any).reason_for_rejection ||
-                                (item as any).rejection_reason;
+        const isPending = item.ApprovalStatus?.toLowerCase().includes('pending') ||
+            item.ApprovalStatus?.toLowerCase().includes('awaiting');
 
-        // Normalized Approval Username
-        const approvalUsername = item.ApprovalUsername || 
-                                 (item as any).approvalUsername || 
-                                 (item as any).approval_username || 
-                                 (item as any).approver_name;
+        const isRejected = item.ApprovalStatus?.toLowerCase().includes('reject') ||
+            item.ApprovalStatus?.toLowerCase().includes('disapprove');
 
-        // Calculate days if not provided
+        const isApproved = item.ApprovalStatus?.toLowerCase().includes('approve') && !isRejected;
+
+        const isCancelled = item.ApprovalStatus?.toLowerCase().includes('cancel');
+
+        // Get approver name from workflow_list (API doesn't return ApprovalUsername directly)
+        const approverName = 
+            item.workflow_list && item.workflow_list.length > 0 
+                ? item.workflow_list[0].Approve_name 
+                : 'Not Assigned';
+
+        const rejectionReason = item.RejectionReason || null;
+
         const daysCount = item.TotalDays || calculateLeaveDays(item.StartDate, item.EndDate, item.IsHalfDay);
-        
+
+        const getApproverLabel = (): string => {
+            if (isPending) return 'Pending with';
+            if (isApproved) return 'Approved by';
+            if (isRejected) return 'Rejected by';
+            if (isCancelled) return 'Cancelled';
+            return 'Reviewer';
+        };
+
+        const getApproverIcon = (): string => {
+            if (isPending) return 'clock';
+            if (isApproved) return 'check-circle';
+            if (isRejected) return 'x-circle';
+            if (isCancelled) return 'slash';
+            return 'user';
+        };
+
         return (
             <View style={styles.requestCard}>
-                
-                {/* Header: Avatar, Name, Status */}
+
+                {/* Header */}
                 <View style={styles.cardHeader}>
                     <View style={styles.headerLeft}>
                         <View style={[styles.avatarContainer, { backgroundColor: `${leaveStyle.color}15` }]}>
-                            <Feather name={leaveStyle.icon as any} size={20} color={leaveStyle.color} />
+                            <Feather name={leaveStyle.icon} size={20} color={leaveStyle.color} />
                         </View>
-                        <View>
+                        <View style={styles.headerTextContainer}>
                             <Text style={styles.leaveTypeTitle}>{item.LeaveType}</Text>
-                            <Text style={styles.requestDate}>Applied: {formatDate(item.CreatedAt || item.CreatedDate || '')}</Text>
+                            <Text style={styles.requestDate}>
+                                Applied: {formatDate(item.CreatedAt || item.CreatedDate || '')}
+                            </Text>
                         </View>
                     </View>
-                    
+
                     <View style={[
-                        styles.statusBadge, 
+                        styles.statusBadge,
                         { backgroundColor: statusStyle.bg, borderColor: `${statusStyle.color}30`, borderWidth: 1 }
                     ]}>
-                        <Feather name={statusStyle.icon as any} size={12} color={statusStyle.color} />
+                        <Feather name={statusStyle.icon} size={12} color={statusStyle.color} />
                         <Text style={[styles.statusText, { color: statusStyle.color }]}>
                             {statusStyle.label}
                         </Text>
                     </View>
                 </View>
 
-                {/* Body: Dates & Reason */}
+                {/* Body */}
                 <View style={styles.cardBody}>
+
+                    {/* Date Row */}
                     <View style={styles.dateRow}>
                         <View style={styles.dateItem}>
                             <Text style={styles.dateLabel}>From</Text>
@@ -266,71 +274,64 @@ const LeaveApplication = () => {
                             <Text style={styles.dateLabel}>To</Text>
                             <Text style={styles.dateValue}>{formatDate(item.EndDate)}</Text>
                         </View>
-                        
-                        {/* Days Pill */}
+
                         <View style={styles.daysPill}>
-                            <Feather name="clock" size={12} color="#FFF" />
-                            <Text style={styles.daysPillText}>{daysCount} Days</Text>
+                            <Feather name="calendar" size={12} color="#FFF" />
+                            <Text style={styles.daysPillText}>
+                                {daysCount} {daysCount === 1 ? 'Day' : 'Days'}
+                            </Text>
                         </View>
                     </View>
-                    
-                    {item.Reason && (
-                         <View style={styles.reasonBlock}>
-                             <Text style={styles.reasonText} numberOfLines={2}>
-                                {item.Reason}
-                             </Text>
-                         </View>
+
+                    {/* Half Day */}
+                    {item.IsHalfDay && (
+                        <View style={styles.halfDayRow}>
+                            <Feather name="clock" size={14} color="#FF9800" />
+                            <Text style={styles.halfDayText}>
+                                Half Day ({item.IsFirstHalf ? 'First Half' : 'Second Half'})
+                            </Text>
+                        </View>
                     )}
 
-                    {/* Approval Info */}
-                    {approvalUsername && (
-                        <View style={styles.approvalInfo}>
-                            <Feather 
-                                name="user-check" 
-                                size={14} 
-                                color={statusStyle.color} 
-                            />
-                            <Text style={styles.approvalLabel}>
-                                {isPending ? 'Reviewing by:' : `${statusStyle.label} by:`}
-                            </Text>
-                            <Text style={[styles.approvalName, { color: statusStyle.color }]}>
-                                {approvalUsername}
+                    {/* Reason */}
+                    {item.Reason && (
+                        <View style={styles.reasonBlock}>
+                            <Feather name="file-text" size={14} color={colors.textSecondary} />
+                            <Text style={styles.reasonText} numberOfLines={2}>
+                                {item.Reason}
                             </Text>
                         </View>
                     )}
 
                     {/* Rejection Reason */}
-                    {(item.ApprovalStatus?.toLowerCase().includes('reject') || 
-                      item.ApprovalStatus?.toLowerCase().includes('disapprove')) && 
-                     rejectionReason && (
+                    {isRejected && rejectionReason && (
                         <View style={styles.rejectionBlock}>
                             <View style={styles.rejectionHeader}>
                                 <Feather name="alert-circle" size={14} color="#C62828" />
-                                <Text style={styles.rejectionTitle}>Rejection Reason:</Text>
+                                <Text style={styles.rejectionTitle}>Rejection Reason</Text>
                             </View>
                             <Text style={styles.rejectionText}>{rejectionReason}</Text>
                         </View>
                     )}
                 </View>
 
-                {/* Footer: Workflow and Approver */}
+                {/* ✅ FOOTER - Only Approver Name (Removed Application ID) */}
                 <View style={styles.cardFooter}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <Pressable
-                            style={({ pressed }) => [styles.historyButton, pressed && { opacity: 0.7 }]}
-                            onPress={() => handleViewHistory(item)}
-                        >
-                            <Feather name="git-merge" size={14} color={colors.primary} />
-                            <Text style={styles.historyButtonText}>View Workflow</Text>
-                        </Pressable>
-
-                        {/* Approver Name beside Workflow */}
-                        {approvalUsername ? (
-                            <View style={styles.approverBadge}>
-                                <Feather name="user" size={12} color={colors.textSecondary} />
-                                <Text style={styles.approverText}>{approvalUsername}</Text>
-                            </View>
-                        ) : null}
+                    <View style={styles.approverSection}>
+                        <Feather
+                            name={getApproverIcon() as any}
+                            size={18}
+                            color={statusStyle.color}
+                        />
+                        <Text style={[styles.approverLabel, { color: statusStyle.color }]}>
+                            {getApproverLabel()}:
+                        </Text>
+                        <View style={[styles.approverNameBadge, { backgroundColor: `${statusStyle.color}15`, borderColor: `${statusStyle.color}30` }]}>
+                            <Feather name="user" size={14} color={statusStyle.color} />
+                            <Text style={[styles.approverNameText, { color: statusStyle.color }]}>
+                                {approverName}
+                            </Text>
+                        </View>
                     </View>
                 </View>
             </View>
@@ -339,28 +340,34 @@ const LeaveApplication = () => {
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
-                 <Text style={styles.screenTitle}>Leave Requests</Text>
-                 <Text style={styles.totalCount}>{totalRecords} Records</Text>
+                <Text style={styles.screenTitle}>Leave Requests</Text>
+                <View style={styles.headerRight}>
+                    <Text style={styles.totalCount}>{totalRecords} Records</Text>
+                </View>
             </View>
 
+            {/* Filter Chips */}
             <View style={styles.filterScrollContainer}>
-                <ScrollView 
-                    horizontal 
+                <ScrollView
+                    horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.filterRow}
                 >
-                    {renderFilterChip('All', 'All', 'layers', '#666')}
-                    {renderFilterChip('Casual', 'casualLeave', 'coffee', '#4A90FF')}
-                    {renderFilterChip('Sick', 'sickLeave', 'activity', '#FF9800')}
-                    {renderFilterChip('Privilege', 'privilegeLeave', 'sun', '#9C27B0')}
+                    {renderFilterChip('All', 'All', 'layers')}
+                    {renderFilterChip('Casual', 'casualLeave', 'coffee')}
+                    {renderFilterChip('Sick', 'sickLeave', 'activity')}
+                    {renderFilterChip('Privilege', 'privilegeLeave', 'sun')}
                 </ScrollView>
             </View>
 
+            {/* Content */}
             {isLoading && !isRefreshing ? (
-                 <View style={styles.centerContainer}>
-                     <Text style={styles.loadingText}>Loading requests...</Text>
-                 </View>
+                <View style={styles.centerContainer}>
+                    <Feather name="loader" size={24} color={colors.primary} />
+                    <Text style={styles.loadingText}>Loading requests...</Text>
+                </View>
             ) : filteredRequests.length === 0 ? (
                 <View style={styles.emptyContainer}>
                     <View style={styles.emptyIconCircle}>
@@ -372,7 +379,7 @@ const LeaveApplication = () => {
                     </Text>
                 </View>
             ) : (
-                <FlatList
+                <FlatList<LeaveApplicationDetails | LeaveApplicationSummary>
                     data={filteredRequests}
                     renderItem={renderLeaveRequestItem}
                     keyExtractor={(item) => item.LeaveApplicationMasterID?.toString() || Math.random().toString()}
@@ -380,62 +387,65 @@ const LeaveApplication = () => {
                     showsVerticalScrollIndicator={false}
                     refreshing={isRefreshing}
                     onRefresh={() => fetchLeaveApplications(true)}
-                />
-            )}
-
-            {/* Approval History Modal */}
-            {selectedRequest && (
-                <ApprovalHistoryModal
-                    visible={historyModalVisible}
-                    onClose={() => setHistoryModalVisible(false)}
-                    tranId={selectedRequest.LeaveApplicationMasterID}
-                    progId={1} 
-                    employeeName={selectedRequest.EmployeeName || 'Unknown'}
+                    ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
                 />
             )}
         </SafeAreaView>
     );
 };
 
+// ✅ STYLES
 const createStyles = (colors: ThemeColors) =>
     StyleSheet.create({
         container: {
             flex: 1,
             backgroundColor: colors.background,
         },
+
         header: {
             flexDirection: 'row',
             justifyContent: 'space-between',
-            alignItems: 'baseline',
+            alignItems: 'center',
             paddingHorizontal: 20,
             paddingTop: 10,
-            paddingBottom: 10,
+            paddingBottom: 16,
         },
         screenTitle: {
-            fontSize: 24,
-            fontWeight: '700',
+            fontSize: 26,
+            fontWeight: '800',
             color: colors.text,
             letterSpacing: -0.5,
+        },
+        headerRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
         },
         totalCount: {
             fontSize: 14,
             fontWeight: '600',
             color: colors.textSecondary,
+            backgroundColor: colors.card,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 16,
+            overflow: 'hidden',
         },
+
         centerContainer: {
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
+            gap: 12,
         },
         loadingText: {
             color: colors.textSecondary,
             fontSize: 15,
             fontWeight: '600',
         },
-        
-        // Filter
+
         filterScrollContainer: {
-            paddingBottom: 12,
+            paddingBottom: 16,
         },
         filterRow: {
             paddingHorizontal: 20,
@@ -451,7 +461,6 @@ const createStyles = (colors: ThemeColors) =>
             backgroundColor: colors.card,
             borderWidth: 1,
             borderColor: colors.border,
-            // Subtle shadow for depth
             shadowColor: colors.shadow,
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.05,
@@ -471,14 +480,14 @@ const createStyles = (colors: ThemeColors) =>
             color: '#FFF',
         },
 
-        // List
         listContent: {
             paddingHorizontal: 20,
             paddingBottom: 40,
-            gap: 16,
         },
-        
-        // Card
+        listSeparator: {
+            height: 16,
+        },
+
         requestCard: {
             backgroundColor: colors.card,
             borderRadius: 16,
@@ -487,10 +496,11 @@ const createStyles = (colors: ThemeColors) =>
             borderColor: colors.border,
             shadowColor: colors.shadow,
             shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.04,
-            shadowRadius: 10,
-            elevation: 3,
+            shadowOpacity: 0.08,
+            shadowRadius: 12,
+            elevation: 4,
         },
+
         cardHeader: {
             flexDirection: 'row',
             justifyContent: 'space-between',
@@ -503,15 +513,18 @@ const createStyles = (colors: ThemeColors) =>
             alignItems: 'center',
             flex: 1,
         },
+        headerTextContainer: {
+            flex: 1,
+        },
         avatarContainer: {
-            width: 44,
-            height: 44,
-            borderRadius: 12,
+            width: 48,
+            height: 48,
+            borderRadius: 14,
             alignItems: 'center',
             justifyContent: 'center',
         },
         leaveTypeTitle: {
-            fontSize: 16,
+            fontSize: 17,
             fontWeight: '700',
             color: colors.text,
             marginBottom: 2,
@@ -522,39 +535,42 @@ const createStyles = (colors: ThemeColors) =>
             fontWeight: '500',
         },
         statusBadge: {
-             flexDirection: 'row',
-             alignItems: 'center',
-             gap: 6,
-             paddingHorizontal: 12,
-             paddingVertical: 6,
-             borderRadius: 20,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 20,
         },
         statusText: {
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: '700',
             textTransform: 'uppercase',
+            letterSpacing: 0.5,
         },
-        
-        // Body
+
         cardBody: {
             gap: 12,
             marginBottom: 16,
         },
+
         dateRow: {
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'space-between',
             backgroundColor: colors.background,
-            padding: 12,
-            borderRadius: 10,
+            padding: 14,
+            borderRadius: 12,
         },
         dateItem: {
-            gap: 2,
+            flex: 1,
         },
         dateLabel: {
             fontSize: 11,
             color: colors.textSecondary,
             fontWeight: '600',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 4,
         },
         dateValue: {
             fontSize: 14,
@@ -562,15 +578,15 @@ const createStyles = (colors: ThemeColors) =>
             fontWeight: '700',
         },
         arrowContainer: {
-            paddingHorizontal: 8,
+            paddingHorizontal: 12,
         },
         daysPill: {
             backgroundColor: colors.primary,
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
             borderRadius: 12,
             marginLeft: 8,
         },
@@ -579,158 +595,127 @@ const createStyles = (colors: ThemeColors) =>
             fontSize: 12,
             fontWeight: '700',
         },
-        reasonBlock: {
-            backgroundColor: `${colors.background}80`, // slightly transparent
-            padding: 2,
-        },
-        reasonText: {
-            fontSize: 13,
-            color: colors.textSecondary,
-            lineHeight: 18,
-            fontStyle: 'italic',
-        },
-        approvalInfo: {
+
+        halfDayRow: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
             paddingVertical: 8,
             paddingHorizontal: 12,
-            backgroundColor: colors.background,
+            backgroundColor: '#FFF3E0',
             borderRadius: 8,
+            borderWidth: 1,
+            borderColor: '#FFE0B2',
         },
-        approvalLabel: {
-            fontSize: 12,
-            fontWeight: '600',
-            color: colors.textSecondary,
-        },
-        approvalName: {
+        halfDayText: {
             fontSize: 13,
-            fontWeight: '700',
+            fontWeight: '600',
+            color: '#F57C00',
         },
+
+        reasonBlock: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 10,
+            paddingVertical: 8,
+        },
+        reasonText: {
+            flex: 1,
+            fontSize: 14,
+            color: colors.textSecondary,
+            lineHeight: 20,
+        },
+
         rejectionBlock: {
             backgroundColor: '#FFEBEE',
-            borderLeftWidth: 3,
+            borderLeftWidth: 4,
             borderLeftColor: '#C62828',
-            padding: 12,
-            borderRadius: 8,
+            padding: 14,
+            borderRadius: 10,
             gap: 8,
         },
         rejectionHeader: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 6,
+            gap: 8,
         },
         rejectionTitle: {
             fontSize: 12,
             fontWeight: '700',
             color: '#C62828',
             textTransform: 'uppercase',
+            letterSpacing: 0.5,
         },
         rejectionText: {
-            fontSize: 13,
+            fontSize: 14,
             color: '#B71C1C',
-            lineHeight: 18,
+            lineHeight: 20,
             fontWeight: '500',
+            marginLeft: 22,
         },
 
-        // Footer
+        // ✅ FOOTER STYLES - Clean approver display
         cardFooter: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingTop: 12,
+            paddingTop: 14,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
-        historyButton: {
+
+        approverSection: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 6,
-            padding: 4,
-        },
-        historyButtonText: {
-            fontSize: 13,
-            fontWeight: '600',
-            color: colors.primary,
-        },
-        approverBadge: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            backgroundColor: colors.background,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.border,
-        },
-        approverText: {
-            fontSize: 12,
-            fontWeight: '600',
-            color: colors.text,
-        },
-        pendingActions: {
-            flexDirection: 'row',
             gap: 10,
         },
-        actionBtn: {
+        approverLabel: {
+            fontSize: 14,
+            fontWeight: '600',
+        },
+        approverNameBadge: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 6,
-            paddingHorizontal: 16,
+            gap: 8,
+            paddingHorizontal: 14,
             paddingVertical: 8,
             borderRadius: 20,
             borderWidth: 1,
         },
-        rejectBtn: {
-            borderColor: '#C62828',
-            backgroundColor: '#FFEBEE',
-        },
-        rejectBtnText: {
-            fontSize: 13,
+        approverNameText: {
+            fontSize: 14,
             fontWeight: '700',
-            color: '#C62828',
         },
-        approveBtn: {
-            borderColor: '#2E7D32',
-            backgroundColor: '#4CAF50',
-        },
-        approveBtnText: {
-            fontSize: 13,
-            fontWeight: '700',
-            color: '#FFF',
-        },
-        
-        // Empty
+
         emptyContainer: {
             flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
-            paddingTop: 80,
+            paddingHorizontal: 40,
             gap: 12,
         },
         emptyIconCircle: {
-            width: 80,
-            height: 80,
-            borderRadius: 40,
+            width: 100,
+            height: 100,
+            borderRadius: 50,
             backgroundColor: colors.card,
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: 8,
+            marginBottom: 12,
             shadowColor: colors.shadow,
             shadowOpacity: 0.1,
             shadowRadius: 20,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 4,
         },
         emptyTitle: {
-            fontSize: 18,
+            fontSize: 20,
             fontWeight: '700',
             color: colors.text,
+            textAlign: 'center',
         },
         emptySubtitle: {
-             fontSize: 14,
-             color: colors.textSecondary,
-             textAlign: 'center',
-             maxWidth: '70%',
+            fontSize: 14,
+            color: colors.textSecondary,
+            textAlign: 'center',
+            lineHeight: 20,
         },
     });
 

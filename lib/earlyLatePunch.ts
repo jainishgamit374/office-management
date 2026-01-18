@@ -243,6 +243,11 @@ export interface EarlyLatePunchDetails {
     UpdatedDate: string;
     IsActive: boolean;
     CanEdit: boolean;
+    workflow_list?: Array<{
+        Approve_name: string;
+        Priority: number;
+        status: string;
+    }>;
 }
 
 export interface EarlyLatePunchResponse {

@@ -1,27 +1,26 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
+import { getMissingPunchDetails } from '@/lib/missPunchList';
+import { disapproveAll } from '@/lib/workflow';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     FlatList,
     Pressable,
-    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ApprovalHistoryModal from '../../components/Admin/ApprovalHistoryModal';
 
-import { getMissingPunchDetails } from '@/lib/missPunchList';
-import { disapproveAll } from '@/lib/workflow';
-
 // Types
 type PunchType = 'In' | 'Out';
 type RequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Awaiting Approve';
+type FilterType = 'All' | 'PunchIn' | 'PunchOut';
+type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Rejected';
 
 interface MissPunchRequest {
     id: number;
@@ -34,14 +33,15 @@ interface MissPunchRequest {
     workflowApprovers?: string[];
 }
 
-type FilterType = 'all' | 'punchIn' | 'punchOut';
-
 const ViewAllMisspunch = () => {
-    const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
+    const { colors } = useTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
+
+    const [selectedFilter, setSelectedFilter] = useState<FilterType>('All');
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
     const [requests, setRequests] = useState<MissPunchRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
     // History Modal State
     const [historyModalVisible, setHistoryModalVisible] = useState(false);
@@ -54,45 +54,28 @@ const ViewAllMisspunch = () => {
             } else {
                 setIsLoading(true);
             }
-            setError(null);
 
-            console.log('📋 Fetching all miss punch requests...');
             const response = await getMissingPunchDetails();
 
             if (response.status === 'Success' && response.data) {
-                // Transform API response to component format
-                const missPunchData: MissPunchRequest[] = response.data.map(item => {
-                    // Extract employee info from workflow list
-                    const employeeName = item.workflow_list && item.workflow_list.length > 0 
-                        ? item.workflow_list[0].Approve_name 
-                        : 'Unknown Employee';
-                    
-                    // Generate employee ID from MissPunchReqMasterID (you may need to adjust this based on actual API)
-                    const employeeId = `EMP${String(item.MissPunchReqMasterID).padStart(4, '0')}`;
-                    
-                    // Get all workflow approvers
-                    const workflowApprovers = item.workflow_list?.map(w => w.Approve_name) || [];
-
-                    return {
-                        id: item.MissPunchReqMasterID,
-                        employeeName: employeeName,
-                        employeeId: employeeId,
-                        date: item.datetime,
-                        punchType: item.PunchType === '1' ? 'In' : 'Out',
-                        reason: item.reason || 'No reason provided',
-                        status: item.approval_status as RequestStatus,
-                        workflowApprovers: workflowApprovers,
-                    };
-                });
+                const missPunchData: MissPunchRequest[] = response.data.map(item => ({
+                    id: item.MissPunchReqMasterID,
+                    employeeName: item.workflow_list?.[0]?.Approve_name || 'Unknown Employee',
+                    employeeId: `EMP${String(item.MissPunchReqMasterID).padStart(4, '0')}`,
+                    date: item.datetime,
+                    punchType: item.PunchType === '1' ? 'In' : 'Out',
+                    reason: item.reason || 'No reason provided',
+                    status: item.approval_status as RequestStatus,
+                    workflowApprovers: item.workflow_list?.map(w => w.Approve_name) || [],
+                }));
 
                 setRequests(missPunchData);
-                console.log('✅ Miss punch requests loaded:', missPunchData.length);
             } else {
                 setRequests([]);
             }
         } catch (err: any) {
             console.error('❌ Failed to fetch miss punch requests:', err);
-            setError(err.message || 'Failed to load miss punch requests');
+            Alert.alert('Error', err.message || 'Failed to load miss punch requests');
             setRequests([]);
         } finally {
             setIsLoading(false);
@@ -100,25 +83,30 @@ const ViewAllMisspunch = () => {
         }
     }, []);
 
-    // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchMissPunchRequests(false);
         }, [fetchMissPunchRequests])
     );
 
-    // Handle pull to refresh
-    const handleRefresh = () => {
-        fetchMissPunchRequests(true);
-    };
+    const filteredRequests = useMemo(() => {
+        let filtered = requests;
 
-    // Filter requests based on selected filter
-    const filteredRequests = requests.filter((request) => {
-        if (selectedFilter === 'all') return true;
-        if (selectedFilter === 'punchIn') return request.punchType === 'In';
-        if (selectedFilter === 'punchOut') return request.punchType === 'Out';
-        return true;
-    });
+        // Filter by punch type
+        if (selectedFilter === 'PunchIn') {
+            filtered = filtered.filter(r => r.punchType === 'In');
+        } else if (selectedFilter === 'PunchOut') {
+            filtered = filtered.filter(r => r.punchType === 'Out');
+        }
+
+        // Filter by status
+        if (statusFilter !== 'All') {
+            filtered = filtered.filter(r => r.status === statusFilter || 
+                (statusFilter === 'Pending' && r.status === 'Awaiting Approve'));
+        }
+
+        return filtered;
+    }, [requests, selectedFilter, statusFilter]);
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -129,54 +117,20 @@ const ViewAllMisspunch = () => {
         });
     };
 
-    const getStatusColor = (status: RequestStatus) => {
-        switch (status) {
-            case 'Pending':
-                return '#FF9800';
-            case 'Approved':
-                return '#4CAF50';
-            case 'Rejected':
-                return '#FF5252';
-            default:
-                return '#666';
+    const getStatusStyle = (status: RequestStatus) => {
+        if (status === 'Pending' || status === 'Awaiting Approve') {
+            return { color: '#F57C00', bg: '#FFF3E0', icon: 'clock' as const, label: 'Pending' };
         }
-    };
-
-    const getStatusBgColor = (status: RequestStatus) => {
-        switch (status) {
-            case 'Pending':
-                return '#FFF3E0';
-            case 'Approved':
-                return '#E8F5E9';
-            case 'Rejected':
-                return '#FFEBEE';
-            default:
-                return '#F0F0F0';
+        if (status === 'Rejected') {
+            return { color: '#C62828', bg: '#FFEBEE', icon: 'x-circle' as const, label: 'Rejected' };
         }
+        if (status === 'Approved') {
+            return { color: '#2E7D32', bg: '#E8F5E9', icon: 'check-circle' as const, label: 'Approved' };
+        }
+        return { color: colors.textSecondary, bg: colors.border, icon: 'info' as const, label: status };
     };
 
-    const handleApprove = (requestId: string) => {
-        Alert.alert(
-            'Approve Miss Punch Request',
-            'Are you sure you want to approve this miss punch request?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Approve',
-                    onPress: () => {
-                        setRequests((prev) =>
-                            prev.map((req) =>
-                                req.id === parseInt(requestId) ? { ...req, status: 'Approved' } : req
-                            )
-                        );
-                        Alert.alert('Success', 'Miss punch request approved successfully!');
-                    },
-                },
-            ]
-        );
-    };
-
-    const handleReject = (requestId: string) => {
+    const handleReject = (requestId: number) => {
         Alert.alert(
             'Reject Miss Punch Request',
             'Are you sure you want to reject this miss punch request?',
@@ -188,18 +142,9 @@ const ViewAllMisspunch = () => {
                     onPress: async () => {
                         try {
                             setIsLoading(true);
-                            // PROGRAM ID 4 for Miss Punch
-                            await disapproveAll({ ProgramID: 4, TranID: parseInt(requestId) });
-                            
-                            // Optimistic update
-                            setRequests((prev) =>
-                                prev.map((req) =>
-                                    req.id === parseInt(requestId) ? { ...req, status: 'Rejected' } : req
-                                )
-                            );
-                            
+                            await disapproveAll({ ProgramID: 4, TranID: requestId });
                             Alert.alert('Success', 'Miss punch request rejected successfully!');
-                            fetchMissPunchRequests(); // Refresh to ensure sync
+                            fetchMissPunchRequests();
                         } catch (error: any) {
                             Alert.alert('Error', error.message || 'Failed to reject request');
                         } finally {
@@ -216,243 +161,178 @@ const ViewAllMisspunch = () => {
         setHistoryModalVisible(true);
     };
 
-    const renderMissPunchRequestItem = ({ item }: { item: MissPunchRequest }) => (
-        <View style={styles.requestCard}>
-            {/* Header Section */}
-            <View style={styles.requestHeader}>
-                <View style={styles.employeeInfo}>
-                    <View
-                        style={[
-                            styles.avatarContainer,
-                            { backgroundColor: item.punchType === 'In' ? '#4CAF5020' : '#FF525220' },
-                        ]}
-                    >
-                        <Text style={[styles.avatarText, { color: item.punchType === 'In' ? '#4CAF50' : '#FF5252' }]}>
-                            {item.employeeName.split(' ').map((n) => n[0]).join('')}
+    const renderFilterChip = (label: string, value: FilterType, icon: string) => {
+        const isActive = selectedFilter === value;
+        return (
+            <Pressable
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => setSelectedFilter(value)}
+            >
+                <Feather name={icon as any} size={14} color={isActive ? '#FFF' : colors.textSecondary} />
+                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                    {label}
+                </Text>
+            </Pressable>
+        );
+    };
+
+    const renderStatusChip = (label: string, value: StatusFilter, icon: string) => {
+        const isActive = statusFilter === value;
+        return (
+            <Pressable
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => setStatusFilter(value)}
+            >
+                <Feather name={icon as any} size={14} color={isActive ? '#FFF' : colors.textSecondary} />
+                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                    {label}
+                </Text>
+            </Pressable>
+        );
+    };
+
+    const renderMissPunchRequestItem = ({ item }: { item: MissPunchRequest }) => {
+        const statusStyle = getStatusStyle(item.status);
+        const isPending = item.status === 'Pending' || item.status === 'Awaiting Approve';
+        const punchColor = item.punchType === 'In' ? '#4CAF50' : '#FF5252';
+
+        const approverName = item.workflowApprovers?.[0] || 'Not Assigned';
+
+        const getApproverLabel = (): string => {
+            if (isPending) return 'Pending with';
+            if (item.status === 'Approved') return 'Approved by';
+            if (item.status === 'Rejected') return 'Rejected by';
+            return 'Reviewer';
+        };
+
+        return (
+            <View style={styles.requestCard}>
+                {/* Header */}
+                <View style={styles.cardHeader}>
+                    <View style={styles.headerLeft}>
+                        <View style={[styles.avatarContainer, { backgroundColor: `${punchColor}15` }]}>
+                            <Feather 
+                                name={item.punchType === 'In' ? 'log-in' : 'log-out'} 
+                                size={20} 
+                                color={punchColor} 
+                            />
+                        </View>
+                        <View style={styles.headerTextContainer}>
+                            <Text style={styles.employeeName}>{item.employeeName}</Text>
+                            <Text style={styles.employeeId}>Punch {item.punchType}</Text>
+                        </View>
+                    </View>
+
+                    <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg, borderColor: `${statusStyle.color}30`, borderWidth: 1 }]}>
+                        <Feather name={statusStyle.icon} size={12} color={statusStyle.color} />
+                        <Text style={[styles.statusText, { color: statusStyle.color }]}>
+                            {statusStyle.label}
                         </Text>
                     </View>
-                    <View style={styles.employeeDetails}>
-                        <Text style={styles.employeeName}>{item.employeeName}</Text>
-                        <Text style={styles.employeeId}>ID: {item.employeeId}</Text>
+                </View>
+
+                {/* Body */}
+                <View style={styles.cardBody}>
+                    {/* Date Row */}
+                    <View style={styles.dateRow}>
+                        <Feather name="calendar" size={16} color={colors.textSecondary} />
+                        <Text style={styles.dateLabel}>Date:</Text>
+                        <Text style={styles.dateValue}>{formatDate(item.date)}</Text>
+                    </View>
+
+                    {/* Reason */}
+                    <View style={styles.reasonBlock}>
+                        <Text style={styles.reasonLabel}>Reason</Text>
+                        <Text style={styles.reasonText} numberOfLines={3}>
+                            {item.reason}
+                        </Text>
                     </View>
                 </View>
-                <View
-                    style={[
-                        styles.statusBadge,
-                        { backgroundColor: getStatusBgColor(item.status) },
-                    ]}
-                >
-                    <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                        {item.status}
-                    </Text>
-                </View>
-                <TouchableOpacity
-                    style={styles.historyIconButton}
-                    onPress={() => handleViewHistory(item)}
-                >
-                    <Feather name="clock" size={16} color="#4A90FF" />
-                </TouchableOpacity>
-            </View>
 
-            {/* Punch Type Badge */}
-            <View
-                style={[
-                    styles.punchTypeBadge,
-                    { backgroundColor: item.punchType === 'In' ? '#4CAF5015' : '#FF525215' },
-                ]}
-            >
-                <Feather
-                    name={item.punchType === 'In' ? 'log-in' : 'log-out'}
-                    size={16}
-                    color={item.punchType === 'In' ? '#4CAF50' : '#FF5252'}
-                />
-                <Text style={[styles.punchTypeText, { color: item.punchType === 'In' ? '#4CAF50' : '#FF5252' }]}>
-                    Punch {item.punchType}
-                </Text>
-            </View>
-
-            {/* Date Info */}
-            <View style={styles.infoRow}>
-                <View style={styles.infoItem}>
-                    <Feather name="calendar" size={16} color="#666" />
-                    <Text style={styles.infoLabel}>Date:</Text>
-                    <Text style={styles.infoValue}>{formatDate(item.date)}</Text>
-                </View>
-            </View>
-
-            {/* Reason */}
-            <View style={styles.reasonContainer}>
-                <Text style={styles.reasonLabel}>Reason:</Text>
-                <Text style={styles.reasonText}>{item.reason}</Text>
-            </View>
-
-            {/* Workflow Approvers */}
-            {item.workflowApprovers && item.workflowApprovers.length > 0 && (
-                <View style={styles.workflowContainer}>
-                    <Text style={styles.workflowLabel}>Approvers:</Text>
-                    <View style={styles.approversList}>
-                        {item.workflowApprovers.map((approver, index) => (
-                            <View key={index} style={styles.approverChip}>
-                                <Feather name="user-check" size={12} color="#4A90FF" />
-                                <Text style={styles.approverText}>{approver}</Text>
+                {/* Footer */}
+                <View style={styles.cardFooter}>
+                    <View style={styles.approverSection}>
+                        <View style={styles.approverInfo}>
+                            <Text style={styles.approverLabel}>{getApproverLabel()}</Text>
+                            <View style={styles.approverNameRow}>
+                                <Feather name="user" size={14} color={statusStyle.color} />
+                                <Text style={[styles.approverNameText, { color: statusStyle.color }]}>
+                                    {approverName}
+                                </Text>
                             </View>
-                        ))}
+                        </View>
                     </View>
-                </View>
-            )}
 
-            {/* Action Buttons (only for pending/awaiting requests) */}
-            {(item.status === 'Pending' || item.status === 'Awaiting Approve') && (
-                <View style={styles.actionButtons}>
-                    <TouchableOpacity
-                        style={[styles.actionButton, styles.approveButton]}
-                        onPress={() => handleApprove(item.id.toString())}
-                        activeOpacity={0.7}
+                    {/* Workflow Button */}
+                    <Pressable
+                        style={({ pressed }) => [styles.historyButton, pressed && { opacity: 0.7 }]}
+                        onPress={() => handleViewHistory(item)}
                     >
-                        <Feather name="check-circle" size={18} color="#FFF" />
-                        <Text style={styles.actionButtonText}>Approve</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.actionButton, styles.rejectButton]}
-                        onPress={() => handleReject(item.id.toString())}
-                        activeOpacity={0.7}
-                    >
-                        <Feather name="x-circle" size={18} color="#FFF" />
-                        <Text style={styles.actionButtonText}>Reject</Text>
-                    </TouchableOpacity>
+                        <Feather name="git-merge" size={16} color={colors.primary} />
+                        <Text style={styles.historyButtonText}>Workflow</Text>
+                    </Pressable>
                 </View>
-            )}
-        </View>
-    );
+            </View>
+        );
+    };
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Error State */}
-            {error && !isLoading && (
-                <View style={styles.errorBanner}>
-                    <Feather name="alert-circle" size={16} color="#FF5252" />
-                    <Text style={styles.errorText}>{error}</Text>
-                    <TouchableOpacity onPress={() => fetchMissPunchRequests(false)}>
-                        <Feather name="refresh-cw" size={16} color="#4A90FF" />
-                    </TouchableOpacity>
+            {/* Header */}
+            <View style={styles.header}>
+                <Text style={styles.screenTitle}>Miss Punch Requests</Text>
+                <View style={styles.headerRight}>
+                    <Text style={styles.totalCount}>{filteredRequests.length} Records</Text>
                 </View>
+            </View>
+
+            {/* Type Filter Chips */}
+            <View style={styles.filterScrollContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                    {renderFilterChip('All', 'All', 'layers')}
+                    {renderFilterChip('Punch In', 'PunchIn', 'log-in')}
+                    {renderFilterChip('Punch Out', 'PunchOut', 'log-out')}
+                </ScrollView>
+            </View>
+
+            {/* Status Filter Chips */}
+            <View style={styles.filterScrollContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                    {renderStatusChip('All Status', 'All', 'filter')}
+                    {renderStatusChip('Pending', 'Pending', 'clock')}
+                    {renderStatusChip('Approved', 'Approved', 'check-circle')}
+                    {renderStatusChip('Rejected', 'Rejected', 'x-circle')}
+                </ScrollView>
+            </View>
+
+            {/* Content */}
+            {isLoading && !isRefreshing ? (
+                <View style={styles.centerContainer}>
+                    <Feather name="loader" size={24} color={colors.primary} />
+                    <Text style={styles.loadingText}>Loading requests...</Text>
+                </View>
+            ) : filteredRequests.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                    <View style={styles.emptyIconCircle}>
+                        <Feather name="inbox" size={40} color={colors.textSecondary} />
+                    </View>
+                    <Text style={styles.emptyTitle}>No Requests Found</Text>
+                    <Text style={styles.emptySubtitle}>
+                        No miss punch requests match the selected filters.
+                    </Text>
+                </View>
+            ) : (
+                <FlatList
+                    data={filteredRequests}
+                    renderItem={renderMissPunchRequestItem}
+                    keyExtractor={(item) => item.id.toString()}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    refreshing={isRefreshing}
+                    onRefresh={() => fetchMissPunchRequests(true)}
+                    ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
+                />
             )}
-
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={isRefreshing}
-                        onRefresh={handleRefresh}
-                        colors={['#4A90FF']}
-                        tintColor="#4A90FF"
-                    />
-                }
-            >
-                {/* Filter Tabs */}
-                <View style={styles.filterContainer}>
-                    <Text style={styles.sectionTitle}>Filter by Punch Type</Text>
-                    <View style={styles.filterRow}>
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'all' && styles.filterChipActive,
-                            ]}
-                            onPress={() => setSelectedFilter('all')}
-                        >
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'all' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                All Requests
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'punchIn' && styles.filterChipActive,
-                                selectedFilter === 'punchIn' && { backgroundColor: '#4CAF50', borderColor: '#4CAF50' },
-                            ]}
-                            onPress={() => setSelectedFilter('punchIn')}
-                        >
-                            <Feather
-                                name="log-in"
-                                size={14}
-                                color={selectedFilter === 'punchIn' ? '#FFF' : '#666'}
-                                style={{ marginRight: 4 }}
-                            />
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'punchIn' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                Punch In
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'punchOut' && styles.filterChipActive,
-                                selectedFilter === 'punchOut' && { backgroundColor: '#FF5252', borderColor: '#FF5252' },
-                            ]}
-                            onPress={() => setSelectedFilter('punchOut')}
-                        >
-                            <Feather
-                                name="log-out"
-                                size={14}
-                                color={selectedFilter === 'punchOut' ? '#FFF' : '#666'}
-                                style={{ marginRight: 4 }}
-                            />
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'punchOut' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                Punch Out
-                            </Text>
-                        </Pressable>
-                    </View>
-                </View>
-
-                {/* Requests List */}
-                <View style={styles.requestsContainer}>
-                    <View style={styles.requestsHeader}>
-                        <Text style={styles.sectionTitle}>Miss Punch Requests</Text>
-                        {!isLoading && <Text style={styles.recordCount}>{filteredRequests.length} records</Text>}
-                    </View>
-
-                    {isLoading ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#4A90FF" />
-                            <Text style={styles.loadingText}>Loading miss punch requests...</Text>
-                        </View>
-                    ) : filteredRequests.length > 0 ? (
-                        <FlatList
-                            data={filteredRequests}
-                            renderItem={renderMissPunchRequestItem}
-                            keyExtractor={(item) => item.id.toString()}
-                            scrollEnabled={false}
-                            contentContainerStyle={styles.listContent}
-                            ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                        />
-                    ) : (
-                        <View style={styles.emptyState}>
-                            <Feather name="inbox" size={48} color="#CCC" />
-                            <Text style={styles.emptyStateText}>No miss punch requests found</Text>
-                            <Text style={styles.emptyStateSubtext}>
-                                There are no {selectedFilter === 'all' ? '' : selectedFilter === 'punchIn' ? 'punch in' : 'punch out'} miss punch requests at the moment
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            </ScrollView>
 
             {/* Approval History Modal */}
             {selectedRequest && (
@@ -460,369 +340,298 @@ const ViewAllMisspunch = () => {
                     visible={historyModalVisible}
                     onClose={() => setHistoryModalVisible(false)}
                     tranId={selectedRequest.id}
-                    progId={4} // Guessing 4 for Miss Punch. Update if needed.
-                    employeeName={selectedRequest.employeeName || 'Unknown'}
+                    progId={4}
+                    employeeName={selectedRequest.employeeName}
                 />
             )}
         </SafeAreaView>
     );
 };
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F5F7FA',
-    },
-    scrollContent: {
-        padding: 16,
-        paddingBottom: 32,
-    },
+const createStyles = (colors: ThemeColors) =>
+    StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: colors.background,
+        },
 
-    // Section Title
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 12,
-    },
+        header: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingHorizontal: 20,
+            paddingTop: 10,
+            paddingBottom: 12,
+        },
+        screenTitle: {
+            fontSize: 28,
+            fontWeight: '800',
+            color: colors.text,
+            letterSpacing: -0.5,
+        },
+        headerRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        totalCount: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.textSecondary,
+            backgroundColor: colors.card,
+            paddingHorizontal: 14,
+            paddingVertical: 7,
+            borderRadius: 18,
+            overflow: 'hidden',
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
 
-    // Filter Chips
-    filterContainer: {
-        marginBottom: 24,
-    },
-    filterRow: {
-        flexDirection: 'row',
-        gap: 12,
-        flexWrap: 'wrap',
-    },
-    filterChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 18,
-        paddingVertical: 12,
-        borderRadius: 12,
-        backgroundColor: '#FFF',
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-        elevation: 4,
-    },
-    filterChipActive: {
-        backgroundColor: '#4A90FF',
-        borderColor: '#4A90FF',
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    filterChipText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#666',
-    },
-    filterChipTextActive: {
-        color: '#FFF',
-        fontWeight: '700',
-    },
+        centerContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 12,
+        },
+        loadingText: {
+            color: colors.textSecondary,
+            fontSize: 15,
+            fontWeight: '600',
+        },
 
-    // Requests Container
-    requestsContainer: {
-        marginBottom: 20,
-    },
-    requestsHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    recordCount: {
-        fontSize: 13,
-        color: '#999',
-        fontWeight: '600',
-    },
-    listContent: {
-        paddingBottom: 16,
-    },
+        filterScrollContainer: {
+            paddingBottom: 10,
+        },
+        filterRow: {
+            paddingHorizontal: 20,
+            gap: 10,
+        },
+        filterChip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: colors.shadow,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 4,
+            elevation: 2,
+        },
+        filterChipActive: {
+            backgroundColor: colors.primary,
+            borderColor: colors.primary,
+        },
+        filterChipText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.textSecondary,
+        },
+        filterChipTextActive: {
+            color: '#FFF',
+        },
 
-    // Request Card
-    requestCard: {
-        backgroundColor: '#FFF',
-        borderRadius: 16,
-        padding: 18,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 2,
-        borderWidth: 1,
-        borderColor: '#F0F0F0',
-    },
+        listContent: {
+            paddingHorizontal: 20,
+            paddingBottom: 40,
+        },
+        listSeparator: {
+            height: 14,
+        },
 
-    // Request Header
-    requestHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 14,
-    },
-    employeeInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 14,
-        flex: 1,
-    },
-    avatarContainer: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    avatarText: {
-        fontSize: 17,
-        fontWeight: '700',
-    },
-    employeeDetails: {
-        flex: 1,
-    },
-    employeeName: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#333',
-        marginBottom: 3,
-    },
-    employeeId: {
-        fontSize: 13,
-        color: '#999',
-        fontWeight: '600',
-    },
+        requestCard: {
+            backgroundColor: colors.card,
+            borderRadius: 18,
+            padding: 18,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: colors.shadow,
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.1,
+            shadowRadius: 16,
+            elevation: 5,
+        },
 
-    // Status Badge
-    statusBadge: {
-        width: '35%',
-        borderRadius: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '700',
-        width: '100%',
-        textAlign: 'center',
-        paddingVertical: 7,
-        paddingHorizontal: 24,
-        textTransform: 'uppercase',
-        letterSpacing: 0.6,
-    },
-    historyIconButton: {
-        marginLeft: 8,
-        padding: 8,
-        borderRadius: 20,
-        backgroundColor: '#E3F2FD',
-    },
+        cardHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: 16,
+        },
+        headerLeft: {
+            flexDirection: 'row',
+            gap: 12,
+            alignItems: 'center',
+            flex: 1,
+        },
+        headerTextContainer: {
+            flex: 1,
+        },
+        avatarContainer: {
+            width: 50,
+            height: 50,
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        employeeName: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: colors.text,
+            marginBottom: 3,
+        },
+        employeeId: {
+            fontSize: 12,
+            color: colors.textSecondary,
+            fontWeight: '500',
+        },
+        statusBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 20,
+        },
+        statusText: {
+            fontSize: 11,
+            fontWeight: '700',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+        },
 
-    // Punch Type Badge
-    punchTypeBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 10,
-        alignSelf: 'flex-start',
-        marginBottom: 14,
-    },
-    punchTypeText: {
-        fontSize: 14,
-        fontWeight: '700',
-    },
+        cardBody: {
+            gap: 14,
+            marginBottom: 16,
+        },
 
-    // Info Row
-    infoRow: {
-        flexDirection: 'row',
-        gap: 16,
-        marginBottom: 14,
-    },
-    infoItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        flex: 1,
-    },
-    infoLabel: {
-        fontSize: 12,
-        color: '#999',
-        fontWeight: '600',
-    },
-    infoValue: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#333',
-    },
+        dateRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.background,
+            padding: 16,
+            borderRadius: 14,
+            gap: 10,
+        },
+        dateLabel: {
+            fontSize: 12,
+            color: colors.textSecondary,
+            fontWeight: '600',
+        },
+        dateValue: {
+            fontSize: 15,
+            color: colors.text,
+            fontWeight: '700',
+        },
 
-    // Reason
-    reasonContainer: {
-        backgroundColor: '#F8F9FA',
-        borderRadius: 10,
-        padding: 14,
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: '#E8EAED',
-    },
-    reasonLabel: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: '#666',
-        marginBottom: 6,
-    },
-    reasonText: {
-        fontSize: 14,
-        color: '#333',
-        lineHeight: 22,
-        fontWeight: '500',
-    },
+        reasonBlock: {
+            backgroundColor: `${colors.textSecondary}08`,
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            borderRadius: 10,
+            borderLeftWidth: 3,
+            borderLeftColor: colors.primary,
+        },
+        reasonLabel: {
+            fontSize: 11,
+            fontWeight: '700',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 6,
+        },
+        reasonText: {
+            fontSize: 14,
+            color: colors.text,
+            lineHeight: 20,
+        },
 
-    // Submitted Info
-    submittedInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 14,
-    },
-    submittedText: {
-        fontSize: 12,
-        color: '#999',
-        fontWeight: '600',
-    },
+        cardFooter: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: 14,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+        },
 
-    // Action Buttons
-    actionButtons: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginTop: 6,
-    },
-    actionButton: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
-        paddingVertical: 14,
-        borderRadius: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
-        width: '60%',
-    },
-    approveButton: {
-        backgroundColor: '#4CAF50',
-    },
-    rejectButton: {
-        backgroundColor: '#FF5252',
-    },
-    actionButtonText: {
-        width: '60%',
-        textAlign: 'center',
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#ffffffff',
-        letterSpacing: 0.5,
-    },
+        approverSection: {
+            flex: 1,
+        },
+        approverInfo: {
+            gap: 4,
+        },
+        approverLabel: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+        },
+        approverNameRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        approverNameText: {
+            fontSize: 15,
+            fontWeight: '700',
+        },
 
-    // Empty State
-    emptyState: {
-        alignItems: 'center',
-        paddingVertical: 60,
-        gap: 14,
-    },
-    emptyStateText: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#999',
-    },
-    emptyStateSubtext: {
-        fontSize: 14,
-        color: '#BBB',
-        textAlign: 'center',
-        paddingHorizontal: 40,
-        lineHeight: 22,
-        fontWeight: '500',
-    },
+        historyButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            backgroundColor: `${colors.primary}10`,
+            borderRadius: 10,
+        },
+        historyButtonText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.primary,
+        },
 
-    // Loading State
-    loadingContainer: {
-        paddingVertical: 60,
-        alignItems: 'center',
-        gap: 16,
-    },
-    loadingText: {
-        fontSize: 15,
-        color: '#666',
-        fontWeight: '600',
-    },
-
-    // Workflow Approvers
-    workflowContainer: {
-        backgroundColor: '#F0F4FF',
-        borderRadius: 10,
-        padding: 14,
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: '#D6E4FF',
-    },
-    workflowLabel: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: '#4A90FF',
-        marginBottom: 10,
-    },
-    approversList: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    approverChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: '#FFF',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#4A90FF',
-    },
-    approverText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#4A90FF',
-    },
-
-    // Error Banner
-    errorBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        backgroundColor: '#FFEBEE',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#FFCDD2',
-    },
-    errorText: {
-        flex: 1,
-        fontSize: 13,
-        color: '#FF5252',
-        fontWeight: '500',
-    },
-});
+        emptyContainer: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 40,
+            paddingTop: 60,
+            gap: 14,
+        },
+        emptyIconCircle: {
+            width: 110,
+            height: 110,
+            borderRadius: 55,
+            backgroundColor: colors.card,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+            shadowColor: colors.shadow,
+            shadowOpacity: 0.12,
+            shadowRadius: 24,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 6,
+        },
+        emptyTitle: {
+            fontSize: 22,
+            fontWeight: '700',
+            color: colors.text,
+            textAlign: 'center',
+        },
+        emptySubtitle: {
+            fontSize: 15,
+            color: colors.textSecondary,
+            textAlign: 'center',
+            lineHeight: 22,
+            maxWidth: '80%',
+        },
+    });
 
 export default ViewAllMisspunch;

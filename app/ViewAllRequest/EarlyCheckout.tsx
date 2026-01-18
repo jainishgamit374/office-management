@@ -5,14 +5,12 @@ import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     FlatList,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,7 +20,7 @@ import ApprovalHistoryModal from '../../components/Admin/ApprovalHistoryModal';
 type FilterType = 'All' | 'Early' | 'Late';
 type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Rejected';
 
-const EarlyCheckoutt = () => {
+const EarlyCheckout = () => {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -30,34 +28,50 @@ const EarlyCheckoutt = () => {
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
     const [requests, setRequests] = useState<EarlyLatePunchDetails[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     // History Modal State
     const [historyModalVisible, setHistoryModalVisible] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState<EarlyLatePunchDetails | null>(null);
 
     // Fetch requests from API
-    const fetchRequests = useCallback(async () => {
+    const fetchRequests = useCallback(async (isRefresh = false) => {
         try {
-            setIsLoading(true);
-            setError(null);
+            if (isRefresh) {
+                setIsRefreshing(true);
+            } else {
+                setIsLoading(true);
+            }
+
+            console.log('🔍 Fetching early/late requests with filters:', {
+                checkoutType: selectedFilter,
+                status: statusFilter,
+            });
+
             const response = await getEarlyLatePunchList({
                 checkoutType: selectedFilter,
                 status: statusFilter,
                 sortBy: 'CreatedDate',
                 sortOrder: 'desc',
             });
-            setRequests(response.data);
-            console.log('✅ Fetched', response.data.length, 'requests');
+
+            console.log('📦 API Response:', {
+                status: response.status,
+                dataLength: response.data?.length || 0,
+                data: response.data,
+            });
+
+            setRequests(response.data || []);
         } catch (err: any) {
-            console.error('Failed to fetch requests:', err);
-            setError(err.message || 'Failed to load requests');
+            console.error('❌ Failed to fetch requests:', err);
+            Alert.alert('Error', err.message || 'Failed to load requests');
+            setRequests([]);
         } finally {
             setIsLoading(false);
+            setIsRefreshing(false);
         }
     }, [selectedFilter, statusFilter]);
 
-    // Fetch data on mount and when filters change
     useFocusEffect(
         useCallback(() => {
             fetchRequests();
@@ -65,7 +79,6 @@ const EarlyCheckoutt = () => {
     );
 
     const formatDate = (dateString: string) => {
-        // Handle both "2025-01-10 04:00:00 PM" and ISO format
         const date = new Date(dateString);
         return date.toLocaleDateString('en-US', {
             day: '2-digit',
@@ -76,70 +89,24 @@ const EarlyCheckoutt = () => {
 
     const formatTime = (dateTimeString: string | null | undefined) => {
         if (!dateTimeString) return 'N/A';
-        // Extract time from "2025-01-10 04:00:00 PM" format
         const timePart = dateTimeString.split(' ').slice(1).join(' ');
         return timePart || dateTimeString;
     };
 
-    const getInitials = (name: string | null | undefined) => {
-        if (!name) return 'NA';
-        return name.split(' ').map((n) => n[0]).join('').toUpperCase();
-    };
+    const getStatusStyle = (status: string) => {
+        const statusLower = status?.toLowerCase() || '';
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'Pending':
-                return '#FF9800';
-            case 'Approved':
-                return '#4CAF50';
-            case 'Rejected':
-                return '#FF5252';
-            default:
-                return '#666';
+        if (statusLower.includes('pending') || statusLower.includes('await')) {
+            return { color: '#F57C00', bg: '#FFF3E0', icon: 'clock' as const, label: 'Pending' };
         }
-    };
-
-    const getStatusBgColor = (status: string) => {
-        switch (status) {
-            case 'Pending':
-                return '#FFF3E0';
-            case 'Approved':
-                return '#E8F5E9';
-            case 'Rejected':
-                return '#FFEBEE';
-            default:
-                return '#F0F0F0';
+        if (statusLower.includes('reject') || statusLower.includes('disapprove')) {
+            return { color: '#C62828', bg: '#FFEBEE', icon: 'x-circle' as const, label: 'Rejected' };
         }
-    };
+        if (statusLower.includes('approve')) {
+            return { color: '#2E7D32', bg: '#E8F5E9', icon: 'check-circle' as const, label: 'Approved' };
+        }
 
-    const getRequestTypeColor = (type: string) => {
-        return type === 'Early' ? '#FF9800' : '#4A90FF';
-    };
-
-    const getRequestTypeIcon = (type: string) => {
-        return type === 'Early' ? 'log-out' : 'log-in';
-    };
-
-    const getRequestTypeLabel = (type: string) => {
-        return type === 'Early' ? 'Early Check-Out' : 'Late Check-In';
-    };
-
-    const handleApprove = (requestId: number) => {
-        Alert.alert(
-            'Approve Request',
-            'Are you sure you want to approve this request?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Approve',
-                    onPress: () => {
-                        // TODO: Call API to approve request
-                        Alert.alert('Success', 'Request approved successfully!');
-                        fetchRequests(); // Refresh list
-                    },
-                },
-            ]
-        );
+        return { color: colors.textSecondary, bg: colors.border, icon: 'info' as const, label: status };
     };
 
     const handleReject = (requestId: number) => {
@@ -154,18 +121,9 @@ const EarlyCheckoutt = () => {
                     onPress: async () => {
                         try {
                             setIsLoading(true);
-                            // PROGRAM ID 6 for Early/Late Punch
                             await disapproveAll({ ProgramID: 6, TranID: requestId });
-                            
-                            // Optimistic update
-                            setRequests((prev) =>
-                                prev.map((req) =>
-                                    req.EarlyLatePunchMasterID === requestId ? { ...req, ApprovalStatus: 'Rejected' as any } : req
-                                )
-                            );
-
                             Alert.alert('Success', 'Request rejected successfully!');
-                            fetchRequests(); // Refresh list
+                            fetchRequests();
                         } catch (error: any) {
                             Alert.alert('Error', error.message || 'Failed to reject request');
                         } finally {
@@ -182,252 +140,195 @@ const EarlyCheckoutt = () => {
         setHistoryModalVisible(true);
     };
 
-    const renderRequestItem = ({ item }: { item: EarlyLatePunchDetails }) => (
-        <View style={styles.requestCard}>
-            {/* Header Section */}
-            <View style={styles.requestHeader}>
-                <View style={styles.employeeInfo}>
-                    <View
-                        style={[
-                            styles.avatarContainer,
-                            { backgroundColor: `${getRequestTypeColor(item.CheckoutType)}20` },
-                        ]}
-                    >
-                        <Text style={[styles.avatarText, { color: getRequestTypeColor(item.CheckoutType) }]}>
-                            {getInitials(item.EmployeeName)}
+    const renderFilterChip = (label: string, value: FilterType, icon: string) => {
+        const isActive = selectedFilter === value;
+        return (
+            <Pressable
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => setSelectedFilter(value)}
+            >
+                <Feather name={icon as any} size={14} color={isActive ? '#FFF' : colors.textSecondary} />
+                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                    {label}
+                </Text>
+            </Pressable>
+        );
+    };
+
+    const renderStatusChip = (label: string, value: StatusFilter, icon: string) => {
+        const isActive = statusFilter === value;
+        return (
+            <Pressable
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => setStatusFilter(value)}
+            >
+                <Feather name={icon as any} size={14} color={isActive ? '#FFF' : colors.textSecondary} />
+                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                    {label}
+                </Text>
+            </Pressable>
+        );
+    };
+
+    const renderRequestItem = ({ item }: { item: EarlyLatePunchDetails }) => {
+        // Safe fallbacks for missing fields
+        const approvalStatus = item.ApprovalStatus || 'Pending';
+        const statusStyle = getStatusStyle(approvalStatus);
+        const requestColor = item.CheckoutType === 'Early' ? '#FF9800' : '#4A90FF';
+        const isPending = approvalStatus?.toLowerCase().includes('pending');
+        const isApproved = approvalStatus?.toLowerCase().includes('approve');
+        const isRejected = approvalStatus?.toLowerCase().includes('reject');
+
+        const approverName = item.workflow_list?.[0]?.Approve_name || 'Not Assigned';
+        const employeeName = item.EmployeeName || `Employee #${item.EmployeeID}`;
+        const dateTimeISO = item.DateTimeISO || item.DateTime || item.CreatedDate;
+
+        const getApproverLabel = (): string => {
+            if (isPending) return 'Pending with';
+            if (isApproved) return 'Approved by';
+            if (isRejected) return 'Rejected by';
+            return 'Reviewer';
+        };
+
+        return (
+            <View style={styles.requestCard}>
+                {/* Header */}
+                <View style={styles.cardHeader}>
+                    <View style={styles.headerLeft}>
+                        <View style={[styles.avatarContainer, { backgroundColor: `${requestColor}15` }]}>
+                            <Feather 
+                                name={item.CheckoutType === 'Early' ? 'log-out' : 'log-in'} 
+                                size={20} 
+                                color={requestColor} 
+                            />
+                        </View>
+                        <View style={styles.headerTextContainer}>
+                            <Text style={styles.employeeName}>{employeeName}</Text>
+                            <Text style={styles.employeeId}>
+                                {item.CheckoutType === 'Early' ? 'Early Check-Out' : 'Late Check-In'}
+                            </Text>
+                        </View>
+                    </View>
+
+                    <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg, borderColor: `${statusStyle.color}30`, borderWidth: 1 }]}>
+                        <Feather name={statusStyle.icon} size={12} color={statusStyle.color} />
+                        <Text style={[styles.statusText, { color: statusStyle.color }]}>
+                            {statusStyle.label}
                         </Text>
                     </View>
-                    <View style={styles.employeeDetails}>
-                        <Text style={styles.employeeName}>{item.EmployeeName || 'Unknown Employee'}</Text>
-                        <Text style={styles.employeeId}>{item.EmployeeEmail || 'No email'}</Text>
-                    </View>
-                </View>
-                <View style={styles.headerActions}>
-                    <View
-                        style={[
-                            styles.statusBadge,
-                            { backgroundColor: getStatusBgColor(item.ApprovalStatus) },
-                        ]}
-                    >
-                        <Text style={[styles.statusText, { color: getStatusColor(item.ApprovalStatus) }]}>
-                            {item.ApprovalStatus}
-                        </Text>
-                    </View>
-                    <TouchableOpacity
-                        style={styles.historyIconButton}
-                        onPress={() => handleViewHistory(item)}
-                    >
-                        <Feather name="clock" size={16} color="#4A90FF" />
-                        <Text style={styles.historyLinkText}>History</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-
-            {/* Request Type Badge */}
-            <View
-                style={[
-                    styles.requestTypeBadge,
-                    { backgroundColor: `${getRequestTypeColor(item.CheckoutType)}15` },
-                ]}
-            >
-                <Feather
-                    name={getRequestTypeIcon(item.CheckoutType) as any}
-                    size={16}
-                    color={getRequestTypeColor(item.CheckoutType)}
-                />
-                <Text style={[styles.requestTypeText, { color: getRequestTypeColor(item.CheckoutType) }]}>
-                    {getRequestTypeLabel(item.CheckoutType)}
-                </Text>
-            </View>
-
-            {/* Date & Time Info */}
-            <View style={styles.infoRow}>
-                <View style={styles.infoItem}>
-                    <Feather name="calendar" size={16} color="#666" />
-                    <Text style={styles.infoLabel}>Date:</Text>
-                    <Text style={styles.infoValue}>{formatDate(item.DateTimeISO)}</Text>
-                </View>
-                <View style={styles.infoItem}>
-                    <Feather name="clock" size={16} color="#666" />
-                    <Text style={styles.infoLabel}>Time:</Text>
-                    <Text style={styles.infoValue}>{formatTime(item.DateTime)}</Text>
-                </View>
-            </View>
-
-            {/* Reason */}
-            <View style={styles.reasonContainer}>
-                <Text style={styles.reasonLabel}>Reason:</Text>
-                <Text style={styles.reasonText}>{item.Reason}</Text>
-            </View>
-
-            {/* Submitted Info */}
-            <View style={styles.submittedInfo}>
-                <Feather name="send" size={12} color="#999" />
-                <Text style={styles.submittedText}>
-                    Submitted on {formatDate(item.CreatedDateISO)}
-                </Text>
-            </View>
-
-            {/* Workflow Approvers */}
-            {item.workflow_list && item.workflow_list.length > 0 && (
-                <View style={styles.workflowContainer}>
-                    <Text style={styles.workflowLabel}>Approvers:</Text>
-                    <View style={styles.approversList}>
-                        {item.workflow_list.map((approver, index) => (
-                            <View key={index} style={styles.approverChip}>
-                                <Feather name="user-check" size={12} color="#4A90FF" />
-                                <Text style={styles.approverText}>{approver.Approve_name}</Text>
-                            </View>
-                        ))}
-                    </View>
-                </View>
-            )}
-
-            {/* Action Buttons (only for pending requests and if user can edit) */}
-            {item.ApprovalStatus === 'Pending' && item.CanEdit && (
-                <View style={styles.actionButtons}>
-                    <TouchableOpacity
-                        style={[styles.actionButton, styles.approveButton]}
-                        onPress={() => handleApprove(item.EarlyLatePunchMasterID)}
-                        activeOpacity={0.7}
-                    >
-                        <Feather name="check-circle" size={18} color="#FFF" />
-                        <Text style={styles.actionButtonText}>Approve</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.actionButton, styles.rejectButton]}
-                        onPress={() => handleReject(item.EarlyLatePunchMasterID)}
-                        activeOpacity={0.7}
-                    >
-                        <Feather name="x-circle" size={18} color="#FFF" />
-                        <Text style={styles.actionButtonText}>Reject</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
-        </View>
-    );
-
-    return (
-        <SafeAreaView style={styles.container}>
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-            >
-                {/* Filter Tabs */}
-                <View style={styles.filterContainer}>
-                    <Text style={styles.sectionTitle}>Filter by Type</Text>
-                    <View style={styles.filterRow}>
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'All' && styles.filterChipActive,
-                            ]}
-                            onPress={() => setSelectedFilter('All')}
-                        >
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'All' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                All Requests
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'Early' && styles.filterChipActive,
-                                selectedFilter === 'Early' && { backgroundColor: '#FF9800', borderColor: '#FF9800' },
-                            ]}
-                            onPress={() => setSelectedFilter('Early')}
-                        >
-                            <Feather
-                                name="log-out"
-                                size={14}
-                                color={selectedFilter === 'Early' ? '#FFF' : '#666'}
-                                style={{ marginRight: 4 }}
-                            />
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'Early' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                Early Check-Out
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            style={[
-                                styles.filterChip,
-                                selectedFilter === 'Late' && styles.filterChipActive,
-                            ]}
-                            onPress={() => setSelectedFilter('Late')}
-                        >
-                            <Feather
-                                name="log-in"
-                                size={14}
-                                color={selectedFilter === 'Late' ? '#FFF' : '#666'}
-                                style={{ marginRight: 4 }}
-                            />
-                            <Text
-                                style={[
-                                    styles.filterChipText,
-                                    selectedFilter === 'Late' && styles.filterChipTextActive,
-                                ]}
-                            >
-                                Late Check-In
-                            </Text>
-                        </Pressable>
-                    </View>
                 </View>
 
-                {/* Requests List */}
-                <View style={styles.requestsContainer}>
-                    <View style={styles.requestsHeader}>
-                        <Text style={styles.sectionTitle}>Requests</Text>
-                        <Text style={styles.recordCount}>{requests.length} records</Text>
-                    </View>
-
-                    {isLoading ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color="#4A90FF" />
-                            <Text style={styles.loadingText}>Loading requests...</Text>
+                {/* Body */}
+                <View style={styles.cardBody}>
+                    {/* Date & Time Row */}
+                    <View style={styles.dateRow}>
+                        <View style={styles.dateItem}>
+                            <Feather name="calendar" size={14} color={colors.textSecondary} />
+                            <Text style={styles.dateLabel}>Date:</Text>
+                            <Text style={styles.dateValue}>{formatDate(dateTimeISO)}</Text>
                         </View>
-                    ) : error ? (
-                        <View style={styles.emptyState}>
-                            <Feather name="alert-circle" size={48} color="#FF5252" />
-                            <Text style={styles.emptyStateText}>Error loading requests</Text>
-                            <Text style={styles.emptyStateSubtext}>{error}</Text>
-                            <TouchableOpacity
-                                style={styles.retryButton}
-                                onPress={fetchRequests}
-                            >
-                                <Feather name="refresh-cw" size={16} color="#4A90FF" />
-                                <Text style={styles.retryButtonText}>Retry</Text>
-                            </TouchableOpacity>
+                        <View style={styles.dateItem}>
+                            <Feather name="clock" size={14} color={colors.textSecondary} />
+                            <Text style={styles.dateLabel}>Time:</Text>
+                            <Text style={styles.dateValue}>{formatTime(item.DateTime)}</Text>
                         </View>
-                    ) : requests.length > 0 ? (
-                        <FlatList
-                            data={requests}
-                            renderItem={renderRequestItem}
-                            keyExtractor={(item) => item.EarlyLatePunchMasterID.toString()}
-                            scrollEnabled={false}
-                            contentContainerStyle={styles.listContent}
-                            ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
-                        />
-                    ) : (
-                        <View style={styles.emptyState}>
-                            <Feather name="inbox" size={48} color="#CCC" />
-                            <Text style={styles.emptyStateText}>No requests found</Text>
-                            <Text style={styles.emptyStateSubtext}>
-                                There are no {selectedFilter === 'All' ? '' : selectedFilter === 'Early' ? 'early check-out' : 'late check-in'} requests at the moment
+                    </View>
+
+                    {/* Reason */}
+                    {item.Reason && (
+                        <View style={styles.reasonBlock}>
+                            <Text style={styles.reasonLabel}>Reason</Text>
+                            <Text style={styles.reasonText} numberOfLines={3}>
+                                {item.Reason}
                             </Text>
                         </View>
                     )}
                 </View>
-            </ScrollView>
+
+                {/* Footer */}
+                <View style={styles.cardFooter}>
+                    <View style={styles.approverSection}>
+                        <View style={styles.approverInfo}>
+                            <Text style={styles.approverLabel}>{getApproverLabel()}</Text>
+                            <View style={styles.approverNameRow}>
+                                <Feather name="user" size={14} color={statusStyle.color} />
+                                <Text style={[styles.approverNameText, { color: statusStyle.color }]}>
+                                    {approverName}
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Workflow Button */}
+                    <Pressable
+                        style={({ pressed }) => [styles.historyButton, pressed && { opacity: 0.7 }]}
+                        onPress={() => handleViewHistory(item)}
+                    >
+                        <Feather name="git-merge" size={16} color={colors.primary} />
+                        <Text style={styles.historyButtonText}>Workflow</Text>
+                    </Pressable>
+                </View>
+            </View>
+        );
+    };
+
+    return (
+        <SafeAreaView style={styles.container}>
+            {/* Header */}
+            <View style={styles.header}>
+                <Text style={styles.screenTitle}>Early/Late Requests</Text>
+                <View style={styles.headerRight}>
+                    <Text style={styles.totalCount}>{requests.length} Records</Text>
+                </View>
+            </View>
+
+            {/* Type Filter Chips */}
+            <View style={styles.filterScrollContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                    {renderFilterChip('All', 'All', 'layers')}
+                    {renderFilterChip('Early Check-Out', 'Early', 'log-out')}
+                    {renderFilterChip('Late Check-In', 'Late', 'log-in')}
+                </ScrollView>
+            </View>
+
+            {/* Status Filter Chips */}
+            <View style={styles.filterScrollContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                    {renderStatusChip('All Status', 'All', 'filter')}
+                    {renderStatusChip('Pending', 'Pending', 'clock')}
+                    {renderStatusChip('Approved', 'Approved', 'check-circle')}
+                    {renderStatusChip('Rejected', 'Rejected', 'x-circle')}
+                </ScrollView>
+            </View>
+
+            {/* Content */}
+            {isLoading && !isRefreshing ? (
+                <View style={styles.centerContainer}>
+                    <Feather name="loader" size={24} color={colors.primary} />
+                    <Text style={styles.loadingText}>Loading requests...</Text>
+                </View>
+            ) : requests.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                    <View style={styles.emptyIconCircle}>
+                        <Feather name="inbox" size={40} color={colors.textSecondary} />
+                    </View>
+                    <Text style={styles.emptyTitle}>No Requests Found</Text>
+                    <Text style={styles.emptySubtitle}>
+                        No requests match the selected filters.
+                    </Text>
+                </View>
+            ) : (
+                <FlatList
+                    data={requests}
+                    renderItem={renderRequestItem}
+                    keyExtractor={(item) => item.EarlyLatePunchMasterID.toString()}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    refreshing={isRefreshing}
+                    onRefresh={() => fetchRequests(true)}
+                    ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
+                />
+            )}
 
             {/* Approval History Modal */}
             {selectedRequest && (
@@ -435,7 +336,7 @@ const EarlyCheckoutt = () => {
                     visible={historyModalVisible}
                     onClose={() => setHistoryModalVisible(false)}
                     tranId={selectedRequest.EarlyLatePunchMasterID}
-                    progId={6} // Using 6 for Early/Late Punch based on user info
+                    progId={6}
                     employeeName={selectedRequest.EmployeeName || 'Unknown'}
                 />
             )}
@@ -445,375 +346,294 @@ const EarlyCheckoutt = () => {
 
 const createStyles = (colors: ThemeColors) =>
     StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
-    scrollContent: {
-        padding: 16,
-        paddingBottom: 32,
-    },
+        container: {
+            flex: 1,
+            backgroundColor: colors.background,
+        },
 
-    // Section Title
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: colors.text,
-        marginBottom: 12,
-    },
+        header: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingHorizontal: 20,
+            paddingTop: 10,
+            paddingBottom: 12,
+        },
+        screenTitle: {
+            fontSize: 28,
+            fontWeight: '800',
+            color: colors.text,
+            letterSpacing: -0.5,
+        },
+        headerRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        totalCount: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.textSecondary,
+            backgroundColor: colors.card,
+            paddingHorizontal: 14,
+            paddingVertical: 7,
+            borderRadius: 18,
+            overflow: 'hidden',
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
 
-    // Filter Chips
-    filterContainer: {
-        marginBottom: 24,
-    },
-    filterRow: {
-        flexDirection: 'row',
-        gap: 12,
-        flexWrap: 'wrap',
-    },
-    filterChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 18,
-        paddingVertical: 12,
-        borderRadius: 12,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        shadowColor: colors.shadow,
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-        elevation: 4,
-    },
-    filterChipActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    filterChipText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: colors.textSecondary,
-    },
-    filterChipTextActive: {
-        color: '#FFF',
-        fontWeight: '700',
-    },
+        centerContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 12,
+        },
+        loadingText: {
+            color: colors.textSecondary,
+            fontSize: 15,
+            fontWeight: '600',
+        },
 
-    // Requests Container
-    requestsContainer: {
-        marginBottom: 20,
-    },
-    requestsHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    recordCount: {
-        fontSize: 13,
-        color: colors.textSecondary,
-        fontWeight: '600',
-    },
-    listContent: {
-        paddingBottom: 16,
-    },
+        filterScrollContainer: {
+            paddingBottom: 10,
+        },
+        filterRow: {
+            paddingHorizontal: 20,
+            gap: 10,
+        },
+        filterChip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: colors.shadow,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 4,
+            elevation: 2,
+        },
+        filterChipActive: {
+            backgroundColor: colors.primary,
+            borderColor: colors.primary,
+        },
+        filterChipText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.textSecondary,
+        },
+        filterChipTextActive: {
+            color: '#FFF',
+        },
 
-    // Request Card
-    requestCard: {
-        backgroundColor: colors.card,
-        borderRadius: 16,
-        padding: 18,
-        shadowColor: colors.shadow,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 2,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
+        listContent: {
+            paddingHorizontal: 20,
+            paddingBottom: 40,
+        },
+        listSeparator: {
+            height: 14,
+        },
 
-    // Request Header
-    requestHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 14,
-    },
-    employeeInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 14,
-        flex: 1,
-    },
-    avatarContainer: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    avatarText: {
-        fontSize: 17,
-        fontWeight: '700',
-    },
-    employeeDetails: {
-        flex: 1,
-    },
-    employeeName: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: colors.text,
-        marginBottom: 3,
-    },
-    employeeId: {
-        fontSize: 13,
-        color: colors.textSecondary,
-        fontWeight: '600',
-    },
+        requestCard: {
+            backgroundColor: colors.card,
+            borderRadius: 18,
+            padding: 18,
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: colors.shadow,
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.1,
+            shadowRadius: 16,
+            elevation: 5,
+        },
 
-    // Header Actions
-    headerActions: {
-        alignItems: 'flex-end',
-        gap: 6,
-    },
-    historyIconButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingVertical: 4,
-        paddingHorizontal: 8,
-        borderRadius: 6,
-        backgroundColor: '#E3F2FD',
-    },
-    historyLinkText: {
-        fontSize: 11,
-        color: '#4A90FF',
-        fontWeight: '700',
-    },
+        cardHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: 16,
+        },
+        headerLeft: {
+            flexDirection: 'row',
+            gap: 12,
+            alignItems: 'center',
+            flex: 1,
+        },
+        headerTextContainer: {
+            flex: 1,
+        },
+        avatarContainer: {
+            width: 50,
+            height: 50,
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        employeeName: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: colors.text,
+            marginBottom: 3,
+        },
+        employeeId: {
+            fontSize: 12,
+            color: colors.textSecondary,
+            fontWeight: '500',
+        },
+        statusBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 20,
+        },
+        statusText: {
+            fontSize: 11,
+            fontWeight: '700',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+        },
 
-    // Status Badge
-    statusBadge: {
-        width: '35%',
-        borderRadius: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '700',
-        width: '100%',
-        textAlign: 'center',
-        paddingVertical: 7,
-        paddingHorizontal: 24,
-        textTransform: 'uppercase',
-        letterSpacing: 0.6,
-    },
+        cardBody: {
+            gap: 14,
+            marginBottom: 16,
+        },
 
-    // Request Type Badge
-    requestTypeBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 10,
-        alignSelf: 'flex-start',
-        marginBottom: 14,
-    },
-    requestTypeText: {
-        fontSize: 14,
-        fontWeight: '700',
-    },
+        dateRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.background,
+            padding: 16,
+            borderRadius: 14,
+            gap: 16,
+        },
+        dateItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            flex: 1,
+        },
+        dateLabel: {
+            fontSize: 11,
+            color: colors.textSecondary,
+            fontWeight: '600',
+        },
+        dateValue: {
+            fontSize: 13,
+            color: colors.text,
+            fontWeight: '700',
+        },
 
-    // Info Row
-    infoRow: {
-        flexDirection: 'row',
-        gap: 16,
-        marginBottom: 14,
-    },
-    infoItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        flex: 1,
-    },
-    infoLabel: {
-        fontSize: 12,
-        color: colors.textSecondary,
-        fontWeight: '600',
-    },
-    infoValue: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: colors.text,
-    },
+        reasonBlock: {
+            backgroundColor: `${colors.textSecondary}08`,
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            borderRadius: 10,
+            borderLeftWidth: 3,
+            borderLeftColor: colors.primary,
+        },
+        reasonLabel: {
+            fontSize: 11,
+            fontWeight: '700',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 6,
+        },
+        reasonText: {
+            fontSize: 14,
+            color: colors.text,
+            lineHeight: 20,
+        },
 
-    // Reason
-    reasonContainer: {
-        backgroundColor: colors.background,
-        borderRadius: 10,
-        padding: 14,
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    reasonLabel: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: colors.textSecondary,
-        marginBottom: 6,
-    },
-    reasonText: {
-        fontSize: 14,
-        color: colors.text,
-        lineHeight: 22,
-        fontWeight: '500',
-    },
+        cardFooter: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: 14,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+        },
 
-    // Submitted Info
-    submittedInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 14,
-    },
-    submittedText: {
-        fontSize: 12,
-        color: colors.textSecondary,
-        fontWeight: '600',
-    },
+        approverSection: {
+            flex: 1,
+        },
+        approverInfo: {
+            gap: 4,
+        },
+        approverLabel: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+        },
+        approverNameRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        approverNameText: {
+            fontSize: 15,
+            fontWeight: '700',
+        },
 
-    // Action Buttons
-    actionButtons: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginTop: 6,
-    },
-    actionButton: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
-        paddingVertical: 14,
-        borderRadius: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
-        width: '60%',
-    },
-    approveButton: {
-        backgroundColor: '#4CAF50',
-    },
-    rejectButton: {
-        backgroundColor: '#FF5252',
-    },
-    actionButtonText: {
-        width: '60%',
-        textAlign: 'center',
-        fontSize: 15,
-        fontWeight: '700',
-        color: '#ffffffff',
-        letterSpacing: 0.5,
-    },
+        historyButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            backgroundColor: `${colors.primary}10`,
+            borderRadius: 10,
+        },
+        historyButtonText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.primary,
+        },
 
-    // Empty State
-    emptyState: {
-        alignItems: 'center',
-        paddingVertical: 60,
-        gap: 14,
-    },
-    emptyStateText: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: colors.textSecondary,
-    },
-    emptyStateSubtext: {
-        fontSize: 14,
-        color: colors.textTertiary,
-        textAlign: 'center',
-        paddingHorizontal: 40,
-        lineHeight: 22,
-        fontWeight: '500',
-    },
+        emptyContainer: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 40,
+            paddingTop: 60,
+            gap: 14,
+        },
+        emptyIconCircle: {
+            width: 110,
+            height: 110,
+            borderRadius: 55,
+            backgroundColor: colors.card,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+            shadowColor: colors.shadow,
+            shadowOpacity: 0.12,
+            shadowRadius: 24,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 6,
+        },
+        emptyTitle: {
+            fontSize: 22,
+            fontWeight: '700',
+            color: colors.text,
+            textAlign: 'center',
+        },
+        emptySubtitle: {
+            fontSize: 15,
+            color: colors.textSecondary,
+            textAlign: 'center',
+            lineHeight: 22,
+            maxWidth: '80%',
+        },
+    });
 
-    // Loading
-    loadingContainer: {
-        alignItems: 'center',
-        paddingVertical: 60,
-        gap: 14,
-    },
-    loadingText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: colors.textSecondary,
-    },
-
-    // Workflow Approvers
-    workflowContainer: {
-        backgroundColor: '#F0F4FF',
-        borderRadius: 10,
-        padding: 14,
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: '#D6E4FF',
-    },
-    workflowLabel: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: '#4A90FF',
-        marginBottom: 10,
-    },
-    approversList: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-    },
-    approverChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: '#FFF',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#4A90FF',
-    },
-    approverText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#4A90FF',
-    },
-
-    // Retry Button
-    retryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginTop: 16,
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        backgroundColor: '#E3F2FD',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#4A90FF',
-    },
-    retryButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#4A90FF',
-    },
-});
-
-export default EarlyCheckoutt;
+export default EarlyCheckout;

@@ -13,6 +13,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ApprovalHistoryModal from '../../components/Admin/ApprovalHistoryModal';
 
 // Types
 type FilterType = 'All' | 'casualLeave' | 'sickLeave' | 'privilegeLeave';
@@ -29,6 +30,10 @@ const LeaveApplication = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalRecords, setTotalRecords] = useState(0);
+
+    // History Modal State
+    const [historyModalVisible, setHistoryModalVisible] = useState(false);
+    const [selectedRequest, setSelectedRequest] = useState<LeaveApplicationDetails | LeaveApplicationSummary | null>(null);
 
     // Fetch leave applications from API
     const fetchLeaveApplications = useCallback(async (refresh: boolean = false) => {
@@ -56,7 +61,7 @@ const LeaveApplication = () => {
             // Debug logging
             if (response.data && response.data.length > 0) {
                 console.log('✅ Leave applications loaded:', response.data.length);
-                console.log('� First item approver:', response.data[0].workflow_list?.[0]?.Approve_name || 'None');
+                console.log('📋 First item approver:', response.data[0].workflow_list?.[0]?.Approve_name || 'None');
             }
 
             setApplications(response.data);
@@ -162,6 +167,11 @@ const LeaveApplication = () => {
         return { color: colors.secondary, icon: 'calendar' as const };
     };
 
+    const handleViewHistory = (item: LeaveApplicationDetails | LeaveApplicationSummary) => {
+        setSelectedRequest(item);
+        setHistoryModalVisible(true);
+    };
+
     const renderFilterChip = (label: string, value: FilterType, icon: string) => {
         const isActive = selectedFilter === value;
         return (
@@ -171,6 +181,33 @@ const LeaveApplication = () => {
                     isActive && styles.filterChipActive,
                 ]}
                 onPress={() => setSelectedFilter(value)}
+            >
+                <Feather
+                    name={icon as any}
+                    size={14}
+                    color={isActive ? '#FFF' : colors.textSecondary}
+                />
+                <Text
+                    style={[
+                        styles.filterChipText,
+                        isActive && styles.filterChipTextActive,
+                    ]}
+                >
+                    {label}
+                </Text>
+            </Pressable>
+        );
+    };
+
+    const renderStatusChip = (label: string, value: StatusFilter, icon: string) => {
+        const isActive = statusFilter === value;
+        return (
+            <Pressable
+                style={[
+                    styles.filterChip,
+                    isActive && styles.filterChipActive,
+                ]}
+                onPress={() => setStatusFilter(value)}
             >
                 <Feather
                     name={icon as any}
@@ -204,7 +241,7 @@ const LeaveApplication = () => {
 
         const isCancelled = item.ApprovalStatus?.toLowerCase().includes('cancel');
 
-        // Get approver name from workflow_list (API doesn't return ApprovalUsername directly)
+        // Get approver name from workflow_list
         const approverName = 
             item.workflow_list && item.workflow_list.length > 0 
                 ? item.workflow_list[0].Approve_name 
@@ -296,8 +333,8 @@ const LeaveApplication = () => {
                     {/* Reason */}
                     {item.Reason && (
                         <View style={styles.reasonBlock}>
-                            <Feather name="file-text" size={14} color={colors.textSecondary} />
-                            <Text style={styles.reasonText} numberOfLines={2}>
+                            <Text style={styles.reasonLabel}>Reason</Text>
+                            <Text style={styles.reasonText} numberOfLines={3}>
                                 {item.Reason}
                             </Text>
                         </View>
@@ -315,24 +352,28 @@ const LeaveApplication = () => {
                     )}
                 </View>
 
-                {/* ✅ FOOTER - Only Approver Name (Removed Application ID) */}
+                {/* Footer - Approver + Workflow Button */}
                 <View style={styles.cardFooter}>
                     <View style={styles.approverSection}>
-                        <Feather
-                            name={getApproverIcon() as any}
-                            size={18}
-                            color={statusStyle.color}
-                        />
-                        <Text style={[styles.approverLabel, { color: statusStyle.color }]}>
-                            {getApproverLabel()}:
-                        </Text>
-                        <View style={[styles.approverNameBadge, { backgroundColor: `${statusStyle.color}15`, borderColor: `${statusStyle.color}30` }]}>
-                            <Feather name="user" size={14} color={statusStyle.color} />
-                            <Text style={[styles.approverNameText, { color: statusStyle.color }]}>
-                                {approverName}
-                            </Text>
+                        <View style={styles.approverInfo}>
+                            <Text style={styles.approverLabel}>{getApproverLabel()}</Text>
+                            <View style={styles.approverNameRow}>
+                                <Feather name="user" size={14} color={statusStyle.color} />
+                                <Text style={[styles.approverNameText, { color: statusStyle.color }]}>
+                                    {approverName}
+                                </Text>
+                            </View>
                         </View>
                     </View>
+
+                    {/* Workflow Button */}
+                    <Pressable
+                        style={({ pressed }) => [styles.historyButton, pressed && { opacity: 0.7 }]}
+                        onPress={() => handleViewHistory(item)}
+                    >
+                        <Feather name="git-merge" size={16} color={colors.primary} />
+                        <Text style={styles.historyButtonText}>Workflow</Text>
+                    </Pressable>
                 </View>
             </View>
         );
@@ -348,7 +389,7 @@ const LeaveApplication = () => {
                 </View>
             </View>
 
-            {/* Filter Chips */}
+            {/* Leave Type Filter Chips */}
             <View style={styles.filterScrollContainer}>
                 <ScrollView
                     horizontal
@@ -359,6 +400,21 @@ const LeaveApplication = () => {
                     {renderFilterChip('Casual', 'casualLeave', 'coffee')}
                     {renderFilterChip('Sick', 'sickLeave', 'activity')}
                     {renderFilterChip('Privilege', 'privilegeLeave', 'sun')}
+                </ScrollView>
+            </View>
+
+            {/* Status Filter Chips */}
+            <View style={styles.filterScrollContainer}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterRow}
+                >
+                    {renderStatusChip('All Status', 'All', 'filter')}
+                    {renderStatusChip('Pending', 'Pending', 'clock')}
+                    {renderStatusChip('Approved', 'Approved', 'check-circle')}
+                    {renderStatusChip('Rejected', 'Rejected', 'x-circle')}
+                    {renderStatusChip('Cancelled', 'Cancelled', 'slash')}
                 </ScrollView>
             </View>
 
@@ -375,7 +431,7 @@ const LeaveApplication = () => {
                     </View>
                     <Text style={styles.emptyTitle}>No Requests Found</Text>
                     <Text style={styles.emptySubtitle}>
-                        No leave requests match the selected filter.
+                        No leave requests match the selected filters.
                     </Text>
                 </View>
             ) : (
@@ -388,6 +444,17 @@ const LeaveApplication = () => {
                     refreshing={isRefreshing}
                     onRefresh={() => fetchLeaveApplications(true)}
                     ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
+                />
+            )}
+
+            {/* Approval History Modal */}
+            {selectedRequest && (
+                <ApprovalHistoryModal
+                    visible={historyModalVisible}
+                    onClose={() => setHistoryModalVisible(false)}
+                    tranId={selectedRequest.LeaveApplicationMasterID}
+                    progId={2} // Leave Program ID
+                    employeeName={`Leave Request - ${selectedRequest.LeaveType}`}
                 />
             )}
         </SafeAreaView>
@@ -408,10 +475,10 @@ const createStyles = (colors: ThemeColors) =>
             alignItems: 'center',
             paddingHorizontal: 20,
             paddingTop: 10,
-            paddingBottom: 16,
+            paddingBottom: 12,
         },
         screenTitle: {
-            fontSize: 26,
+            fontSize: 28,
             fontWeight: '800',
             color: colors.text,
             letterSpacing: -0.5,
@@ -422,14 +489,16 @@ const createStyles = (colors: ThemeColors) =>
             gap: 8,
         },
         totalCount: {
-            fontSize: 14,
-            fontWeight: '600',
+            fontSize: 13,
+            fontWeight: '700',
             color: colors.textSecondary,
             backgroundColor: colors.card,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            borderRadius: 16,
+            paddingHorizontal: 14,
+            paddingVertical: 7,
+            borderRadius: 18,
             overflow: 'hidden',
+            borderWidth: 1,
+            borderColor: colors.border,
         },
 
         centerContainer: {
@@ -445,7 +514,7 @@ const createStyles = (colors: ThemeColors) =>
         },
 
         filterScrollContainer: {
-            paddingBottom: 16,
+            paddingBottom: 10,
         },
         filterRow: {
             paddingHorizontal: 20,
@@ -485,20 +554,20 @@ const createStyles = (colors: ThemeColors) =>
             paddingBottom: 40,
         },
         listSeparator: {
-            height: 16,
+            height: 14,
         },
 
         requestCard: {
             backgroundColor: colors.card,
-            borderRadius: 16,
-            padding: 16,
+            borderRadius: 18,
+            padding: 18,
             borderWidth: 1,
             borderColor: colors.border,
             shadowColor: colors.shadow,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.08,
-            shadowRadius: 12,
-            elevation: 4,
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.1,
+            shadowRadius: 16,
+            elevation: 5,
         },
 
         cardHeader: {
@@ -517,17 +586,17 @@ const createStyles = (colors: ThemeColors) =>
             flex: 1,
         },
         avatarContainer: {
-            width: 48,
-            height: 48,
-            borderRadius: 14,
+            width: 50,
+            height: 50,
+            borderRadius: 16,
             alignItems: 'center',
             justifyContent: 'center',
         },
         leaveTypeTitle: {
-            fontSize: 17,
+            fontSize: 18,
             fontWeight: '700',
             color: colors.text,
-            marginBottom: 2,
+            marginBottom: 3,
         },
         requestDate: {
             fontSize: 12,
@@ -539,7 +608,7 @@ const createStyles = (colors: ThemeColors) =>
             alignItems: 'center',
             gap: 6,
             paddingHorizontal: 12,
-            paddingVertical: 6,
+            paddingVertical: 7,
             borderRadius: 20,
         },
         statusText: {
@@ -550,7 +619,7 @@ const createStyles = (colors: ThemeColors) =>
         },
 
         cardBody: {
-            gap: 12,
+            gap: 14,
             marginBottom: 16,
         },
 
@@ -558,8 +627,8 @@ const createStyles = (colors: ThemeColors) =>
             flexDirection: 'row',
             alignItems: 'center',
             backgroundColor: colors.background,
-            padding: 14,
-            borderRadius: 12,
+            padding: 16,
+            borderRadius: 14,
         },
         dateItem: {
             flex: 1,
@@ -570,10 +639,10 @@ const createStyles = (colors: ThemeColors) =>
             fontWeight: '600',
             textTransform: 'uppercase',
             letterSpacing: 0.5,
-            marginBottom: 4,
+            marginBottom: 5,
         },
         dateValue: {
-            fontSize: 14,
+            fontSize: 15,
             color: colors.text,
             fontWeight: '700',
         },
@@ -585,14 +654,14 @@ const createStyles = (colors: ThemeColors) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderRadius: 12,
+            paddingHorizontal: 14,
+            paddingVertical: 9,
+            borderRadius: 14,
             marginLeft: 8,
         },
         daysPillText: {
             color: '#FFF',
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: '700',
         },
 
@@ -600,10 +669,10 @@ const createStyles = (colors: ThemeColors) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            paddingVertical: 8,
-            paddingHorizontal: 12,
+            paddingVertical: 10,
+            paddingHorizontal: 14,
             backgroundColor: '#FFF3E0',
-            borderRadius: 8,
+            borderRadius: 10,
             borderWidth: 1,
             borderColor: '#FFE0B2',
         },
@@ -614,15 +683,24 @@ const createStyles = (colors: ThemeColors) =>
         },
 
         reasonBlock: {
-            flexDirection: 'row',
-            alignItems: 'flex-start',
-            gap: 10,
-            paddingVertical: 8,
+            backgroundColor: `${colors.textSecondary}08`,
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            borderRadius: 10,
+            borderLeftWidth: 3,
+            borderLeftColor: colors.primary,
+        },
+        reasonLabel: {
+            fontSize: 11,
+            fontWeight: '700',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 6,
         },
         reasonText: {
-            flex: 1,
             fontSize: 14,
-            color: colors.textSecondary,
+            color: colors.text,
             lineHeight: 20,
         },
 
@@ -630,8 +708,8 @@ const createStyles = (colors: ThemeColors) =>
             backgroundColor: '#FFEBEE',
             borderLeftWidth: 4,
             borderLeftColor: '#C62828',
-            padding: 14,
-            borderRadius: 10,
+            padding: 16,
+            borderRadius: 12,
             gap: 8,
         },
         rejectionHeader: {
@@ -654,34 +732,52 @@ const createStyles = (colors: ThemeColors) =>
             marginLeft: 22,
         },
 
-        // ✅ FOOTER STYLES - Clean approver display
+        // Footer with Approver + Workflow Button
         cardFooter: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             paddingTop: 14,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
 
         approverSection: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 10,
+            flex: 1,
+        },
+        approverInfo: {
+            gap: 4,
         },
         approverLabel: {
-            fontSize: 14,
+            fontSize: 11,
             fontWeight: '600',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
         },
-        approverNameBadge: {
+        approverNameRow: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 8,
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            borderRadius: 20,
-            borderWidth: 1,
+            gap: 6,
         },
         approverNameText: {
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: '700',
+        },
+
+        historyButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            backgroundColor: `${colors.primary}10`,
+            borderRadius: 10,
+        },
+        historyButtonText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.primary,
         },
 
         emptyContainer: {
@@ -689,33 +785,35 @@ const createStyles = (colors: ThemeColors) =>
             alignItems: 'center',
             justifyContent: 'center',
             paddingHorizontal: 40,
-            gap: 12,
+            paddingTop: 60,
+            gap: 14,
         },
         emptyIconCircle: {
-            width: 100,
-            height: 100,
-            borderRadius: 50,
+            width: 110,
+            height: 110,
+            borderRadius: 55,
             backgroundColor: colors.card,
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: 12,
+            marginBottom: 16,
             shadowColor: colors.shadow,
-            shadowOpacity: 0.1,
-            shadowRadius: 20,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 4,
+            shadowOpacity: 0.12,
+            shadowRadius: 24,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 6,
         },
         emptyTitle: {
-            fontSize: 20,
+            fontSize: 22,
             fontWeight: '700',
             color: colors.text,
             textAlign: 'center',
         },
         emptySubtitle: {
-            fontSize: 14,
+            fontSize: 15,
             color: colors.textSecondary,
             textAlign: 'center',
-            lineHeight: 20,
+            lineHeight: 22,
+            maxWidth: '80%',
         },
     });
 

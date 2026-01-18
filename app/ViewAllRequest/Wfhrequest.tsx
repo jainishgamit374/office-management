@@ -38,12 +38,14 @@ interface WFHRequest {
 }
 
 type FilterType = 'All' | 'FullDay' | 'HalfDay';
+type StatusFilter = 'All' | 'Pending' | 'Approved' | 'Rejected';
 
 const Wfhrequest = () => {
     const { colors } = useTheme();
     const styles = useMemo(() => createStyles(colors), [colors]);
 
     const [selectedFilter, setSelectedFilter] = useState<FilterType>('All');
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
     const [requests, setRequests] = useState<WFHRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -90,11 +92,34 @@ const Wfhrequest = () => {
 
     // Client-side filtering
     const filteredRequests = useMemo(() => {
-        if (selectedFilter === 'All') return requests;
-        if (selectedFilter === 'FullDay') return requests.filter(r => !r.IsHalfDay);
-        if (selectedFilter === 'HalfDay') return requests.filter(r => r.IsHalfDay);
-        return requests;
-    }, [requests, selectedFilter]);
+        let filtered = requests;
+
+        // Filter by type
+        if (selectedFilter === 'FullDay') {
+            filtered = filtered.filter(r => !r.IsHalfDay);
+        } else if (selectedFilter === 'HalfDay') {
+            filtered = filtered.filter(r => r.IsHalfDay);
+        }
+
+        // Filter by status
+        if (statusFilter !== 'All') {
+            filtered = filtered.filter(r => {
+                const status = r.ApprovalStatus?.toLowerCase() || '';
+                if (statusFilter === 'Pending') {
+                    return status.includes('pending') || status.includes('await');
+                }
+                if (statusFilter === 'Approved') {
+                    return status.includes('approve');
+                }
+                if (statusFilter === 'Rejected') {
+                    return status.includes('reject') || status.includes('disapprove');
+                }
+                return true;
+            });
+        }
+
+        return filtered;
+    }, [requests, selectedFilter, statusFilter]);
 
     const formatDate = (dateString: string) => {
         const date = new Date(dateString);
@@ -108,20 +133,17 @@ const Wfhrequest = () => {
     const getStatusStyle = (status: string) => {
         const statusLower = status?.toLowerCase() || '';
 
-        // Amber/Orange for Pending/Awaiting
         if (statusLower.includes('pending') || statusLower.includes('await')) {
-            return { color: '#F57C00', bg: '#FFF3E0', icon: 'clock', label: 'Pending' };
+            return { color: '#F57C00', bg: '#FFF3E0', icon: 'clock' as const, label: 'Pending' };
         }
-        // Red for Rejected/Disapproved
         if (statusLower.includes('reject') || statusLower.includes('disapprove')) {
-            return { color: '#C62828', bg: '#FFEBEE', icon: 'x-circle', label: 'Rejected' };
+            return { color: '#C62828', bg: '#FFEBEE', icon: 'x-circle' as const, label: 'Rejected' };
         }
-        // Green for Approved
         if (statusLower.includes('approve')) {
-            return { color: '#2E7D32', bg: '#E8F5E9', icon: 'check-circle', label: 'Approved' };
+            return { color: '#2E7D32', bg: '#E8F5E9', icon: 'check-circle' as const, label: 'Approved' };
         }
         
-        return { color: colors.textSecondary, bg: colors.border, icon: 'info', label: status };
+        return { color: colors.textSecondary, bg: colors.border, icon: 'info' as const, label: status };
     };
 
     const handleViewHistory = (item: WFHRequest) => {
@@ -156,20 +178,66 @@ const Wfhrequest = () => {
         );
     };
 
+    const renderStatusChip = (label: string, value: StatusFilter, icon: string) => {
+        const isActive = statusFilter === value;
+        return (
+            <Pressable
+                style={[
+                    styles.filterChip,
+                    isActive && styles.filterChipActive,
+                ]}
+                onPress={() => setStatusFilter(value)}
+            >
+                <Feather
+                    name={icon as any}
+                    size={14}
+                    color={isActive ? '#FFF' : colors.textSecondary}
+                />
+                <Text
+                    style={[
+                        styles.filterChipText,
+                        isActive && styles.filterChipTextActive,
+                    ]}
+                >
+                    {label}
+                </Text>
+            </Pressable>
+        );
+    };
+
     const renderWFHRequestItem = ({ item }: { item: WFHRequest }) => {
         const statusStyle = getStatusStyle(item.ApprovalStatus);
+        
+        const isPending = item.ApprovalStatus?.toLowerCase().includes('pending') ||
+            item.ApprovalStatus?.toLowerCase().includes('await');
+        const isRejected = item.ApprovalStatus?.toLowerCase().includes('reject') ||
+            item.ApprovalStatus?.toLowerCase().includes('disapprove');
+        const isApproved = item.ApprovalStatus?.toLowerCase().includes('approve') && !isRejected;
+
+        // Get approver name from workflow_list
+        const approverName = 
+            item.workflow_list && item.workflow_list.length > 0 
+                ? item.workflow_list[0].Approve_name 
+                : 'Not Assigned';
+
+        const getApproverLabel = (): string => {
+            if (isPending) return 'Pending with';
+            if (isApproved) return 'Approved by';
+            if (isRejected) return 'Rejected by';
+            return 'Reviewer';
+        };
         
         return (
             <View style={styles.requestCard}>
                 
-                {/* Header: Avatar, Name, Status */}
+                {/* Header */}
                 <View style={styles.cardHeader}>
                     <View style={styles.headerLeft}>
                         <View style={[styles.avatarContainer, { backgroundColor: item.IsHalfDay ? '#FF980015' : '#4A90FF15' }]}>
                             {item.ProfileImage ? (
                                 <Image
                                     source={{ uri: item.ProfileImage }}
-                                    style={{ width: 44, height: 44, borderRadius: 12 }}
+                                    style={{ width: 50, height: 50, borderRadius: 16 }}
                                 />
                             ) : (
                                 <Feather 
@@ -179,7 +247,7 @@ const Wfhrequest = () => {
                                 />
                             )}
                         </View>
-                        <View>
+                        <View style={styles.headerTextContainer}>
                             <Text style={styles.itemTitle}>{item.EmployeeName || `Employee ID: ${item.EmployeeID}`}</Text>
                             <Text style={styles.itemSubtitle}>
                                 {item.IsHalfDay 
@@ -193,40 +261,54 @@ const Wfhrequest = () => {
                         styles.statusBadge, 
                         { backgroundColor: statusStyle.bg, borderColor: `${statusStyle.color}30`, borderWidth: 1 }
                     ]}>
-                        <Feather name={statusStyle.icon as any} size={12} color={statusStyle.color} />
+                        <Feather name={statusStyle.icon} size={12} color={statusStyle.color} />
                         <Text style={[styles.statusText, { color: statusStyle.color }]}>
                             {statusStyle.label}
                         </Text>
                     </View>
                 </View>
 
-                {/* Body: Date & Reason */}
+                {/* Body */}
                 <View style={styles.cardBody}>
-                    <View style={styles.infoRow}>
-                        <View style={styles.infoItem}>
-                            <Feather name="calendar" size={14} color={colors.textSecondary} />
-                            <Text style={styles.infoLabel}>Date:</Text>
-                            <Text style={styles.infoValue}>{formatDate(item.DateTime)}</Text>
-                        </View>
+                    {/* Date Row */}
+                    <View style={styles.dateRow}>
+                        <Feather name="calendar" size={16} color={colors.textSecondary} />
+                        <Text style={styles.dateLabel}>Date:</Text>
+                        <Text style={styles.dateValue}>{formatDate(item.DateTime)}</Text>
                     </View>
                     
+                    {/* Reason */}
                     {item.Reason && (
-                         <View style={styles.reasonBlock}>
-                             <Text style={styles.reasonText} numberOfLines={2}>
+                        <View style={styles.reasonBlock}>
+                            <Text style={styles.reasonLabel}>Reason</Text>
+                            <Text style={styles.reasonText} numberOfLines={3}>
                                 {item.Reason}
-                             </Text>
-                         </View>
+                            </Text>
+                        </View>
                     )}
                 </View>
 
-                {/* Footer: Workflow Button Only */}
+                {/* Footer - Approver + Workflow Button */}
                 <View style={styles.cardFooter}>
-                     <Pressable
+                    <View style={styles.approverSection}>
+                        <View style={styles.approverInfo}>
+                            <Text style={styles.approverLabel}>{getApproverLabel()}</Text>
+                            <View style={styles.approverNameRow}>
+                                <Feather name="user" size={14} color={statusStyle.color} />
+                                <Text style={[styles.approverNameText, { color: statusStyle.color }]}>
+                                    {approverName}
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    {/* Workflow Button */}
+                    <Pressable
                         style={({ pressed }) => [styles.historyButton, pressed && { opacity: 0.7 }]}
                         onPress={() => handleViewHistory(item)}
                     >
-                         <Feather name="git-merge" size={14} color={colors.primary} />
-                         <Text style={styles.historyButtonText}>Workflow</Text>
+                        <Feather name="git-merge" size={16} color={colors.primary} />
+                        <Text style={styles.historyButtonText}>Workflow</Text>
                     </Pressable>
                 </View>
             </View>
@@ -235,27 +317,47 @@ const Wfhrequest = () => {
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
-                 <Text style={styles.screenTitle}>WFH Requests</Text>
-                 <Text style={styles.totalCount}>{filteredRequests.length} Records</Text>
+                <Text style={styles.screenTitle}>WFH Requests</Text>
+                <View style={styles.headerRight}>
+                    <Text style={styles.totalCount}>{filteredRequests.length} Records</Text>
+                </View>
             </View>
 
+            {/* Type Filter Chips */}
             <View style={styles.filterScrollContainer}>
                 <ScrollView 
                     horizontal 
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.filterRow}
                 >
-                    {renderFilterChip('All Requests', 'All', 'layers')}
+                    {renderFilterChip('All', 'All', 'layers')}
                     {renderFilterChip('Full Day', 'FullDay', 'home')}
                     {renderFilterChip('Half Day', 'HalfDay', 'clock')}
                 </ScrollView>
             </View>
 
+            {/* Status Filter Chips */}
+            <View style={styles.filterScrollContainer}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterRow}
+                >
+                    {renderStatusChip('All Status', 'All', 'filter')}
+                    {renderStatusChip('Pending', 'Pending', 'clock')}
+                    {renderStatusChip('Approved', 'Approved', 'check-circle')}
+                    {renderStatusChip('Rejected', 'Rejected', 'x-circle')}
+                </ScrollView>
+            </View>
+
+            {/* Content */}
             {isLoading && !isRefreshing ? (
-                 <View style={styles.centerContainer}>
-                     <Text style={styles.loadingText}>Loading requests...</Text>
-                 </View>
+                <View style={styles.centerContainer}>
+                    <Feather name="loader" size={24} color={colors.primary} />
+                    <Text style={styles.loadingText}>Loading requests...</Text>
+                </View>
             ) : filteredRequests.length === 0 ? (
                 <View style={styles.emptyContainer}>
                     <View style={styles.emptyIconCircle}>
@@ -263,7 +365,7 @@ const Wfhrequest = () => {
                     </View>
                     <Text style={styles.emptyTitle}>No Requests Found</Text>
                     <Text style={styles.emptySubtitle}>
-                        No WFH requests match the selected filter.
+                        No WFH requests match the selected filters.
                     </Text>
                 </View>
             ) : (
@@ -275,7 +377,7 @@ const Wfhrequest = () => {
                     showsVerticalScrollIndicator={false}
                     refreshing={isRefreshing}
                     onRefresh={() => fetchWFHRequests(true)}
-                    ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+                    ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
                 />
             )}
 
@@ -299,29 +401,44 @@ const createStyles = (colors: ThemeColors) =>
             flex: 1,
             backgroundColor: colors.background,
         },
+
         header: {
             flexDirection: 'row',
             justifyContent: 'space-between',
-            alignItems: 'baseline',
+            alignItems: 'center',
             paddingHorizontal: 20,
             paddingTop: 10,
-            paddingBottom: 10,
+            paddingBottom: 12,
         },
         screenTitle: {
-            fontSize: 24,
-            fontWeight: '700',
+            fontSize: 28,
+            fontWeight: '800',
             color: colors.text,
             letterSpacing: -0.5,
         },
-        totalCount: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: colors.textSecondary,
+        headerRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
         },
+        totalCount: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.textSecondary,
+            backgroundColor: colors.card,
+            paddingHorizontal: 14,
+            paddingVertical: 7,
+            borderRadius: 18,
+            overflow: 'hidden',
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+
         centerContainer: {
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
+            gap: 12,
         },
         loadingText: {
             color: colors.textSecondary,
@@ -329,9 +446,8 @@ const createStyles = (colors: ThemeColors) =>
             fontWeight: '600',
         },
         
-        // Filter
         filterScrollContainer: {
-            paddingBottom: 12,
+            paddingBottom: 10,
         },
         filterRow: {
             paddingHorizontal: 20,
@@ -366,25 +482,27 @@ const createStyles = (colors: ThemeColors) =>
             color: '#FFF',
         },
 
-        // List
         listContent: {
             paddingHorizontal: 20,
             paddingBottom: 40,
         },
+        listSeparator: {
+            height: 14,
+        },
         
-        // Card
         requestCard: {
             backgroundColor: colors.card,
-            borderRadius: 16,
-            padding: 16,
+            borderRadius: 18,
+            padding: 18,
             borderWidth: 1,
             borderColor: colors.border,
             shadowColor: colors.shadow,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.04,
-            shadowRadius: 10,
-            elevation: 3,
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.1,
+            shadowRadius: 16,
+            elevation: 5,
         },
+
         cardHeader: {
             flexDirection: 'row',
             justifyContent: 'space-between',
@@ -397,18 +515,21 @@ const createStyles = (colors: ThemeColors) =>
             alignItems: 'center',
             flex: 1,
         },
+        headerTextContainer: {
+            flex: 1,
+        },
         avatarContainer: {
-            width: 44,
-            height: 44,
-            borderRadius: 12,
+            width: 50,
+            height: 50,
+            borderRadius: 16,
             alignItems: 'center',
             justifyContent: 'center',
         },
         itemTitle: {
-            fontSize: 16,
+            fontSize: 18,
             fontWeight: '700',
             color: colors.text,
-            marginBottom: 2,
+            marginBottom: 3,
         },
         itemSubtitle: {
             fontSize: 12,
@@ -416,107 +537,147 @@ const createStyles = (colors: ThemeColors) =>
             fontWeight: '500',
         },
         statusBadge: {
-             flexDirection: 'row',
-             alignItems: 'center',
-             gap: 6,
-             paddingHorizontal: 12,
-             paddingVertical: 6,
-             borderRadius: 20,
-        },
-        statusText: {
-            fontSize: 12,
-            fontWeight: '700',
-            textTransform: 'uppercase',
-        },
-        
-        // Body
-        cardBody: {
-            gap: 12,
-            marginBottom: 16,
-        },
-        infoRow: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 8,
+            gap: 6,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 20,
         },
-        infoItem: {
-             flexDirection: 'row',
-             alignItems: 'center',
-             gap: 8,
+        statusText: {
+            fontSize: 11,
+            fontWeight: '700',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
         },
-        infoLabel: {
+        
+        cardBody: {
+            gap: 14,
+            marginBottom: 16,
+        },
+
+        dateRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.background,
+            padding: 16,
+            borderRadius: 14,
+            gap: 10,
+        },
+        dateLabel: {
             fontSize: 12,
             color: colors.textSecondary,
             fontWeight: '600',
         },
-        infoValue: {
-            fontSize: 14,
+        dateValue: {
+            fontSize: 15,
             color: colors.text,
             fontWeight: '700',
         },
+
         reasonBlock: {
-            backgroundColor: `${colors.background}`, 
-            padding: 10,
-            borderRadius: 8,
+            backgroundColor: `${colors.textSecondary}08`,
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            borderRadius: 10,
+            borderLeftWidth: 3,
+            borderLeftColor: colors.primary,
+        },
+        reasonLabel: {
+            fontSize: 11,
+            fontWeight: '700',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 6,
         },
         reasonText: {
-            fontSize: 13,
-            color: colors.textSecondary,
-            lineHeight: 18,
-            fontStyle: 'italic',
+            fontSize: 14,
+            color: colors.text,
+            lineHeight: 20,
         },
 
-        // Footer
         cardFooter: {
             flexDirection: 'row',
-            justifyContent: 'flex-start',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            paddingTop: 12,
+            paddingTop: 14,
             borderTopWidth: 1,
             borderTopColor: colors.border,
         },
+
+        approverSection: {
+            flex: 1,
+        },
+        approverInfo: {
+            gap: 4,
+        },
+        approverLabel: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+        },
+        approverNameRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        approverNameText: {
+            fontSize: 15,
+            fontWeight: '700',
+        },
+
         historyButton: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            padding: 4,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            backgroundColor: `${colors.primary}10`,
+            borderRadius: 10,
         },
         historyButtonText: {
             fontSize: 13,
-            fontWeight: '600',
+            fontWeight: '700',
             color: colors.primary,
         },
         
-        // Empty
         emptyContainer: {
             flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
-            paddingTop: 80,
-            gap: 12,
+            paddingHorizontal: 40,
+            paddingTop: 60,
+            gap: 14,
         },
         emptyIconCircle: {
-            width: 80,
-            height: 80,
-            borderRadius: 40,
+            width: 110,
+            height: 110,
+            borderRadius: 55,
             backgroundColor: colors.card,
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: 8,
+            marginBottom: 16,
             shadowColor: colors.shadow,
-            shadowOpacity: 0.1,
-            shadowRadius: 20,
+            shadowOpacity: 0.12,
+            shadowRadius: 24,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 6,
         },
         emptyTitle: {
-            fontSize: 18,
+            fontSize: 22,
             fontWeight: '700',
             color: colors.text,
+            textAlign: 'center',
         },
         emptySubtitle: {
-             fontSize: 14,
-             color: colors.textSecondary,
-             textAlign: 'center',
-             maxWidth: '70%',
+            fontSize: 15,
+            color: colors.textSecondary,
+            textAlign: 'center',
+            lineHeight: 22,
+            maxWidth: '80%',
         },
     });
 

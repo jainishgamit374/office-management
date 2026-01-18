@@ -349,6 +349,7 @@ const PendingRequestsSection: React.FC = () => {
             leaves.map((item) => (
               <SwipeApprovalRow
                 key={`${item.programId}-${item.id}`}
+                employeeName={item.employeeName}
                 title={item.title}
                 subtitle={item.subtitle}
                 date={item.date}
@@ -380,6 +381,7 @@ const PendingRequestsSection: React.FC = () => {
             missPunches.map((item) => (
               <SwipeApprovalRow
                 key={`${item.programId}-${item.id}`}
+                employeeName={item.employeeName}
                 title={item.title}
                 subtitle={item.subtitle}
                 date={item.date}
@@ -411,6 +413,7 @@ const PendingRequestsSection: React.FC = () => {
             earlyCheckouts.map((item) => (
               <SwipeApprovalRow
                 key={`${item.programId}-${item.id}`}
+                employeeName={item.employeeName}
                 title={item.title}
                 subtitle={item.subtitle}
                 date={item.date}
@@ -442,6 +445,7 @@ const PendingRequestsSection: React.FC = () => {
             lateArrivals.map((item) => (
               <SwipeApprovalRow
                 key={`${item.programId}-${item.id}`}
+                employeeName={item.employeeName}
                 title={item.title}
                 subtitle={item.subtitle}
                 date={item.date}
@@ -473,6 +477,7 @@ const PendingRequestsSection: React.FC = () => {
             wfh.map((item) => (
               <SwipeApprovalRow
                 key={`${item.programId}-${item.id}`}
+                employeeName={item.employeeName}
                 title={item.title}
                 subtitle={item.subtitle}
                 date={item.date}

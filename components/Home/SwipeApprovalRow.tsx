@@ -95,6 +95,22 @@ export default function SwipeApprovalRow({
       .slice(0, 2);
   };
 
+  // Extract only the reason from subtitle (remove date range if present)
+  const getReasonOnly = (subtitle?: string) => {
+    if (!subtitle) return '';
+    
+    // If subtitle contains date range (e.g., "2024-01-15 → 2024-01-17\nReason text")
+    const parts = subtitle.split('\n');
+    if (parts.length > 1 && parts[0].includes('→')) {
+      return parts.slice(1).join('\n'); // Return only the reason part
+    }
+    
+    return subtitle; // Otherwise return as is
+  };
+
+  const reasonText = getReasonOnly(subtitle);
+
+
   return (
     <Animated.View style={[styles.wrap, { backgroundColor: bgColor, borderColor: colors.border }]}>
       {/* Swipe hints */}
@@ -153,10 +169,10 @@ export default function SwipeApprovalRow({
               {title}
             </Text>
 
-            {/* Reason/Subtitle */}
-            {subtitle && (
+            {/* Reason Only (no date range) */}
+            {reasonText && (
               <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={2}>
-                {subtitle}
+                {reasonText}
               </Text>
             )}
           </View>

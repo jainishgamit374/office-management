@@ -34,21 +34,18 @@ import {
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CONTAINER_PADDING = 16;
 const SECTION_PADDING = 20;
-// Subtract 2 for border width compensation
 const TRACK_WIDTH = SCREEN_WIDTH - (CONTAINER_PADDING * 2) - (SECTION_PADDING * 2) - 2;
 const BUTTON_SIZE = 64;
 const BUTTON_MARGIN = 4;
 const MAX_SWIPE_DISTANCE = TRACK_WIDTH - BUTTON_SIZE - (BUTTON_MARGIN * 2);
 const SWIPE_THRESHOLD = MAX_SWIPE_DISTANCE * 0.6;
 
-// Office Hours Configuration
 const OFFICE_START_HOUR = 9;
 const OFFICE_START_MINUTE = 30;
 const BREAK_START_HOUR = 13;
 const BREAK_END_HOUR = 14;
 const TOTAL_WORKING_HOURS = 8;
 
-// Time slots for the pillars
 const TIME_SLOTS = [
   { label: '9:30', start: 9.5, end: 10.5, isBreak: false },
   { label: '10:30', start: 10.5, end: 11.5, isBreak: false },
@@ -126,6 +123,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const hasCheckedOutRef = useRef(false);
   const isPunchingRef = useRef(false);
   const isLoadingRef = useRef(true);
+  const previousPunchType = useRef<0 | 1 | 2>(0);
+  const lastPunchTimeRef = useRef<number>(0);
 
   useEffect(() => { isCheckedInRef.current = isCheckedIn; }, [isCheckedIn]);
   useEffect(() => { hasCheckedOutRef.current = hasCheckedOut; }, [hasCheckedOut]);
@@ -184,7 +183,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     const checkInHour = checkInTime.getHours() + checkInTime.getMinutes() / 60;
 
     let workingHours = 0;
-    const effectiveStart = checkInHour; // Use actual punch-in time
+    const effectiveStart = checkInHour;
 
     if (currentHour <= effectiveStart) return 0;
 
@@ -200,7 +199,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   }, []);
 
   // ============ HELPER: Parse Time ============
-  const parsePunchTime = (timeString: string | null | undefined): Date | null => {
+  const parsePunchTime = useCallback((timeString: string | null | undefined): Date | null => {
     if (!timeString) return null;
 
     try {
@@ -215,7 +214,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         let hour = parseInt(hours, 10);
         if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
         if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
-        // Treat as UTC
         return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds)));
       }
 
@@ -225,7 +223,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         let hour = parseInt(hours, 10);
         if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
         if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
-        // Treat as UTC
         return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds)));
       }
 
@@ -237,7 +234,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       console.error('Error parsing time:', timeString, error);
       return null;
     }
-  };
+  }, []);
 
   const formatTime = (date: Date | null): string => {
     if (!date) return '--:--';
@@ -255,140 +252,184 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       setError(null);
 
       const response: PunchStatusResponse = await getPunchStatus();
-
       onStatusLoaded?.(response);
       setLastUpdated(new Date());
 
-      const { punch, lateEarly } = response.data;
+      const punch = response.data?.punch ?? { PunchType: 0 };
+      const lateEarly = response.data?.lateEarly ?? {
+        lateCheckins: 0,
+        earlyCheckouts: 0,
+        remainingLateCheckins: 5,
+      };
 
       setLateCheckInCount(lateEarly.lateCheckins);
       setEarlyCheckOutCount(lateEarly.earlyCheckouts);
       setRemainingLateCheckins(lateEarly.remainingLateCheckins);
       onLateEarlyCountChange?.(lateEarly.lateCheckins, lateEarly.earlyCheckouts);
 
-      setPunchType(punch.PunchType);
+      const newType = punch.PunchType as 0 | 1 | 2;
 
-      switch (punch.PunchType) {
-        case 0:
-          // Not checked in - reset everything
-          pan.setValue(0);
-          colorAnim.setValue(0);
-          progressAnim.setValue(0);
-          setIsCheckedIn(false);
-          setHasCheckedOut(false);
-          setPunchInTime(null);
-          setPunchOutTime(null);
-          setPunchInDate(null);
-          setPunchOutDate(null);
-          setWorkingMinutes(0);
-          setSlotProgresses([]);
-          setCompletedWorkingHours(0);
-          break;
-
-        case 1:
-          // Checked in - set slider to end position FIRST
-          const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
-          const parsedInTime = parsePunchTime(inTimeStr);
-          
-          console.log('Loading existing check-in:', {
-            inTimeStr,
-            parsedInTime,
-            currentTime: new Date()
-          });
-          
-          // Calculate current progress to set the button color immediately
-          if (parsedInTime) {
-            const workingHrs = calculateWorkingHours(parsedInTime);
-            const progress = workingHrs / TOTAL_WORKING_HOURS;
-            console.log('Setting progress on load:', {
-              workingHours: workingHrs.toFixed(2),
-              progressValue: progress.toFixed(3),
-              progressPercent: (progress * 100).toFixed(1) + '%'
-            });
-            progressAnim.setValue(progress);
-          } else {
-            console.warn('Failed to parse punch-in time:', inTimeStr);
-          }
-          
-          pan.setValue(MAX_SWIPE_DISTANCE);
-          colorAnim.setValue(1);
-          
-          // Now update state
-          setIsCheckedIn(true);
-          setHasCheckedOut(false);
-          setPunchInTime(inTimeStr);
-          setPunchInDate(parsedInTime);
-          setPunchOutTime(null);
-          setPunchOutDate(null);
-          setWorkingMinutes(punch.WorkingMinutes || 0);
-          break;
-
-        case 2:
-          // Checked out - reset slider position
-          pan.setValue(0);
-          colorAnim.setValue(2);
-          progressAnim.setValue(0);
-          
-          const outTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
-          setPunchOutTime(outTimeStr);
-          const parsedOutTime = parsePunchTime(outTimeStr);
-          setPunchOutDate(parsedOutTime);
-          if (punch.PunchInTime) {
-            setPunchInTime(punch.PunchInTime);
-            setPunchInDate(parsePunchTime(punch.PunchInTime));
-          }
-          setWorkingMinutes(punch.WorkingMinutes || 0);
-          setIsCheckedIn(false);
-          setHasCheckedOut(true);
-          break;
+      // 🛡️ SECURITY GUARD: PREVENT STALE DATA RESET
+      const timeSincePunch = Date.now() - lastPunchTimeRef.current;
+      if (timeSincePunch < 30000 && newType === 0 && previousPunchType.current !== 0) {
+        console.warn('🛡️ Ignoring stale server data (Server: 0, Local: Checked In). Time since punch:', timeSincePunch);
+        setIsInitialized(true);
+        return;
       }
 
-      setIsInitialized(true);
+      // Set animation values IMMEDIATELY for checked-in state
+      if (newType === 1) {
+        pan.setValue(MAX_SWIPE_DISTANCE);
+        colorAnim.setValue(1);
+
+        const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
+        const parsedInTime = parsePunchTime(inTimeStr);
+        if (parsedInTime) {
+          const progress = calculateWorkingHours(parsedInTime) / TOTAL_WORKING_HOURS;
+          progressAnim.setValue(progress);
+        }
+      }
+
+      // Only run full state update if punch type changed or first load
+      if (newType !== previousPunchType.current || !isInitialized) {
+        console.log('🔄 Punch type changed:', previousPunchType.current, '→', newType);
+        
+        previousPunchType.current = newType;
+        setPunchType(newType);
+
+        switch (newType) {
+          case 0:
+            pan.setValue(0);
+            colorAnim.setValue(0);
+            progressAnim.setValue(0);
+            setIsCheckedIn(false);
+            setHasCheckedOut(false);
+            setPunchInTime(null);
+            setPunchOutTime(null);
+            setPunchInDate(null);
+            setPunchOutDate(null);
+            setWorkingMinutes(0);
+            setSlotProgresses([]);
+            setCompletedWorkingHours(0);
+            break;
+
+          case 1:
+            const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
+            const parsedInTime = parsePunchTime(inTimeStr);
+
+            setIsCheckedIn(true);
+            setHasCheckedOut(false);
+            setPunchInTime(inTimeStr);
+            setPunchInDate(parsedInTime);
+            setPunchOutTime(null);
+            setPunchOutDate(null);
+            setWorkingMinutes(punch.WorkingMinutes || 0);
+            break;
+
+          case 2:
+            pan.setValue(0);
+            colorAnim.setValue(2);
+            progressAnim.setValue(0);
+
+            const outTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
+            setPunchOutTime(outTimeStr);
+            setPunchOutDate(parsePunchTime(outTimeStr));
+            if (punch.PunchInTime) {
+              setPunchInTime(punch.PunchInTime);
+              setPunchInDate(parsePunchTime(punch.PunchInTime));
+            }
+            setWorkingMinutes(punch.WorkingMinutes || 0);
+            setIsCheckedIn(false);
+            setHasCheckedOut(true);
+            break;
+        }
+      } else {
+        // Silent update - just update data without moving sliders
+        if (newType === 1) {
+          const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
+          const parsedInTime = parsePunchTime(inTimeStr);
+          if (parsedInTime) {
+            setPunchInDate(parsedInTime);
+            setPunchInTime(inTimeStr);
+            const progress = calculateWorkingHours(parsedInTime) / TOTAL_WORKING_HOURS;
+            progressAnim.setValue(progress);
+            setWorkingMinutes(punch.WorkingMinutes || 0);
+          }
+        } else if (newType === 2) {
+          const outTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
+          setPunchOutTime(outTimeStr);
+          setPunchOutDate(parsePunchTime(outTimeStr));
+          setWorkingMinutes(punch.WorkingMinutes || 0);
+        }
+      }
+
+      if (!isInitialized) {
+        setIsInitialized(true);
+      }
     } catch (error) {
-      console.error('Failed to fetch punch status:', error);
+      console.error('❌ Failed to fetch punch status:', error);
       setError(error instanceof Error ? error.message : 'Failed to load status');
-      setPunchType(0);
-      setIsCheckedIn(false);
-      setHasCheckedOut(false);
-      setPunchInDate(null);
-      setPunchOutDate(null);
-      pan.setValue(0);
-      colorAnim.setValue(0);
-      setIsInitialized(true);
+
+      // 🛡️ ERROR SAFETY: Do NOT reset state on API error if already initialized
+      if (!isInitialized) {
+        setPunchType(0);
+        setIsCheckedIn(false);
+        setHasCheckedOut(false);
+        setPunchInDate(null);
+        setPunchOutDate(null);
+        pan.setValue(0);
+        colorAnim.setValue(0);
+        previousPunchType.current = 0;
+        setIsInitialized(true);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [pan, colorAnim, progressAnim, onLateEarlyCountChange, onStatusLoaded]);
+  }, [
+    pan,
+    colorAnim,
+    progressAnim,
+    onLateEarlyCountChange,
+    onStatusLoaded,
+    calculateWorkingHours,
+    parsePunchTime,
+    isInitialized,
+  ]);
 
+  // Initial mount
   useEffect(() => {
     fetchPunchStatus(true);
   }, [fetchPunchStatus]);
 
+  // Screen focus
   useFocusEffect(
     useCallback(() => {
-      if (isInitialized) {
+      if (isInitialized && !isPunchingRef.current) {
+        console.log('📱 Screen focused - refreshing status');
         fetchPunchStatus(false, true);
       }
     }, [fetchPunchStatus, isInitialized])
   );
 
-  // Trigger refresh when refreshKey changes (pull-to-refresh)
+  // Pull-to-refresh
   useEffect(() => {
-    if (isInitialized && refreshKey !== undefined && refreshKey > 0) {
-      console.log('🔄 CheckInCard: Refreshing due to pull-to-refresh, refreshKey:', refreshKey);
+    if (isInitialized && refreshKey !== undefined && refreshKey > 0 && !isPunchingRef.current) {
+      console.log('🔄 Pull-to-refresh triggered, refreshKey:', refreshKey);
       fetchPunchStatus(false, true);
     }
   }, [refreshKey, isInitialized, fetchPunchStatus]);
 
+  // Background polling
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!isPunchingRef.current && !isLoadingRef.current) {
+      if (!isPunchingRef.current && !isLoadingRef.current && isInitialized) {
         fetchPunchStatus(false, true);
       }
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [fetchPunchStatus]);
+  }, [fetchPunchStatus, isInitialized]);
 
+  // New day reset
   useEffect(() => {
     let lastDate = new Date().toISOString().split('T')[0];
 
@@ -396,9 +437,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       const currentDate = new Date().toISOString().split('T')[0];
       if (currentDate !== lastDate) {
         lastDate = currentDate;
-        console.log('New day detected - resetting check-in state');
-        
-        // Explicitly reset all state for the new day
+        console.log('🌅 New day detected - resetting');
+
         pan.setValue(0);
         colorAnim.setValue(0);
         progressAnim.setValue(0);
@@ -412,8 +452,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setSlotProgresses([]);
         setCompletedWorkingHours(0);
         setPunchType(0);
-        
-        // Fetch fresh status from server
+        previousPunchType.current = 0;
+
         fetchPunchStatus(true);
       }
     };
@@ -426,8 +466,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     tomorrow.setHours(0, 0, 0, 100);
 
     const midnightTimeout = setTimeout(() => {
-      console.log('Midnight reached - resetting for new day');
-      checkNewDay(); // Use the same reset logic
+      console.log('🌙 Midnight reached');
+      checkNewDay();
     }, tomorrow.getTime() - now.getTime());
 
     return () => {
@@ -436,7 +476,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     };
   }, [fetchPunchStatus, pan, colorAnim, progressAnim]);
 
-  // ============ PROGRESS UPDATE ============
+  // Progress update
   useEffect(() => {
     const updateProgress = () => {
       if (!isCheckedIn || !punchInDate || hasCheckedOut) {
@@ -459,12 +499,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       setCompletedWorkingHours(workingHrs);
 
       const progressValue = workingHrs / TOTAL_WORKING_HOURS;
-      console.log('Progress Update:', {
-        workingHours: workingHrs.toFixed(2),
-        progressPercent: (progressValue * 100).toFixed(1) + '%',
-        isCheckedIn,
-        hasCheckedOut
-      });
 
       Animated.timing(progressAnim, {
         toValue: progressValue,
@@ -491,7 +525,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         const granted = await requestLocationPermission();
         if (!granted) {
           Alert.alert('Location Required', 'Please enable location to check in.');
-          resetToStart();
           return false;
         }
       }
@@ -504,7 +537,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
       if (isLate && remainingLateCheckins <= 0) {
         Alert.alert('Limit Reached', 'You have used all your late check-ins for this month.');
-        resetToStart();
         return false;
       }
 
@@ -541,7 +573,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     } catch (error) {
       console.error('Punch IN error:', error);
       Alert.alert('Check-In Failed', error instanceof Error ? error.message : 'Unable to check in.');
-      resetToStart();
       return false;
     } finally {
       setIsPunching(false);
@@ -561,7 +592,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         const granted = await requestLocationPermission();
         if (!granted) {
           Alert.alert('Location Required', 'Please enable location to check out.');
-          resetToCheckedIn();
           return false;
         }
       }
@@ -615,7 +645,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     } catch (error) {
       console.error('Punch OUT error:', error);
       Alert.alert('Check-Out Failed', error instanceof Error ? error.message : 'Unknown error');
-      resetToCheckedIn();
       return false;
     } finally {
       setIsPunching(false);
@@ -646,15 +675,44 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         if (hasCheckedOutRef.current || isPunchingRef.current) return;
 
         if (!isCheckedInRef.current && g.dx > SWIPE_THRESHOLD) {
-          Animated.spring(pan, { toValue: MAX_SWIPE_DISTANCE, useNativeDriver: false, friction: 8, tension: 40 }).start(async () => {
-            const success = await handlePunchIn();
-            if (success) { setIsCheckedIn(true); setHasCheckedOut(false); setPunchType(1); }
-          });
+          // ✅ CRITICAL FIX: Update ALL state synchronously BEFORE animation/API call
+          previousPunchType.current = 1;
+          setIsCheckedIn(true);
+          setHasCheckedOut(false);
+          setPunchType(1);
+          lastPunchTimeRef.current = Date.now();
+          
+          Animated.spring(pan, { toValue: MAX_SWIPE_DISTANCE, useNativeDriver: false, friction: 8, tension: 40 }).start();
+          
+          // API call happens in background - UI is already updated
+          const success = await handlePunchIn();
+          if (!success) {
+            // Only revert if API call failed
+            previousPunchType.current = 0;
+            setIsCheckedIn(false);
+            setPunchType(0);
+            resetToStart();
+          }
         } else if (isCheckedInRef.current && g.dx < -SWIPE_THRESHOLD) {
-          Animated.spring(pan, { toValue: 0, useNativeDriver: false, friction: 8, tension: 40 }).start(async () => {
-            const success = await handlePunchOut();
-            if (success) { setIsCheckedIn(false); setHasCheckedOut(true); setPunchType(2); }
-          });
+          // ✅ CRITICAL FIX: Update ALL state synchronously BEFORE animation/API call
+          previousPunchType.current = 2;
+          setIsCheckedIn(false);
+          setHasCheckedOut(true);
+          setPunchType(2);
+          lastPunchTimeRef.current = Date.now();
+          
+          Animated.spring(pan, { toValue: 0, useNativeDriver: false, friction: 8, tension: 40 }).start();
+          
+          // API call happens in background - UI is already updated
+          const success = await handlePunchOut();
+          if (!success) {
+            // Only revert if API call failed
+            previousPunchType.current = 1;
+            setIsCheckedIn(true);
+            setHasCheckedOut(false);
+            setPunchType(1);
+            resetToCheckedIn();
+          }
         } else {
           isCheckedInRef.current ? resetToCheckedIn() : resetToStart();
         }
@@ -687,15 +745,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
   const getButtonColor = () => {
     if (isCheckedIn && !hasCheckedOut) {
-      // Color transition: Red (0%) → Yellow (50%) → Green (100%)
       return progressAnim.interpolate({
         inputRange: [0, 0.5, 1],
-        outputRange: ['#EF4444', '#F59E0B', '#10B981'] // Red → Yellow → Green
+        outputRange: ['#EF4444', '#F59E0B', '#10B981']
       });
     }
     return colorAnim.interpolate({
       inputRange: [0, 1, 2],
-      outputRange: [colors.primary, colors.primary, '#9CA3AF'] // Blue → Blue → Gray
+      outputRange: [colors.primary, colors.primary, '#9CA3AF']
     });
   };
 
@@ -739,10 +796,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const getPillarColor = (index: number, isBreak: boolean, filled: boolean, current: boolean): string => {
     if (isBreak) return filled || current ? '#F59E0B' : 'transparent';
     if (!filled && !current) return 'transparent';
-    // Red for early slots (0-3), Yellow for mid slots (4-6), Green for late slots (7-8)
-    if (index < 4) return '#EF4444';  // Red
-    if (index < 7) return '#F59E0B';  // Yellow
-    return '#10B981';                 // Green
+    if (index < 4) return '#EF4444';
+    if (index < 7) return '#F59E0B';
+    return '#10B981';
   };
 
   // ============ LOADING STATE ============
@@ -820,7 +876,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   // ============ RENDER ============
   return (
     <View style={styles.container}>
-      {/* Last Updated */}
       {lastUpdated && (
         <View style={styles.lastUpdatedWrapper}>
           <Feather name="clock" size={10} color={colors.textSecondary} />
@@ -830,7 +885,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         </View>
       )}
 
-      {/* Main Card */}
       <View style={[
         styles.card,
         {
@@ -852,10 +906,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         hasCheckedOut && { opacity: 0.9 }
       ]}>
 
-        {/* Swipe Section */}
         <View style={styles.swipeSection}>
           <View style={[styles.swipeTrack, { backgroundColor: trackBg }]}>
-            {/* Progressive Fill Background - Red to Yellow to Green */}
             {isCheckedIn && !hasCheckedOut && (
               <Animated.View
                 style={[
@@ -867,19 +919,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
                     }),
                     backgroundColor: progressAnim.interpolate({
                       inputRange: [0, 0.5, 1],
-                      outputRange: [
-                        '#EF4444',  // Red (start)
-                        '#F59E0B',  // Yellow (mid-day)
-                        '#10B981'   // Green (end of day)
-                      ]
+                      outputRange: ['#EF4444', '#F59E0B', '#10B981']
                     }),
-                    opacity: 0.6,  // Increased opacity for better visibility
+                    opacity: 0.6,
                   },
                 ]}
               />
             )}
 
-            {/* Swipe Text */}
             <View style={styles.swipeTextWrapper}>
               <Text style={[
                 styles.swipeText,
@@ -889,7 +936,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
               </Text>
             </View>
 
-            {/* Swipe Button */}
             <Animated.View
               style={[
                 styles.swipeButton,
@@ -923,7 +969,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           </View>
         </View>
 
-        {/* Time Info Section */}
         {(isCheckedIn || hasCheckedOut) && (
           <View style={[styles.timeSection, { borderTopColor: dividerColor }]}>
             <View style={styles.timeRow}>
@@ -960,10 +1005,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           </View>
         )}
 
-        {/* Progress Pillars */}
         {isCheckedIn && !hasCheckedOut && slotProgresses.length > 0 && (
           <View style={[styles.pillarsSection, { borderTopColor: dividerColor }]}>
-            {/* Break Indicator */}
             {isOnBreak && (
               <View style={[styles.breakBanner, { backgroundColor: isDark ? '#2E2A1A' : '#FEF3C7' }]}>
                 <Text style={styles.breakEmoji}>🍽️</Text>
@@ -1013,7 +1056,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
               })}
             </View>
 
-            {/* Progress Summary */}
             <View style={[styles.progressSummary, { backgroundColor: timeBoxBg }]}>
               <View style={styles.progressHeader}>
                 <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>
@@ -1029,8 +1071,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
                     styles.progressBarFill,
                     {
                       width: `${(completedWorkingHours / TOTAL_WORKING_HOURS) * 100}%`,
-                      backgroundColor: completedWorkingHours >= 8 ? '#10B981' :      // Green
-                        completedWorkingHours >= 4 ? '#F59E0B' : '#EF4444'           // Yellow : Red
+                      backgroundColor: completedWorkingHours >= 8 ? '#10B981' :
+                        completedWorkingHours >= 4 ? '#F59E0B' : '#EF4444'
                     }
                   ]}
                 />
@@ -1047,7 +1089,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           </View>
         )}
 
-        {/* Warning Boxes */}
         {isCheckedIn && !hasCheckedOut && remainingLateCheckins <= 2 && remainingLateCheckins > 0 && (
           <View style={[
             styles.warningBox,
@@ -1080,286 +1121,55 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   );
 };
 
-// ============ STYLES ============
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  lastUpdatedWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 4,
-    marginBottom: 8,
-    paddingRight: 4,
-  },
-  lastUpdated: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  card: {
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
-  loadingCard: {
-    minHeight: 160,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  errorCard: {
-    minHeight: 160,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    gap: 16,
-  },
-  errorIconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorText: {
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  retryText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6366F1',
-  },
-
-  // Swipe Section
-  swipeSection: {
-    padding: 20,
-    paddingBottom: 16,
-  },
-  swipeTrack: {
-    width: '100%',
-    height: 72,
-    borderRadius: 36,
-    position: 'relative',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  progressBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 36,
-  },
-  swipeTextWrapper: {
-    position: 'absolute',
-    width: '100%',
-    paddingHorizontal: 80,
-    alignItems: 'center',
-  },
-  swipeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    textAlign: 'center',
-  },
-  swipeButton: {
-    position: 'absolute',
-    left: 4,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  swipeButtonText: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
-
-  // Time Section
-  timeSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    paddingTop: 16,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  timeBox: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderRadius: 16,
-    gap: 8,
-  },
-  timeIconWrapper: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  timeLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  timeValue: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-
-  // Pillars Section
-  pillarsSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    paddingTop: 16,
-  },
-  breakBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  breakEmoji: {
-    fontSize: 16,
-  },
-  breakText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  pillarsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 6,
-    marginBottom: 16,
-  },
-  pillarWrapper: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 8,
-  },
-  pillarOuter: {
-    width: '100%',
-    height: 52,
-    borderRadius: 10,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-  },
-  pillarBreak: {
-    borderWidth: 2,
-    borderStyle: 'dashed',
-  },
-  pillarActive: {
-    borderWidth: 2,
-  },
-  pillarFill: {
-    width: '100%',
-    borderRadius: 8,
-  },
-  breakIconWrapper: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  breakIconText: {
-    fontSize: 14,
-  },
-  pillarLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-  },
-
-  // Progress Summary
-  progressSummary: {
-    padding: 14,
-    borderRadius: 14,
-    gap: 10,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  progressValue: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  progressBarSmall: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  progressMilestones: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  milestoneText: {
-    fontSize: 10,
-    fontWeight: '500',
-  },
-
-  // Warning Box
-  warningBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginHorizontal: 20,
-    marginBottom: 20,
-    padding: 14,
-    borderRadius: 14,
-  },
-  warningIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  warningText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
+  container: { paddingHorizontal: 16, paddingVertical: 8 },
+  lastUpdatedWrapper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginBottom: 8, paddingRight: 4 },
+  lastUpdated: { fontSize: 11, fontWeight: '500' },
+  card: { borderRadius: 24, overflow: 'hidden' },
+  loadingCard: { minHeight: 160, justifyContent: 'center', alignItems: 'center', gap: 16 },
+  loadingText: { fontSize: 14, fontWeight: '600' },
+  errorCard: { minHeight: 160, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 },
+  errorIconWrapper: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
+  errorText: { fontSize: 14, fontWeight: '500', textAlign: 'center' },
+  retryButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
+  retryText: { fontSize: 14, fontWeight: '600', color: '#6366F1' },
+  swipeSection: { padding: 20, paddingBottom: 16 },
+  swipeTrack: { width: '100%', height: 72, borderRadius: 36, position: 'relative', justifyContent: 'center', overflow: 'hidden' },
+  progressBar: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 36 },
+  swipeTextWrapper: { position: 'absolute', width: '100%', paddingHorizontal: 80, alignItems: 'center' },
+  swipeText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textAlign: 'center' },
+  swipeButton: { position: 'absolute', left: 4, width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
+  swipeButtonText: { fontSize: 16, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5 },
+  timeSection: { paddingHorizontal: 20, paddingBottom: 20, borderTopWidth: 1, paddingTop: 16 },
+  timeRow: { flexDirection: 'row', gap: 12 },
+  timeBox: { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 8, borderRadius: 16, gap: 8 },
+  timeIconWrapper: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  timeLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  timeValue: { fontSize: 14, fontWeight: '800' },
+  pillarsSection: { paddingHorizontal: 20, paddingBottom: 20, borderTopWidth: 1, paddingTop: 16 },
+  breakBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, marginBottom: 16 },
+  breakEmoji: { fontSize: 16 },
+  breakText: { fontSize: 13, fontWeight: '600' },
+  pillarsContainer: { flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginBottom: 16 },
+  pillarWrapper: { flex: 1, alignItems: 'center', gap: 8 },
+  pillarOuter: { width: '100%', height: 52, borderRadius: 10, overflow: 'hidden', justifyContent: 'flex-end' },
+  pillarBreak: { borderWidth: 2, borderStyle: 'dashed' },
+  pillarActive: { borderWidth: 2 },
+  pillarFill: { width: '100%', borderRadius: 8 },
+  breakIconWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
+  breakIconText: { fontSize: 14 },
+  pillarLabel: { fontSize: 9, fontWeight: '600' },
+  progressSummary: { padding: 14, borderRadius: 14, gap: 10 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  progressLabel: { fontSize: 12, fontWeight: '600' },
+  progressValue: { fontSize: 14, fontWeight: '800' },
+  progressBarSmall: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: 4 },
+  progressMilestones: { flexDirection: 'row', justifyContent: 'space-between' },
+  milestoneText: { fontSize: 10, fontWeight: '500' },
+  warningBox: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 20, marginBottom: 20, padding: 14, borderRadius: 14 },
+  warningIconWrapper: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  warningText: { flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 18 },
 });
 
 export default CheckInCard;

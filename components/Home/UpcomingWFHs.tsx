@@ -23,6 +23,7 @@ interface UpcomingWFHsProps {
         wfh2: Animated.Value;
         wfh3: Animated.Value;
     };
+    refreshKey?: number;
 }
 
 const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
@@ -30,6 +31,7 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
     onToggleExpand,
     onAnimatePress,
     scaleAnims,
+    refreshKey,
 }) => {
     const [wfhs, setWfhs] = useState<WFHDetail[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -80,13 +82,13 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchWFHApplications();
-        }, [fetchWFHApplications])
+        }, [fetchWFHApplications, refreshKey])
     );
 
     // Check if main section is expanded

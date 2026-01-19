@@ -5,7 +5,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-const LeaveBalanceSection: React.FC = () => {
+interface LeaveBalanceSectionProps {
+    refreshKey?: number;
+}
+
+const LeaveBalanceSection: React.FC<LeaveBalanceSectionProps> = ({ refreshKey }) => {
     const { colors } = useTheme();
     const styles = createStyles(colors);
     const [leaveBalances, setLeaveBalances] = useState<LeaveBalanceItem[]>([]);
@@ -42,12 +46,12 @@ const LeaveBalanceSection: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     useFocusEffect(
         useCallback(() => {
             fetchLeaveBalance();
-        }, [fetchLeaveBalance])
+        }, [fetchLeaveBalance, refreshKey])
     );
 
     const getLeaveCount = (leaveType: string): number => {

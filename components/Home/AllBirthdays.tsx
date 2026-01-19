@@ -16,6 +16,7 @@ interface AllBirthdaysProps {
     onToggleExpand: () => void;
     onAnimatePress: (animKey: 'birthday', callback: () => void) => void;
     scaleAnim: Animated.Value;
+    refreshKey?: number;
 }
 
 const AllBirthdays: React.FC<AllBirthdaysProps> = ({
@@ -23,6 +24,7 @@ const AllBirthdays: React.FC<AllBirthdaysProps> = ({
     onToggleExpand,
     onAnimatePress,
     scaleAnim,
+    refreshKey,
 }) => {
     const [birthdays, setBirthdays] = useState<Birthday[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -61,13 +63,13 @@ const AllBirthdays: React.FC<AllBirthdaysProps> = ({
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchBirthdays();
-        }, [fetchBirthdays])
+        }, [fetchBirthdays, refreshKey])
     );
 
     return (

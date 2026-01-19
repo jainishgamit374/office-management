@@ -1,11 +1,10 @@
 import Navbar from '@/components/Navigation/Navbar';
 import { useTabBar } from '@/constants/TabBarContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import React, { useRef, useState } from 'react';
-import { Animated, ScrollView, StyleSheet } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { Animated, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AllBirthdays from './AllBirthdays';
-import AttendanceIrregularities from './AttendanceIrregularities';
 import AttendanceTrackingCards from './AttendanceTrackingCards';
 import CheckInCard from './CheckInCard';
 import EarlyCheckouts from './EarlyCheckouts';
@@ -26,6 +25,8 @@ const HomeScreen: React.FC = () => {
   const [hasCheckedOut, setHasCheckedOut] = useState(false);
   const [hasEverCheckedIn, setHasEverCheckedIn] = useState(false);
   const [expandedLeave, setExpandedLeave] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const totalTasks = 12;
   const tasksToComplete = 4;
@@ -107,6 +108,17 @@ const HomeScreen: React.FC = () => {
       },
     }
   );
+  
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setRefreshKey(prev => prev + 1);
+    
+    // Simulate a delay for the refresh animation
+    // The actual components will refresh via the refreshKey prop
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1500);
+  }, []);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -116,6 +128,14 @@ const HomeScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         {/* Header */}
         <Navbar />
@@ -127,35 +147,36 @@ const HomeScreen: React.FC = () => {
         {/* <GreetingSection /> */}
 
         {/* Leave Balance Sheet */}
-        <LeaveBalanceSection />
+        <LeaveBalanceSection refreshKey={refreshKey} />
 
         {/* Attendance Tracking Cards - Now manages its own state */}
-        <AttendanceTrackingCards />
+        <AttendanceTrackingCards refreshKey={refreshKey} />
 
         {/* Check In Card */}
         <CheckInCard
           onCheckInChange={handleCheckInChange}
+          refreshKey={refreshKey}
         />
 
 
         {/* Missed Punch Section */}
-        <MissedPunchSection />
+        <MissedPunchSection refreshKey={refreshKey} />
 
         {/* Attendance Irregularities */}
-        {/* <AttendanceIrregularities /> */}
+        {/* <AttendanceIrregularities refreshKey={refreshKey} /> */}
 
   
         {/* My pending requests */}
-        <PendingRequestsSection />
+        <PendingRequestsSection refreshKey={refreshKey} />
 
         {/* Late arrivals */}
-        <LateArrivals title="Late Arrivals Today" />
+        <LateArrivals title="Late Arrivals Today" refreshKey={refreshKey} />
 
         {/* Leave Early Today */}
-        <EarlyCheckouts title="Leaving Early Today" />
+        <EarlyCheckouts title="Leaving Early Today" refreshKey={refreshKey} />
 
         {/* Employees on Leave Today */}
-        <EmployeesOnLeaveToday />
+        <EmployeesOnLeaveToday refreshKey={refreshKey} />
 
         {/* Upcoming Leaves */}
         <UpcomingLeaves
@@ -167,6 +188,7 @@ const HomeScreen: React.FC = () => {
             leave2: scaleAnims.leave2,
             leave3: scaleAnims.leave3,
           }}
+          refreshKey={refreshKey}
         />
 
         {/* Upcoming WFHs */}
@@ -180,6 +202,7 @@ const HomeScreen: React.FC = () => {
             wfh2: scaleAnims.wfh2,
             wfh3: scaleAnims.wfh3,
           }}
+          refreshKey={refreshKey}
         />
 
         {/* Employees WFH Today */}
@@ -188,10 +211,11 @@ const HomeScreen: React.FC = () => {
           onToggleExpand={() => handleExpandToggle(expandedLeave === 8 ? null : 8)}
           onAnimatePress={animatePress}
           scaleAnim={scaleAnims.wfhToday}
+          refreshKey={refreshKey}
         />
 
         {/* Employee of the Month */}
-        <EmployeeOfTheMonthSection />
+        <EmployeeOfTheMonthSection refreshKey={refreshKey} />
 
         {/* All Birthdays */}
         <AllBirthdays
@@ -199,6 +223,7 @@ const HomeScreen: React.FC = () => {
           onToggleExpand={() => handleExpandToggle(expandedLeave === 9 ? null : 9)}
           onAnimatePress={animatePress}
           scaleAnim={scaleAnims.birthday}
+          refreshKey={refreshKey}
         />
 
       </ScrollView>

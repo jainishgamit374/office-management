@@ -24,6 +24,7 @@ interface UpcomingLeavesProps {
         leave2: Animated.Value;
         leave3: Animated.Value;
     };
+    refreshKey?: number;
 }
 
 const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
@@ -31,6 +32,7 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
     onToggleExpand,
     onAnimatePress,
     scaleAnims,
+    refreshKey,
 }) => {
     const [leaves, setLeaves] = useState<LeaveDetail[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -137,13 +139,13 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     // Fetch data on component mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchLeaveApplications();
-        }, [fetchLeaveApplications])
+        }, [fetchLeaveApplications, refreshKey])
     );
 
     // Show loading state

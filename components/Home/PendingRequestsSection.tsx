@@ -5,13 +5,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Easing, LayoutAnimation, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 
 import {
-  approveAny,
-  BASE,
-  disapproveAny,
-  getEarlyCheckoutDetails,
-  getLeaveApprovals,
-  getMissPunchApprovalHistory,
-  getWfhApprovals
+    approveAny,
+    BASE,
+    disapproveAny,
+    getEarlyCheckoutDetails,
+    getLeaveApprovals,
+    getMissPunchApprovalHistory,
+    getWfhApprovals
 } from '@/lib/approvalsApi';
 import { getEarlyLatePunchList } from '@/lib/earlyLatePunch';
 import ApprovalDetailsModal, { ApprovalDetails } from './ApprovalDetailsModal';
@@ -110,14 +110,18 @@ function AccordionSection({
 function EmptyState({ label, styles, colors }: { label: string; styles: any; colors: ThemeColors }) {
   return (
     <View style={styles.emptyState}>
-      <Feather name="check-circle" size={20} color={colors.disabled || '#9CA3AF'} />
-      <Text style={[styles.emptyText, { color: colors.disabled || '#9CA3AF' }]}>{label}</Text>
+      <Feather name="check-circle" size={20} color={colors.textTertiary} />
+      <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{label}</Text>
     </View>
   );
 }
 
+interface PendingRequestsSectionProps {
+  refreshKey?: number;
+}
+
 // ---------- Main ----------
-const PendingRequestsSection: React.FC = () => {
+const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({ refreshKey }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -334,12 +338,12 @@ const PendingRequestsSection: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshKey]);
 
   useFocusEffect(
     useCallback(() => {
       fetchData();
-    }, [fetchData])
+    }, [fetchData, refreshKey])
   );
 
   const totalCount = leaves.length + missPunches.length + earlyCheckouts.length + lateArrivals.length + wfh.length;

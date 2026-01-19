@@ -15,6 +15,7 @@ interface EmployeesWFHTodayProps {
     onToggleExpand: () => void;
     onAnimatePress: (animKey: 'wfhToday', callback: () => void) => void;
     scaleAnim: Animated.Value;
+    refreshKey?: number;
 }
 
 const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
@@ -22,6 +23,7 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
     onToggleExpand,
     onAnimatePress,
     scaleAnim,
+    refreshKey,
 }) => {
     const [employees, setEmployees] = useState<WFHEmployee[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -57,13 +59,13 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchWFHEmployees();
-        }, [fetchWFHEmployees])
+        }, [fetchWFHEmployees, refreshKey])
     );
 
     return (

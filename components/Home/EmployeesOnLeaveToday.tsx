@@ -13,10 +13,10 @@ interface Employee {
 }
 
 interface EmployeesOnLeaveTodayProps {
-    // No props needed - fetches its own data
+    refreshKey?: number;
 }
 
-const EmployeesOnLeaveToday: React.FC<EmployeesOnLeaveTodayProps> = () => {
+const EmployeesOnLeaveToday: React.FC<EmployeesOnLeaveTodayProps> = ({ refreshKey }) => {
     const { colors } = useTheme();
     const styles = createStyles(colors);
     
@@ -52,13 +52,13 @@ const EmployeesOnLeaveToday: React.FC<EmployeesOnLeaveTodayProps> = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchTodayLeaves();
-        }, [fetchTodayLeaves])
+        }, [fetchTodayLeaves, refreshKey])
     );
 
     return (

@@ -15,9 +15,10 @@ interface EarlyCheckoutData {
 
 interface EarlyCheckoutsProps {
     title: string;
+    refreshKey?: number;
 }
 
-const EarlyCheckouts: React.FC<EarlyCheckoutsProps> = ({ title }) => {
+const EarlyCheckouts: React.FC<EarlyCheckoutsProps> = ({ title, refreshKey }) => {
     const { colors } = useTheme();
     const styles = createStyles(colors);
     const [checkouts, setCheckouts] = useState<EarlyCheckoutData[]>([]);
@@ -87,13 +88,13 @@ const EarlyCheckouts: React.FC<EarlyCheckoutsProps> = ({ title }) => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchEarlyCheckouts();
-        }, [fetchEarlyCheckouts])
+        }, [fetchEarlyCheckouts, refreshKey])
     );
 
     const formatDateTime = (dateTimeStr: string): string => {

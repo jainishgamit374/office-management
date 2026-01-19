@@ -9,7 +9,11 @@ interface EmployeeOfMonthData {
     month: string;
 }
 
-const EmployeeOfTheMonthSection: React.FC = () => {
+interface EmployeeOfTheMonthSectionProps {
+    refreshKey?: number;
+}
+
+const EmployeeOfTheMonthSection: React.FC<EmployeeOfTheMonthSectionProps> = ({ refreshKey }) => {
     const [employee, setEmployee] = useState<EmployeeOfMonthData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -41,13 +45,13 @@ const EmployeeOfTheMonthSection: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchEmployeeOfTheMonth();
-        }, [fetchEmployeeOfTheMonth])
+        }, [fetchEmployeeOfTheMonth, refreshKey])
     );
 
     return (

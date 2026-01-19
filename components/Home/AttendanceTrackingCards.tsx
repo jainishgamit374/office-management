@@ -8,9 +8,10 @@ import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView,
 
 interface AttendanceTrackingCardsProps {
     onCountsChange?: (lateCount: number, earlyCount: number) => void;
+    refreshKey?: number;
 }
 
-const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCountsChange }) => {
+const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCountsChange, refreshKey }) => {
     const { colors } = useTheme();
     const styles = createStyles(colors);
     const [showModal, setShowModal] = useState(false);
@@ -84,13 +85,13 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
         } catch (error) {
             console.error('❌ [AttendanceTrackingCards] Error fetching counts:', error);
         }
-    }, [onCountsChange]);
+    }, [onCountsChange, refreshKey]);
 
     // Fetch on mount and when screen gains focus
     useFocusEffect(
         useCallback(() => {
             fetchCounts();
-        }, [fetchCounts])
+        }, [fetchCounts, refreshKey])
     );
 
     // Manual refresh

@@ -15,9 +15,10 @@ interface LateArrivalData {
 
 interface LateArrivalsProps {
     title: string;
+    refreshKey?: number;
 }
 
-const LateArrivals: React.FC<LateArrivalsProps> = ({ title }) => {
+const LateArrivals: React.FC<LateArrivalsProps> = ({ title, refreshKey }) => {
     const { colors } = useTheme();
     const styles = createStyles(colors);
     const [arrivals, setArrivals] = useState<LateArrivalData[]>([]);
@@ -77,13 +78,13 @@ const LateArrivals: React.FC<LateArrivalsProps> = ({ title }) => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchLateArrivals();
-        }, [fetchLateArrivals])
+        }, [fetchLateArrivals, refreshKey])
     );
 
     const formatDateTime = (dateTimeStr: string): string => {

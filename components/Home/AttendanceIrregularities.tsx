@@ -17,7 +17,11 @@ import {
     View
 } from 'react-native';
 
-const AttendanceIrregularities = () => {
+interface AttendanceIrregularitiesProps {
+    refreshKey?: number;
+}
+
+const AttendanceIrregularities: React.FC<AttendanceIrregularitiesProps> = ({ refreshKey }) => {
     const [lateCheckins, setLateCheckins] = useState<AttendanceIrregularity[]>([]);
     const [earlyCheckouts, setEarlyCheckouts] = useState<AttendanceIrregularity[]>([]);
     const [halfDays, setHalfDays] = useState<AttendanceIrregularity[]>([]);
@@ -80,7 +84,7 @@ const AttendanceIrregularities = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [refreshKey]);
 
     const handleDisapprove = async (programId: number, tranId: number) => {
         Alert.alert(
@@ -116,7 +120,7 @@ const AttendanceIrregularities = () => {
     useFocusEffect(
         useCallback(() => {
             fetchIrregularities();
-        }, [fetchIrregularities])
+        }, [fetchIrregularities, refreshKey])
     );
 
     const formatDate = (dateStr: string) => {

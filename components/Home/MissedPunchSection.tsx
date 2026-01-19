@@ -33,7 +33,11 @@ interface MissingPunchOut {
 
 type MissPunchFormType = 'check-in' | 'check-out';
 
-const MissedPunchSection: React.FC = () => {
+interface MissedPunchSectionProps {
+  refreshKey?: number;
+}
+
+const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) => {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -106,12 +110,12 @@ const MissedPunchSection: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [refreshKey]);
 
   useFocusEffect(
     useCallback(() => {
       fetchMissedPunches();
-    }, [fetchMissedPunches])
+    }, [fetchMissedPunches, refreshKey])
   );
 
   const formatDateTime = (dateStr: string): string => {

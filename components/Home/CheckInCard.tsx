@@ -12,6 +12,7 @@ import {
   type PunchStatusResponse
 } from '@/lib/attendance';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -45,6 +46,9 @@ const OFFICE_START_MINUTE = 30;
 const BREAK_START_HOUR = 13;
 const BREAK_END_HOUR = 14;
 const TOTAL_WORKING_HOURS = 8;
+
+const KEY_LAST_PUNCH_TIME = 'attendance_last_punch_time';
+const KEY_LAST_PUNCH_TYPE = 'attendance_last_punch_type';
 
 const TIME_SLOTS = [
   { label: '9:30', start: 9.5, end: 10.5, isBreak: false },
@@ -125,6 +129,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const isLoadingRef = useRef(true);
   const previousPunchType = useRef<0 | 1 | 2>(0);
   const lastPunchTimeRef = useRef<number>(0);
+  const lastProgressRef = useRef<number>(0);
 
   useEffect(() => { isCheckedInRef.current = isCheckedIn; }, [isCheckedIn]);
   useEffect(() => { hasCheckedOutRef.current = hasCheckedOut; }, [hasCheckedOut]);
@@ -277,9 +282,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         return;
       }
 
-      // Set animation values IMMEDIATELY for checked-in state
+      // ────── CRITICAL FIX: Set animation values IMMEDIATELY for checked-in state ──────
       if (newType === 1) {
-        pan.setValue(MAX_SWIPE_DISTANCE);
+        // Force position if not already there (using cast to access internal value for check)
+        // This prevents "bouncing" but ensures we are at the right spot
+        if ((pan as any)._value !== MAX_SWIPE_DISTANCE) {
+           pan.setValue(MAX_SWIPE_DISTANCE);
+        }
         colorAnim.setValue(1);
 
         const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
@@ -289,6 +298,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           progressAnim.setValue(progress);
         }
       }
+      // ─────────────────────────────────────────────────────────────────────────────────
 
       // Only run full state update if punch type changed or first load
       if (newType !== previousPunchType.current || !isInitialized) {
@@ -299,9 +309,11 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
         switch (newType) {
           case 0:
+            // Not checked in
             pan.setValue(0);
             colorAnim.setValue(0);
             progressAnim.setValue(0);
+            lastProgressRef.current = 0;
             setIsCheckedIn(false);
             setHasCheckedOut(false);
             setPunchInTime(null);
@@ -314,6 +326,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
             break;
 
           case 1:
+            // Checked in
             const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
             const parsedInTime = parsePunchTime(inTimeStr);
 
@@ -327,10 +340,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
             break;
 
           case 2:
+            // Checked out
             pan.setValue(0);
             colorAnim.setValue(2);
             progressAnim.setValue(0);
-
+            lastProgressRef.current = 0;
+            
             const outTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
             setPunchOutTime(outTimeStr);
             setPunchOutDate(parsePunchTime(outTimeStr));
@@ -346,12 +361,23 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       } else {
         // Silent update - just update data without moving sliders
         if (newType === 1) {
+          // 🛡️ RECOVERY: If for some reason state is wrong but we are in silent update
+          if (!isCheckedInRef.current) {
+            console.log('🛡️ Fixing inconsistent state in silent update');
+            setIsCheckedIn(true);
+            previousPunchType.current = 1;
+            pan.setValue(MAX_SWIPE_DISTANCE);
+            colorAnim.setValue(1);
+          }
+
           const inTimeStr = punch.PunchDateTimeISO || punch.PunchDateTime;
           const parsedInTime = parsePunchTime(inTimeStr);
           if (parsedInTime) {
             setPunchInDate(parsedInTime);
             setPunchInTime(inTimeStr);
             const progress = calculateWorkingHours(parsedInTime) / TOTAL_WORKING_HOURS;
+            // Only update progress if we have a valid value, don't animate here, let effect handle it
+            // or just set it. 
             progressAnim.setValue(progress);
             setWorkingMinutes(punch.WorkingMinutes || 0);
           }
@@ -396,9 +422,36 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     isInitialized,
   ]);
 
-  // Initial mount
+  // Initial mount - Restore state from storage then fetch
   useEffect(() => {
-    fetchPunchStatus(true);
+    const restoreState = async () => {
+      try {
+        const [savedTime, savedType] = await AsyncStorage.multiGet([
+          KEY_LAST_PUNCH_TIME, 
+          KEY_LAST_PUNCH_TYPE
+        ]);
+
+        if (savedTime[1]) {
+          lastPunchTimeRef.current = parseInt(savedTime[1], 10);
+        }
+        if (savedType[1]) {
+           const savedTypeVal = parseInt(savedType[1], 10);
+           if (!isNaN(savedTypeVal)) {
+             previousPunchType.current = savedTypeVal as 0 | 1 | 2;
+           }
+        }
+        console.log('📦 Restored state:', { 
+          lastPunchTime: lastPunchTimeRef.current, 
+          previousPunchType: previousPunchType.current 
+        });
+      } catch (e) {
+        console.error('Failed to restore state', e);
+      } finally {
+        fetchPunchStatus(true);
+      }
+    };
+    
+    restoreState();
   }, [fetchPunchStatus]);
 
   // Screen focus
@@ -442,6 +495,18 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         pan.setValue(0);
         colorAnim.setValue(0);
         progressAnim.setValue(0);
+        lastProgressRef.current = 0;
+        setIsCheckedIn(false);
+        setHasCheckedOut(false);
+        setPunchInTime(null);
+        setPunchOutTime(null);
+        setPunchInDate(null);
+        setPunchOutDate(null);
+        setWorkingMinutes(0);
+        setSlotProgresses([]);
+        setCompletedWorkingHours(0);
+        setPunchType(0);
+        lastProgressRef.current = 0;
         setIsCheckedIn(false);
         setHasCheckedOut(false);
         setPunchInTime(null);
@@ -453,6 +518,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setCompletedWorkingHours(0);
         setPunchType(0);
         previousPunchType.current = 0;
+        
+        // Clear storage
+        AsyncStorage.multiRemove([KEY_LAST_PUNCH_TIME, KEY_LAST_PUNCH_TYPE]);
 
         fetchPunchStatus(true);
       }
@@ -500,11 +568,17 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
       const progressValue = workingHrs / TOTAL_WORKING_HOURS;
 
-      Animated.timing(progressAnim, {
-        toValue: progressValue,
-        duration: 500,
-        useNativeDriver: false,
-      }).start();
+      // Monotonic progress update - prevent backward jumps
+      // Only animate if new progress is greater than or equal to last seen progress
+      // (Unless it's a new day reset which is handled separately)
+      if (progressValue >= lastProgressRef.current) {
+        lastProgressRef.current = progressValue;
+        Animated.timing(progressAnim, {
+          toValue: progressValue,
+          duration: 500,
+          useNativeDriver: false,
+        }).start();
+      }
     };
 
     updateProgress();
@@ -682,6 +756,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           setPunchType(1);
           lastPunchTimeRef.current = Date.now();
           
+          // Save to storage immediately
+          AsyncStorage.multiSet([
+            [KEY_LAST_PUNCH_TIME, lastPunchTimeRef.current.toString()],
+            [KEY_LAST_PUNCH_TYPE, '1']
+          ]);
+          
           Animated.spring(pan, { toValue: MAX_SWIPE_DISTANCE, useNativeDriver: false, friction: 8, tension: 40 }).start();
           
           // API call happens in background - UI is already updated
@@ -691,6 +771,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
             previousPunchType.current = 0;
             setIsCheckedIn(false);
             setPunchType(0);
+            
+            // Revert storage
+            AsyncStorage.setItem(KEY_LAST_PUNCH_TYPE, '0');
+            
             resetToStart();
           }
         } else if (isCheckedInRef.current && g.dx < -SWIPE_THRESHOLD) {
@@ -700,6 +784,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           setHasCheckedOut(true);
           setPunchType(2);
           lastPunchTimeRef.current = Date.now();
+          
+          // Save to storage immediately
+          AsyncStorage.multiSet([
+            [KEY_LAST_PUNCH_TIME, lastPunchTimeRef.current.toString()],
+            [KEY_LAST_PUNCH_TYPE, '2']
+          ]);
           
           Animated.spring(pan, { toValue: 0, useNativeDriver: false, friction: 8, tension: 40 }).start();
           
@@ -711,6 +801,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
             setIsCheckedIn(true);
             setHasCheckedOut(false);
             setPunchType(1);
+            
+            // Revert storage
+            AsyncStorage.setItem(KEY_LAST_PUNCH_TYPE, '1');
+            
             resetToCheckedIn();
           }
         } else {

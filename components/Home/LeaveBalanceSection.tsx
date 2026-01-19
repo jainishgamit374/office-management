@@ -3,7 +3,7 @@ import { getEmployeeLeaveBalance, type LeaveBalanceItem } from '@/lib/leaves';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 interface LeaveBalanceSectionProps {
     refreshKey?: number;
@@ -25,17 +25,7 @@ const LeaveBalanceSection: React.FC<LeaveBalanceSectionProps> = ({ refreshKey })
             console.log('📡 Leave Balance Response:', JSON.stringify(response, null, 2));
             
             if (response.status === 'Success' && response.data && Array.isArray(response.data)) {
-                if (response.data.length > 0) {
-                    setLeaveBalances(response.data);
-                } else {
-                    // Use sample data when API returns empty
-                    const sampleData: LeaveBalanceItem[] = [
-                        { Leavename: 'CL', count: 15 },
-                        { Leavename: 'PL', count: 15 },
-                        { Leavename: 'SL', count: 13 }
-                    ];
-                    setLeaveBalances(sampleData);
-                }
+                setLeaveBalances(response.data);
             } else {
                 setLeaveBalances([]);
             }
@@ -75,19 +65,9 @@ const LeaveBalanceSection: React.FC<LeaveBalanceSectionProps> = ({ refreshKey })
     };
 
     return (
-        <TouchableOpacity 
-            style={styles.container}
-            onPress={fetchLeaveBalance}
-            disabled={isLoading}
-            activeOpacity={0.7}
-        >
+        <View style={styles.container}>
             <View style={styles.header}>
-                <View>
-                    <Text style={styles.title}>Leave Balance</Text>
-                    <Text style={styles.subtitle}>
-                        {isLoading ? 'Refreshing...' : 'Tap to refresh'}
-                    </Text>
-                </View>
+                <Text style={styles.title}>Leave Balance</Text>
                 {isLoading && (
                     <ActivityIndicator size="small" color={colors.primary} />
                 )}
@@ -143,7 +123,7 @@ const LeaveBalanceSection: React.FC<LeaveBalanceSectionProps> = ({ refreshKey })
                     </View>
                 </>
             )}
-        </TouchableOpacity>
+        </View>
     );
 };
 
@@ -167,11 +147,6 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: colors.primary,
-    },
-    subtitle: {
-        fontSize: 11,
-        color: colors.textSecondary,
-        marginTop: 2,
     },
     loadingContainer: {
         paddingVertical: 16,

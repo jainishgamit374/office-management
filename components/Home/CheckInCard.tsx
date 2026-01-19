@@ -70,6 +70,7 @@ interface CheckInCardProps {
   onCheckInChange?: (isCheckedIn: boolean, hasCheckedOut: boolean) => void;
   onLateEarlyCountChange?: (lateCount: number, earlyCount: number) => void;
   onStatusLoaded?: (status: PunchStatusResponse) => void;
+  refreshKey?: number;
 }
 
 interface SlotProgress {
@@ -84,6 +85,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   onCheckInChange,
   onLateEarlyCountChange,
   onStatusLoaded,
+  refreshKey,
 }) => {
   const { colors, theme } = useTheme();
   const isDark = theme === 'dark';
@@ -369,6 +371,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       }
     }, [fetchPunchStatus, isInitialized])
   );
+
+  // Trigger refresh when refreshKey changes (pull-to-refresh)
+  useEffect(() => {
+    if (isInitialized && refreshKey !== undefined && refreshKey > 0) {
+      console.log('🔄 CheckInCard: Refreshing due to pull-to-refresh, refreshKey:', refreshKey);
+      fetchPunchStatus(false, true);
+    }
+  }, [refreshKey, isInitialized, fetchPunchStatus]);
 
   useEffect(() => {
     const interval = setInterval(() => {

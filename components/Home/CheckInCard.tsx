@@ -302,7 +302,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         
         // 🛡️ GUARD: Prevent automatic checkout from API
         // Only allow checkout (PunchType 2) if:
-        // 1. It's the initial load (!isInitialized)
+        // 1. It's the initial load (!isInitialized) AND the checkout is from today
         // 2. User was not checked in before (previousPunchType !== 1)
         // 3. User manually triggered checkout (manualCheckoutRef.current === true)
         if (newType === 2 && previousPunchType.current === 1 && isInitialized && !manualCheckoutRef.current) {
@@ -310,6 +310,29 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           console.warn('🛡️ Keeping user in checked-in state. Only manual swipe can check out.');
           // Keep the current state, don't update to checked out
           return;
+        }
+        
+        // 🛡️ ADDITIONAL GUARD: Check if checkout is from today
+        // If PunchType is 2 but the punch-out time is NOT from today, treat it as checked IN
+        if (newType === 2 && !isInitialized) {
+          const checkoutDate = parsePunchTime(punchDateTime);
+          if (checkoutDate) {
+            const today = new Date();
+            const checkoutDay = checkoutDate.toISOString().split('T')[0];
+            const currentDay = today.toISOString().split('T')[0];
+            
+            if (checkoutDay !== currentDay) {
+              console.warn('🛡️ CHECKOUT IS FROM A PREVIOUS DAY:', checkoutDay, '!== Today:', currentDay);
+              console.warn('🛡️ Treating as checked IN (PunchType: 1) instead of checked OUT');
+              
+              // Override: Treat as checked in
+              newType = 1;
+              // Use the punch-in time from the API if available
+              if (punchInTimeStr) {
+                punchDateTime = punchInTimeStr;
+              }
+            }
+          }
         }
         
         // Reset manual checkout flag after processing

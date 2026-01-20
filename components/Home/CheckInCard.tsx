@@ -12,6 +12,7 @@ import {
   type PunchStatusResponse
 } from '@/lib/attendance';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -58,6 +59,10 @@ const TIME_SLOTS = [
   { label: '5:00', start: 17, end: 18.5, isBreak: false },
 ];
 
+// 🔑 STORAGE KEYS
+const STORAGE_KEY_DATE = '@attendance_date';
+const STORAGE_KEY_STATE = '@attendance_state';
+
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -75,6 +80,14 @@ interface SlotProgress {
   current: boolean;
   progress: number;
   isBreak: boolean;
+}
+
+interface StoredState {
+  punchType: 0 | 1 | 2;
+  punchInTime: string | null;
+  punchOutTime: string | null;
+  workingMinutes: number;
+  date: string;
 }
 
 // ============ COMPONENT ============
@@ -124,7 +137,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const isPunchingRef = useRef(false);
   const isLoadingRef = useRef(true);
   const previousPunchType = useRef<0 | 1 | 2>(0);
-  const manualCheckoutRef = useRef(false); // Track if user manually checked out
 
   useEffect(() => { isCheckedInRef.current = isCheckedIn; }, [isCheckedIn]);
   useEffect(() => { hasCheckedOutRef.current = hasCheckedOut; }, [hasCheckedOut]);
@@ -144,6 +156,140 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const timeBoxBg = isDark ? '#2C2C2E' : '#F8FAFC';
   const pillarBg = isDark ? '#3A3A3C' : '#E5E7EB';
   const dividerColor = isDark ? '#3A3A3C' : '#F3F4F6';
+
+  // ============ 🆕 STORAGE HELPERS ============
+  const saveToStorage = useCallback(async (state: StoredState) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(state));
+      await AsyncStorage.setItem(STORAGE_KEY_DATE, state.date);
+      console.log('💾 Saved to storage:', state);
+    } catch (error) {
+      console.error('❌ Failed to save:', error);
+    }
+  }, []);
+
+  const loadFromStorage = useCallback(async (): Promise<StoredState | null> => {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_KEY_STATE);
+      if (!stored) return null;
+      
+      const state: StoredState = JSON.parse(stored);
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Only restore if same day
+      if (state.date !== today) {
+        console.log('🗑️ Storage from different day, clearing');
+        await AsyncStorage.multiRemove([STORAGE_KEY_STATE, STORAGE_KEY_DATE]);
+        return null;
+      }
+      
+      console.log('📂 Loaded from storage:', state);
+      return state;
+    } catch (error) {
+      console.error('❌ Failed to load:', error);
+      return null;
+    }
+  }, []);
+
+  const clearStorage = useCallback(async () => {
+    try {
+      await AsyncStorage.multiRemove([STORAGE_KEY_STATE, STORAGE_KEY_DATE]);
+      console.log('🗑️ Storage cleared');
+    } catch (error) {
+      console.error('❌ Failed to clear:', error);
+    }
+  }, []);
+
+  // ============ HELPER: Apply state (unified) ============
+  const applyState = useCallback((
+    type: 0 | 1 | 2,
+    inTime: string | null,
+    outTime: string | null,
+    workingMins: number,
+    saveToStore: boolean = true
+  ) => {
+    const today = new Date().toISOString().split('T')[0];
+
+    console.log('🔄 Applying state:', { type, inTime, outTime, workingMins });
+
+    switch (type) {
+      case 0: // Reset
+        pan.setValue(0);
+        colorAnim.setValue(0);
+        progressAnim.setValue(0);
+        setIsCheckedIn(false);
+        setHasCheckedOut(false);
+        setPunchInTime(null);
+        setPunchOutTime(null);
+        setPunchInDate(null);
+        setPunchOutDate(null);
+        setWorkingMinutes(0);
+        setSlotProgresses([]);
+        setCompletedWorkingHours(0);
+        setPunchType(0);
+        previousPunchType.current = 0;
+        
+        if (saveToStore) {
+          saveToStorage({ punchType: 0, punchInTime: null, punchOutTime: null, workingMinutes: 0, date: today });
+        }
+        break;
+
+      case 1: // Checked In
+        const parsedIn = parsePunchTime(inTime);
+        
+        pan.setValue(MAX_SWIPE_DISTANCE);
+        colorAnim.setValue(1);
+        
+        setIsCheckedIn(true);
+        setHasCheckedOut(false);
+        setPunchInTime(inTime);
+        setPunchInDate(parsedIn || new Date());
+        setPunchOutTime(null);
+        setPunchOutDate(null);
+        setWorkingMinutes(workingMins);
+        setPunchType(1);
+        previousPunchType.current = 1;
+
+        if (parsedIn) {
+          const progress = calculateWorkingHours(parsedIn) / TOTAL_WORKING_HOURS;
+          progressAnim.setValue(progress);
+        }
+
+        if (saveToStore) {
+          saveToStorage({ punchType: 1, punchInTime: inTime, punchOutTime: null, workingMinutes: workingMins, date: today });
+        }
+        break;
+
+      case 2: // Checked Out
+        const parsedOut = parsePunchTime(outTime);
+        const parsedIn2 = parsePunchTime(inTime);
+
+        pan.setValue(0);
+        colorAnim.setValue(2);
+        progressAnim.setValue(0);
+
+        setIsCheckedIn(false);
+        setHasCheckedOut(true);
+        setPunchOutTime(outTime);
+        setPunchOutDate(parsedOut || new Date());
+        
+        if (inTime) {
+          setPunchInTime(inTime);
+          setPunchInDate(parsedIn2);
+        }
+        
+        setWorkingMinutes(workingMins);
+        setSlotProgresses([]);
+        setCompletedWorkingHours(0);
+        setPunchType(2);
+        previousPunchType.current = 2;
+
+        if (saveToStore) {
+          saveToStorage({ punchType: 2, punchInTime: inTime, punchOutTime: outTime, workingMinutes: workingMins, date: today });
+        }
+        break;
+    }
+  }, [pan, colorAnim, progressAnim, saveToStorage, parsePunchTime, calculateWorkingHours]);
 
   // ============ HELPER: Calculate slot progress ============
   const calculateSlotProgresses = useCallback((checkInTime: Date | null): SlotProgress[] => {
@@ -245,45 +391,59 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     });
   };
 
-  // ============ FETCH PUNCH STATUS ============
+  // ============ 🆕 FETCH PUNCH STATUS (REFACTORED) ============
   const fetchPunchStatus = useCallback(async (showLoading = true, isRefresh = false): Promise<void> => {
-    console.log('🔔 fetchPunchStatus called - showLoading:', showLoading, 'isRefresh:', isRefresh);
     try {
       if (showLoading && !isRefresh) setIsLoading(true);
       setError(null);
 
+      const today = new Date().toISOString().split('T')[0];
+
+      // 1️⃣ Check for new day
+      const lastDate = await AsyncStorage.getItem(STORAGE_KEY_DATE);
+      if (lastDate && lastDate !== today) {
+        console.log('🌅 New day detected - clearing storage');
+        await clearStorage();
+        applyState(0, null, null, 0, true);
+      }
+
+      // 2️⃣ Try loading from storage first (instant UI)
+      if (!isRefresh) {
+        const stored = await loadFromStorage();
+        if (stored) {
+          console.log('⚡ Restoring from storage');
+          applyState(stored.punchType, stored.punchInTime, stored.punchOutTime, stored.workingMinutes, false);
+        }
+      }
+
+      // 3️⃣ Fetch from API (background sync)
       const response: PunchStatusResponse = await getPunchStatus();
       onStatusLoaded?.(response);
       setLastUpdated(new Date());
 
-      // @ts-ignore - Handle both nested and flat API response structures
       const responseData = response.data || (response as any);
       
-      // Try to get PunchType from multiple possible locations
+      // Handle both nested and flat API structures
       let newType: 0 | 1 | 2 = 0;
       let punchDateTime: string | null = null;
       let workingMins = 0;
       let punchInTimeStr: string | null = null;
 
-      // Check if data is nested under 'punch' key
       if (responseData.punch) {
         newType = (responseData.punch.PunchType ?? 0) as 0 | 1 | 2;
         punchDateTime = responseData.punch.PunchDateTimeISO || responseData.punch.PunchDateTime;
         workingMins = responseData.punch.WorkingMinutes || 0;
         punchInTimeStr = responseData.punch.PunchInTime;
       } else {
-        // Data is flat (directly under data)
         newType = (responseData.PunchType ?? 0) as 0 | 1 | 2;
         punchDateTime = responseData.PunchDateTimeISO || responseData.PunchDateTime;
         workingMins = responseData.WorkingMinutes || 0;
         punchInTimeStr = responseData.PunchInTime;
       }
 
-      console.log('📊 API Response - PunchType:', newType, 'DateTime:', punchDateTime);
-      console.log('🔍 Previous PunchType:', previousPunchType.current, '| Current PunchType:', newType);
-      console.log('🔍 isInitialized:', isInitialized, '| isRefresh:', isRefresh);
-      console.log('🔍 Full API Response:', JSON.stringify(responseData, null, 2));
+      console.log('📡 API Response:', { newType, punchDateTime });
 
+      // Update late/early counts
       const lateEarly = responseData.lateEarly ?? {
         lateCheckins: 0,
         earlyCheckouts: 0,
@@ -295,160 +455,82 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       setRemainingLateCheckins(lateEarly.remainingLateCheckins);
       onLateEarlyCountChange?.(lateEarly.lateCheckins, lateEarly.earlyCheckouts);
 
-      // Only run full state update if punch type changed or first load
-      if (newType !== previousPunchType.current || !isInitialized) {
-        console.log('🔄 Punch type changed:', previousPunchType.current, '→', newType);
-        console.warn('⚠️ FULL STATE UPDATE TRIGGERED');
-        
-        // 🛡️ GUARD: Prevent automatic checkout from API
-        // Only allow checkout (PunchType 2) if:
-        // 1. It's the initial load (!isInitialized) AND the checkout is from today
-        // 2. User was not checked in before (previousPunchType !== 1)
-        // 3. User manually triggered checkout (manualCheckoutRef.current === true)
-        if (newType === 2 && previousPunchType.current === 1 && isInitialized && !manualCheckoutRef.current) {
-          console.warn('🛡️ BLOCKED: Automatic checkout prevented! Backend returned PunchType: 2 but user is checked in.');
-          console.warn('🛡️ Keeping user in checked-in state. Only manual swipe can check out.');
-          // Keep the current state, don't update to checked out
-          return;
-        }
-        
-        // 🛡️ ADDITIONAL GUARD: Check if checkout is from today
-        // If PunchType is 2 but the punch-out time is NOT from today, treat it as checked IN
-        if (newType === 2 && !isInitialized) {
-          const checkoutDate = parsePunchTime(punchDateTime);
-          if (checkoutDate) {
-            const today = new Date();
-            const checkoutDay = checkoutDate.toISOString().split('T')[0];
-            const currentDay = today.toISOString().split('T')[0];
-            
-            if (checkoutDay !== currentDay) {
-              console.warn('🛡️ CHECKOUT IS FROM A PREVIOUS DAY:', checkoutDay, '!== Today:', currentDay);
-              console.warn('🛡️ Treating as checked IN (PunchType: 1) instead of checked OUT');
-              
-              // Override: Treat as checked in
-              newType = 1;
-              // Use the punch-in time from the API if available
-              if (punchInTimeStr) {
-                punchDateTime = punchInTimeStr;
-              }
-            }
+      // 4️⃣ Guard: Check if checkout is from today
+      if (newType === 2) {
+        const checkoutDate = parsePunchTime(punchDateTime);
+        if (checkoutDate) {
+          const checkoutDay = checkoutDate.toISOString().split('T')[0];
+          if (checkoutDay !== today) {
+            console.log('🛡️ Checkout from previous day detected - resetting');
+            newType = 0;
+            punchDateTime = null;
           }
         }
+      }
+
+      // 5️⃣ Apply API state (with storage priority)
+      // If we have stored state and API returns checkout, check if it's a manual checkout
+      const stored = await loadFromStorage();
+      
+      if (stored && stored.punchType === 1 && newType === 2) {
+        // User was checked in (in storage), but API says checked out
+        // This could mean:
+        // 1. App was closed and reopened (storage has check-in, API has old checkout)
+        // 2. Admin manually checked out the user
         
-        // Reset manual checkout flag after processing
-        if (newType === 2 && manualCheckoutRef.current) {
-          manualCheckoutRef.current = false;
-        }
+        // Check if the checkout time is AFTER the stored check-in time
+        const storedCheckInDate = parsePunchTime(stored.punchInTime);
+        const apiCheckOutDate = parsePunchTime(punchDateTime);
         
-        previousPunchType.current = newType;
-        setPunchType(newType);
-
-        switch (newType) {
-          case 0:
-            pan.setValue(0);
-            colorAnim.setValue(0);
-            progressAnim.setValue(0);
-            setIsCheckedIn(false);
-            setHasCheckedOut(false);
-            setPunchInTime(null);
-            setPunchOutTime(null);
-            setPunchInDate(null);
-            setPunchOutDate(null);
-            setWorkingMinutes(0);
-            setSlotProgresses([]);
-            setCompletedWorkingHours(0);
-            break;
-
-          case 1:
-            // Set slider to checked-in position
-            pan.setValue(MAX_SWIPE_DISTANCE);
-            colorAnim.setValue(1);
-            
-            const parsedInTime = parsePunchTime(punchDateTime);
-            if (parsedInTime) {
-              const progress = calculateWorkingHours(parsedInTime) / TOTAL_WORKING_HOURS;
-              progressAnim.setValue(progress);
-            }
-            
-            setIsCheckedIn(true);
-            setHasCheckedOut(false);
-            setPunchInTime(punchDateTime);
-            setPunchInDate(parsePunchTime(punchDateTime));
-            setPunchOutTime(null);
-            setPunchOutDate(null);
-            setWorkingMinutes(workingMins);
-            break;
-
-          case 2:
-            pan.setValue(0);
-            colorAnim.setValue(2);
-            progressAnim.setValue(0);
-
-            setPunchOutTime(punchDateTime);
-            setPunchOutDate(parsePunchTime(punchDateTime));
-            if (punchInTimeStr) {
-              setPunchInTime(punchInTimeStr);
-              setPunchInDate(parsePunchTime(punchInTimeStr));
-            }
-            setWorkingMinutes(workingMins);
-            setIsCheckedIn(false);
-            setHasCheckedOut(true);
-            break;
+        if (storedCheckInDate && apiCheckOutDate && apiCheckOutDate > storedCheckInDate) {
+          // API checkout is newer than stored check-in - this is a real checkout
+          console.log('✅ API checkout is newer - applying checkout state');
+          applyState(2, punchInTimeStr, punchDateTime, workingMins, true);
+        } else {
+          // API checkout is older or same - keep stored check-in state
+          console.log('🛡️ Keeping stored check-in state - API checkout is stale');
+          // Don't change anything, storage state is already applied
         }
-      } else {
-        // Silent update - just update data without moving sliders
-        if (newType === 1) {
-          const parsedInTime = parsePunchTime(punchDateTime);
-          if (parsedInTime) {
-            setPunchInDate(parsedInTime);
-            setPunchInTime(punchDateTime);
-            const progress = calculateWorkingHours(parsedInTime) / TOTAL_WORKING_HOURS;
-            progressAnim.setValue(progress);
-            setWorkingMinutes(workingMins);
-          }
+      } else if (newType !== previousPunchType.current || !isInitialized) {
+        // Normal state change or first load
+        console.log('🔄 State changed:', previousPunchType.current, '→', newType);
+        
+        if (newType === 0) {
+          applyState(0, null, null, 0, true);
+        } else if (newType === 1) {
+          applyState(1, punchDateTime, null, workingMins, true);
         } else if (newType === 2) {
-          setPunchOutTime(punchDateTime);
-          setPunchOutDate(parsePunchTime(punchDateTime));
-          setWorkingMinutes(workingMins);
+          applyState(2, punchInTimeStr, punchDateTime, workingMins, true);
         }
       }
 
       if (!isInitialized) {
         setIsInitialized(true);
       }
+
     } catch (error) {
       console.error('❌ Failed to fetch punch status:', error);
       setError(error instanceof Error ? error.message : 'Failed to load status');
 
-      // Do NOT reset state on API error if already initialized
       if (!isInitialized) {
-        setPunchType(0);
-        setIsCheckedIn(false);
-        setHasCheckedOut(false);
-        setPunchInDate(null);
-        setPunchOutDate(null);
-        pan.setValue(0);
-        colorAnim.setValue(0);
-        previousPunchType.current = 0;
+        applyState(0, null, null, 0, true);
         setIsInitialized(true);
       }
     } finally {
       setIsLoading(false);
     }
   }, [
-    pan,
-    colorAnim,
-    progressAnim,
-    onLateEarlyCountChange,
     onStatusLoaded,
-    calculateWorkingHours,
-    parsePunchTime,
+    onLateEarlyCountChange,
     isInitialized,
+    loadFromStorage,
+    clearStorage,
+    applyState,
+    parsePunchTime,
   ]);
 
   // Initial mount
   useEffect(() => {
-    console.log('🚀 Initial mount - calling fetchPunchStatus');
     fetchPunchStatus(true);
   }, [fetchPunchStatus]);
 
@@ -456,10 +538,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   useFocusEffect(
     useCallback(() => {
       if (isInitialized && !isPunchingRef.current) {
-        console.log('📱 Screen focused - refreshing status');
+        console.log('📱 Screen focused - refreshing');
         fetchPunchStatus(false, true);
-      } else {
-        console.log('📱 Screen focused - skipping (isInitialized:', isInitialized, 'isPunching:', isPunchingRef.current, ')');
       }
     }, [fetchPunchStatus, isInitialized])
   );
@@ -467,10 +547,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   // Pull-to-refresh
   useEffect(() => {
     if (isInitialized && refreshKey !== undefined && refreshKey > 0 && !isPunchingRef.current) {
-      console.log('🔄 Pull-to-refresh triggered, refreshKey:', refreshKey);
+      console.log('🔄 Pull-to-refresh');
       fetchPunchStatus(false, true);
-    } else if (refreshKey !== undefined && refreshKey > 0) {
-      console.log('🔄 Pull-to-refresh skipped (isInitialized:', isInitialized, 'isPunching:', isPunchingRef.current, ')');
     }
   }, [refreshKey, isInitialized, fetchPunchStatus]);
 
@@ -478,38 +556,23 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isPunchingRef.current && !isLoadingRef.current && isInitialized) {
-        console.log('⏰ Background polling - refreshing status');
         fetchPunchStatus(false, true);
       }
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchPunchStatus, isInitialized]);
 
-  // New day reset at midnight
+  // Midnight reset
   useEffect(() => {
     let lastDate = new Date().toISOString().split('T')[0];
 
-    const checkNewDay = () => {
+    const checkNewDay = async () => {
       const currentDate = new Date().toISOString().split('T')[0];
       if (currentDate !== lastDate) {
         lastDate = currentDate;
-        console.log('🌅 New day detected - resetting at midnight');
-
-        pan.setValue(0);
-        colorAnim.setValue(0);
-        progressAnim.setValue(0);
-        setIsCheckedIn(false);
-        setHasCheckedOut(false);
-        setPunchInTime(null);
-        setPunchOutTime(null);
-        setPunchInDate(null);
-        setPunchOutDate(null);
-        setWorkingMinutes(0);
-        setSlotProgresses([]);
-        setCompletedWorkingHours(0);
-        setPunchType(0);
-        previousPunchType.current = 0;
-
+        console.log('🌅 Midnight reset');
+        await clearStorage();
+        applyState(0, null, null, 0, true);
         fetchPunchStatus(true);
       }
     };
@@ -521,16 +584,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0);
 
-    const midnightTimeout = setTimeout(() => {
-      console.log('🌙 Midnight (12:00 AM) reached - resetting');
-      checkNewDay();
-    }, tomorrow.getTime() - now.getTime());
+    const midnightTimeout = setTimeout(checkNewDay, tomorrow.getTime() - now.getTime());
 
     return () => {
       clearInterval(interval);
       clearTimeout(midnightTimeout);
     };
-  }, [fetchPunchStatus, pan, colorAnim, progressAnim]);
+  }, [fetchPunchStatus, clearStorage, applyState]);
 
   // Progress update
   useEffect(() => {
@@ -599,29 +659,20 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       const response: PunchResponse = await recordPunch('IN', false, true);
       const responseData = response.data || (response as any);
 
-      if (responseData) {
-        const punchTime = responseData.PunchTimeISO || responseData.PunchTime;
-        setPunchInTime(punchTime);
+      const punchTime = responseData.PunchTimeISO || responseData.PunchTime || now.toISOString();
+      const workingMins = responseData.WorkingMinutes || 0;
 
-        const parsedDate = parsePunchTime(punchTime);
-        if (parsedDate) {
-          setPunchInDate(parsedDate);
-        } else {
-          setPunchInDate(new Date());
-        }
+      // Apply state and save
+      applyState(1, punchTime, null, workingMins, true);
 
-        if (responseData.IsLate) {
-          Alert.alert(
-            'Checked In (Late) ⚠️',
-            `You are ${responseData.LateByMinutes} minutes late.\n\nRemaining late check-ins: ${remainingLateCheckins - 1}/5`,
-            [{ text: 'OK' }]
-          );
-        } else {
-          Alert.alert('Checked In! ✅', `Punch Time: ${responseData.PunchTime}`, [{ text: 'OK' }]);
-        }
+      if (responseData.IsLate) {
+        Alert.alert(
+          'Checked In (Late) ⚠️',
+          `You are ${responseData.LateByMinutes} minutes late.\n\nRemaining: ${remainingLateCheckins - 1}/5`,
+          [{ text: 'OK' }]
+        );
       } else {
-        setPunchInDate(new Date());
-        setPunchInTime(new Date().toISOString());
+        Alert.alert('Checked In! ✅', `Punch Time: ${responseData.PunchTime || formatTime(now)}`, [{ text: 'OK' }]);
       }
 
       Animated.timing(colorAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start();
@@ -630,6 +681,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     } catch (error) {
       console.error('Punch IN error:', error);
       Alert.alert('Check-In Failed', error instanceof Error ? error.message : 'Unable to check in.');
+      applyState(0, null, null, 0, true);
       return false;
     } finally {
       setIsPunching(false);
@@ -659,42 +711,25 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       const response: PunchResponse = await recordPunch('OUT', false, true);
       const responseData = response.data || (response as any);
 
-      if (responseData) {
-        const punchTime = responseData.PunchTimeISO || responseData.PunchTime;
-        setPunchOutTime(punchTime);
+      const punchTime = responseData.PunchTimeISO || responseData.PunchTime || new Date().toISOString();
+      const workingMins = responseData.WorkingMinutes || workingMinutes;
 
-        const parsedOutDate = parsePunchTime(punchTime);
-        if (parsedOutDate) setPunchOutDate(parsedOutDate);
+      // Apply state and save
+      applyState(2, punchInTime, punchTime, workingMins, true);
 
-        if (responseData.WorkingHours) {
-          const match = responseData.WorkingHours.match(/(\d+)h\s*(\d+)m/);
-          if (match) {
-            const h = parseInt(match[1], 10);
-            const m = parseInt(match[2], 10);
-            setWorkingMinutes(h * 60 + m);
-          }
-        } else if (punchInDate && parsedOutDate) {
-          const mins = Math.floor((parsedOutDate.getTime() - punchInDate.getTime()) / (1000 * 60));
-          if (mins > 0) setWorkingMinutes(mins);
-        }
-
-        const workingHrs = responseData.WorkingHours || getDisplayWorkingHours();
-        if (responseData.IsEarly) {
-          Alert.alert(
-            'Checked Out (Early) ⚠️',
-            `Early by ${responseData.EarlyByMinutes} min\n\nWorking: ${workingHrs}`,
-            [{ text: 'OK' }]
-          );
-        } else {
-          Alert.alert(
-            'Checked Out! 🏁',
-            `Working: ${workingHrs}${responseData.OvertimeHours ? `\nOT: ${responseData.OvertimeHours}` : ''}`,
-            [{ text: 'OK' }]
-          );
-        }
+      const workingHrs = responseData.WorkingHours || getDisplayWorkingHours();
+      if (responseData.IsEarly) {
+        Alert.alert(
+          'Checked Out (Early) ⚠️',
+          `Early by ${responseData.EarlyByMinutes} min\n\nWorking: ${workingHrs}`,
+          [{ text: 'OK' }]
+        );
       } else {
-        setPunchOutTime(new Date().toISOString());
-        setPunchOutDate(new Date());
+        Alert.alert(
+          'Checked Out! 🏁',
+          `Working: ${workingHrs}${responseData.OvertimeHours ? `\nOT: ${responseData.OvertimeHours}` : ''}`,
+          [{ text: 'OK' }]
+        );
       }
 
       Animated.timing(colorAnim, { toValue: 2, duration: 800, useNativeDriver: false }).start();
@@ -703,6 +738,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     } catch (error) {
       console.error('Punch OUT error:', error);
       Alert.alert('Check-Out Failed', error instanceof Error ? error.message : 'Unknown error');
+      applyState(1, punchInTime, null, workingMinutes, true);
       return false;
     } finally {
       setIsPunching(false);
@@ -733,41 +769,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         if (hasCheckedOutRef.current || isPunchingRef.current) return;
 
         if (!isCheckedInRef.current && g.dx > SWIPE_THRESHOLD) {
-          previousPunchType.current = 1;
-          setIsCheckedIn(true);
-          setHasCheckedOut(false);
-          setPunchType(1);
-          
           Animated.spring(pan, { toValue: MAX_SWIPE_DISTANCE, useNativeDriver: false, friction: 8, tension: 40 }).start();
-          
           const success = await handlePunchIn();
-          if (!success) {
-            previousPunchType.current = 0;
-            setIsCheckedIn(false);
-            setPunchType(0);
-            resetToStart();
-          }
+          if (!success) resetToStart();
         } else if (isCheckedInRef.current && g.dx < -SWIPE_THRESHOLD) {
-          // Mark that this is a manual checkout
-          manualCheckoutRef.current = true;
-          
-          previousPunchType.current = 2;
-          setIsCheckedIn(false);
-          setHasCheckedOut(true);
-          setPunchType(2);
-          
           Animated.spring(pan, { toValue: 0, useNativeDriver: false, friction: 8, tension: 40 }).start();
-          
           const success = await handlePunchOut();
-          if (!success) {
-            // Reset manual checkout flag if checkout failed
-            manualCheckoutRef.current = false;
-            previousPunchType.current = 1;
-            setIsCheckedIn(true);
-            setHasCheckedOut(false);
-            setPunchType(1);
-            resetToCheckedIn();
-          }
+          if (!success) resetToCheckedIn();
         } else {
           isCheckedInRef.current ? resetToCheckedIn() : resetToStart();
         }
@@ -928,7 +936,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     );
   }
 
-  // ============ RENDER ============
+  // ============ RENDER (UI remains same - keeping rest of code) ============
   return (
     <View style={styles.container}>
       {lastUpdated && (

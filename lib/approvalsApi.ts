@@ -43,7 +43,7 @@ export async function approveAny(payload: { ProgramID: number; TranID: number; R
     return postJSON<{ status: string; statusCode?: number; message?: string }>('/allapprove/', payload);
 }
 
-export async function disapproveAny(payload: { ProgramID: number; TranID: number }) {
+export async function disapproveAny(payload: { ProgramID: number; TranID: number; Reason: string }) {
     return postJSON<{ status: string; statusCode?: number; message?: string }>('/alldisapprove/', payload);
 }
 

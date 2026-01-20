@@ -47,6 +47,12 @@ const Leaveapplyreq = () => {
     }>({});
 
     // Fetch leave balance
+    // 📊 Balance Lifecycle:
+    // 1. When leave is APPLIED → balance goes to "pending" (not deducted yet)
+    // 2. When leave is APPROVED → balance moves from "pending" to "used" (deducted)
+    // 3. When leave is REJECTED → balance is restored from "pending" to "available"
+    // 
+    // Formula: Available = Total - Used - Pending
     const fetchLeaveBalance = useCallback(async () => {
         try {
             setIsLoadingBalance(true);
@@ -56,18 +62,27 @@ const Leaveapplyreq = () => {
                 const balanceMap: any = {};
                 response.data.forEach((item: any) => {
                     const key = item.Leavename; 
+                    // Calculate actual available balance
+                    // If the API provides used/pending, use them; otherwise assume all is available
+                    const total = item.count || 0;
+                    const used = item.used || 0;
+                    const pending = item.pending || 0;
+                    const available = Math.max(0, total - used - pending);
+                    
                     balanceMap[key] = {
                         name: item.Leavename,
-                        total: item.count, 
-                        used: 0, 
-                        pending: 0,
-                        available: item.count
+                        total: total, 
+                        used: used,           // Approved and consumed leaves
+                        pending: pending,     // Applied but awaiting approval
+                        available: available  // Can be applied for (Total - Used - Pending)
                     };
                 });
                 setLeaveBalance(balanceMap);
+                console.log('📊 Leave balance loaded:', balanceMap);
             }
         } catch (error) {
             console.error('Failed to fetch leave balance:', error);
+            Alert.alert('Error', 'Failed to load leave balance. Please try again.');
         } finally {
             setIsLoadingBalance(false);
         }
@@ -127,16 +142,31 @@ const Leaveapplyreq = () => {
         // Calculate total days
         const totalDays = calculateLeaveDays(sDateStr, eDateStr, isHalfDay);
 
-        // Check leave balance
-        if (leaveBalance[selectedLeaveType]) {
-            const balance = leaveBalance[selectedLeaveType];
-            if (balance.available < totalDays) {
-                Alert.alert(
-                    'Insufficient Balance',
-                    `You don't have enough ${selectedLeaveType} balance.\n\nAvailable: ${balance.available} days\nRequested: ${totalDays} days`
-                );
-                return;
-            }
+        // ✅ Enhanced leave balance validation
+        const balance = leaveBalance[selectedLeaveType];
+        
+        if (!balance) {
+            Alert.alert(
+                'Balance Not Available',
+                `Unable to fetch ${selectedLeaveType} balance. Please refresh and try again.`
+            );
+            return;
+        }
+
+        // Check if sufficient balance is available
+        if (balance.available < totalDays) {
+            const shortBy = (totalDays - balance.available).toFixed(1);
+            const message = `You don't have enough ${selectedLeaveType} leave balance.\n\n` +
+                `📊 Balance Details:\n` +
+                `• Total: ${balance.total} days\n` +
+                `• Used: ${balance.used} days\n` +
+                `• Pending: ${balance.pending} days\n` +
+                `• Available: ${balance.available} days\n\n` +
+                `🚫 Requested: ${totalDays} days\n` +
+                `⚠️ Short by: ${shortBy} days`;
+            
+            Alert.alert('Insufficient Leave Balance', message);
+            return;
         }
 
         const validation = validateLeaveApplication({
@@ -225,12 +255,21 @@ const Leaveapplyreq = () => {
                     ) : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                             {['CL', 'SL', 'PL'].map((key) => {
-                                const value = leaveBalance[key] || { available: 0, total: 0 };
+                                const value = leaveBalance[key] || { available: 0, total: 0, used: 0, pending: 0 };
                                 const color = getLeaveTypeColor(key);
+                                const hasBalance = value.available > 0;
+                                
                                 return (
-                                    <View key={key} style={styles.balanceCard}>
+                                    <View key={key} style={[
+                                        styles.balanceCard,
+                                        !hasBalance && styles.balanceCardEmpty
+                                    ]}>
                                         <Text style={[styles.balanceCount, { color }]}>{value.available}</Text>
                                         <Text style={styles.balanceLabel}>{key}</Text>
+                                        <Text style={styles.balanceSubtext}>of {value.total}</Text>
+                                        {value.pending > 0 && (
+                                            <Text style={styles.balancePending}>({value.pending} pending)</Text>
+                                        )}
                                     </View>
                                 );
                             })}
@@ -245,26 +284,51 @@ const Leaveapplyreq = () => {
                         {(['CL', 'SL', 'PL'] as LeaveType[]).map((type) => {
                             const isSelected = selectedLeaveType === type;
                             const color = getLeaveTypeColor(type);
+                            const balance = leaveBalance[type];
+                            const hasBalance = balance && balance.available > 0;
+                            const isDisabled = !isLoadingBalance && !hasBalance;
+                            
                             return (
                                 <TouchableOpacity
                                     key={type}
                                     style={[
                                         styles.leaveTypeChip,
                                         isSelected && { backgroundColor: color, borderColor: color },
+                                        isDisabled && styles.leaveTypeChipDisabled,
                                     ]}
-                                    onPress={() => setSelectedLeaveType(type)}
+                                    onPress={() => {
+                                        if (!isDisabled) {
+                                            setSelectedLeaveType(type);
+                                        } else {
+                                            Alert.alert(
+                                                'No Balance',
+                                                `You don't have any ${type} leave balance available.`
+                                            );
+                                        }
+                                    }}
+                                    disabled={isDisabled}
                                 >
                                     <Feather 
                                         name={isSelected ? "check-circle" : "circle"} 
                                         size={18} 
-                                        color={isSelected ? "#FFF" : colors.textSecondary} 
+                                        color={isSelected ? "#FFF" : (isDisabled ? colors.textTertiary : colors.textSecondary)} 
                                     />
                                     <Text style={[
                                         styles.leaveTypeText, 
-                                        isSelected && styles.leaveTypeTextActive
+                                        isSelected && styles.leaveTypeTextActive,
+                                        isDisabled && styles.leaveTypeTextDisabled,
                                     ]}>
                                         {type}
                                     </Text>
+                                    {!isLoadingBalance && balance && (
+                                        <Text style={[
+                                            styles.leaveTypeBalance,
+                                            isSelected && styles.leaveTypeBalanceActive,
+                                            isDisabled && styles.leaveTypeBalanceDisabled,
+                                        ]}>
+                                            ({balance.available})
+                                        </Text>
+                                    )}
                                 </TouchableOpacity>
                             );
                         })}
@@ -503,6 +567,20 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         color: colors.textSecondary,
         fontWeight: '600',
     },
+    balanceSubtext: {
+        fontSize: 10,
+        color: colors.textTertiary,
+        marginTop: 2,
+    },
+    balancePending: {
+        fontSize: 9,
+        color: colors.primary,
+        marginTop: 4,
+        fontWeight: '600',
+    },
+    balanceCardEmpty: {
+        opacity: 0.5,
+    },
 
     // Leave Types
     leaveTypeRow: {
@@ -528,6 +606,27 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     },
     leaveTypeTextActive: {
         color: '#FFF',
+    },
+    leaveTypeTextDisabled: {
+        color: colors.textTertiary,
+        opacity: 0.5,
+    },
+    leaveTypeBalance: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: colors.textSecondary,
+        marginLeft: 4,
+    },
+    leaveTypeBalanceActive: {
+        color: '#FFF',
+    },
+    leaveTypeBalanceDisabled: {
+        color: colors.textTertiary,
+        opacity: 0.5,
+    },
+    leaveTypeChipDisabled: {
+        opacity: 0.5,
+        backgroundColor: colors.border,
     },
 
     // Date Box

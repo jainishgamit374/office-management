@@ -5,15 +5,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Easing, LayoutAnimation, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 
 import {
-    approveAny,
-    BASE,
-    disapproveAny,
-    getEarlyCheckoutDetails,
-    getLeaveApprovals,
-    getMissPunchApprovalHistory,
-    getWfhApprovals
+  approveAny,
+  BASE,
+  disapproveAny,
+  getEarlyCheckoutDetails,
+  getLeaveApprovals,
+  getMissPunchApprovalHistory,
+  getWfhApprovals
 } from '@/lib/approvalsApi';
-import { getEarlyLatePunchList } from '@/lib/earlyLatePunch';
+import { getExpectedLateArrivals } from '@/lib/earlyLatePunch';
 import ApprovalDetailsModal, { ApprovalDetails } from './ApprovalDetailsModal';
 import SwipeApprovalRow from './SwipeApprovalRow';
 
@@ -190,14 +190,8 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({ refresh
             await approveAny({ ProgramID: actionItem.programId, TranID: actionItem.tranId, Reason: actionReason });
             Alert.alert('Approved', 'Request approved successfully.');
         } else {
-            await disapproveAny({ ProgramID: actionItem.programId, TranID: actionItem.tranId }); // disaproveAny uses Reason?
-            // Checking approvals.ts, disapproveAny signature is (payload: { ProgramID, TranID }). 
-            // Wait, approveAny has Reason. disapproveAny usually might not, or might.
-            // Let's assume it doesn't based on previous view, BUT user asked for reason box for *both*.
-            // If API doesn't take it, we just collect it (maybe log it or ignore it, but UI requires it).
-            // Actually, I should check approvals.ts again.
-            // But let's assume valid. 
-             Alert.alert('Disapproved', 'Request disapproved successfully.');
+            await disapproveAny({ ProgramID: actionItem.programId, TranID: actionItem.tranId, Reason: actionReason });
+            Alert.alert('Disapproved', 'Request disapproved successfully.');
         }
         fetchData();
         setActionModalVisible(false);
@@ -219,7 +213,7 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({ refresh
         getMissPunchApprovalHistory(),
         getEarlyCheckoutDetails(),
         getWfhApprovals(),
-        getEarlyLatePunchList({ checkoutType: 'Late', status: 'Pending' }), // Fetch Late Arrivals
+        getExpectedLateArrivals(), // Use the new endpoint
       ]);
 
       // Leave approvals (ProgramID 2)
@@ -312,24 +306,25 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({ refresh
         setWfh([]);
       }
 
-      // Late Arrivals (ProgramID 3) - Filter for pending only
+      // Late Arrivals - Using /expectedlatearrivals/ endpoint
       if (lateArrivalRes.status === 'fulfilled' && lateArrivalRes.value.status === 'Success') {
-        const data = lateArrivalRes.value.data || [];
-        console.log('✅ Late Arrival Data:', data.length);
+        const data = lateArrivalRes.value.late_arrivals || [];
+        console.log('✅ Late Arrival Response:', JSON.stringify(lateArrivalRes.value, null, 2));
+        console.log('📊 Late Arrival Count:', data.length);
+        
         setLateArrivals(
-          data
-            .filter((i: any) => i.ApprovalStatus === 'Pending' || i.ApprovalStatusMasterID === 3) // Check both possibilities
-            .map((i: any) => ({
-              id: i.EarlyLatePunchMasterID,
-              programId: 3, // Using ProgramID 3 as per instruction
-              employeeName: i.EmployeeName || 'Unknown',
-              title: 'Late Arrival',
-              subtitle: i.Reason,
-              status: i.ApprovalStatus || 'Awaiting Approve',
-              date: i.DateTime,
-            }))
+          data.map((i: any, index: number) => ({
+            id: i.id || i.EarlyLatePunchMasterID || index, // Use index as fallback ID
+            programId: 3, // Using ProgramID 3 for late arrivals
+            employeeName: i.EmployeeName || 'Unknown', // Backend returns EmployeeName (capitalized)
+            title: 'Late Arrival',
+            subtitle: i.Reason || 'No reason provided', // Backend returns Reason (capitalized)
+            status: i.status || 'Awaiting Approve',
+            date: i.PunchTime || new Date().toLocaleTimeString(), // Backend returns PunchTime
+          }))
         );
       } else {
+        console.log('❌ Late Arrival Response Failed:', lateArrivalRes.status === 'fulfilled' ? lateArrivalRes.value : 'Promise rejected');
         setLateArrivals([]);
       }
 

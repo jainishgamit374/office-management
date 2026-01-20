@@ -91,6 +91,14 @@ export const getEarlyLatePunchList = async (params?: {
 };
 
 /**
+ * Get Expected Late Arrivals (Pending Approvals)
+ * GET /expectedlatearrivals/
+ */
+export const getExpectedLateArrivals = async () => {
+    return apiRequest('/expectedlatearrivals/', 'GET');
+};
+
+/**
  * Create Early/Late Punch Request
  * POST /early-late-punch/
  */

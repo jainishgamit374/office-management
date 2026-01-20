@@ -326,18 +326,23 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
     const now = new Date();
     const currentHour = now.getHours() + now.getMinutes() / 60;
-    const checkInHour = checkInTime.getHours() + checkInTime.getMinutes() / 60;
+    
+    // Always start from office start time (9:30 AM = 9.5)
+    const effectiveStart = OFFICE_START_HOUR + OFFICE_START_MINUTE / 60;
 
-    let workingHours = 0;
-    const effectiveStart = checkInHour;
-
+    // If current time is before office start, return 0
     if (currentHour <= effectiveStart) return 0;
 
+    let workingHours = 0;
+
     if (currentHour <= BREAK_START_HOUR) {
+      // Before lunch break
       workingHours = currentHour - effectiveStart;
     } else if (currentHour <= BREAK_END_HOUR) {
+      // During lunch break
       workingHours = BREAK_START_HOUR - effectiveStart;
     } else {
+      // After lunch break
       workingHours = (BREAK_START_HOUR - effectiveStart) + (currentHour - BREAK_END_HOUR);
     }
 

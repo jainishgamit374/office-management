@@ -1,4 +1,4 @@
-// components/CheckInCard.tsx
+// components/CheckInCard.tsx - API-ONLY VERSION (No Local Storage)
 import { useTheme } from '@/contexts/ThemeContext';
 import {
   formatMinutesToHours,
@@ -12,7 +12,6 @@ import {
   type PunchStatusResponse
 } from '@/lib/attendance';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -47,6 +46,11 @@ const BREAK_START_HOUR = 13;
 const BREAK_END_HOUR = 14;
 const TOTAL_WORKING_HOURS = 8;
 
+// API Timeout and Retry Configuration
+const API_TIMEOUT_MS = 15000; // 15 seconds timeout
+const MAX_RETRY_ATTEMPTS = 3; // Maximum number of retry attempts
+const RETRY_DELAY_BASE_MS = 1000; // Base delay for exponential backoff (1 second)
+
 const TIME_SLOTS = [
   { label: '9:30', start: 9.5, end: 10.5, isBreak: false },
   { label: '10:30', start: 10.5, end: 11.5, isBreak: false },
@@ -58,10 +62,6 @@ const TIME_SLOTS = [
   { label: '4:00', start: 16, end: 17, isBreak: false },
   { label: '5:00', start: 17, end: 18.5, isBreak: false },
 ];
-
-// 🔑 STORAGE KEYS
-const STORAGE_KEY_DATE = '@attendance_date';
-const STORAGE_KEY_STATE = '@attendance_state';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -80,14 +80,6 @@ interface SlotProgress {
   current: boolean;
   progress: number;
   isBreak: boolean;
-}
-
-interface StoredState {
-  punchType: 0 | 1 | 2;
-  punchInTime: string | null;
-  punchOutTime: string | null;
-  workingMinutes: number;
-  date: string;
 }
 
 // ============ COMPONENT ============
@@ -136,12 +128,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const hasCheckedOutRef = useRef(false);
   const isPunchingRef = useRef(false);
   const isLoadingRef = useRef(true);
-  const previousPunchType = useRef<0 | 1 | 2>(0);
+  const lastLocalActionTimeRef = useRef<Date | null>(null);
+  const currentPunchTypeRef = useRef<0 | 1 | 2>(0);
 
   useEffect(() => { isCheckedInRef.current = isCheckedIn; }, [isCheckedIn]);
   useEffect(() => { hasCheckedOutRef.current = hasCheckedOut; }, [hasCheckedOut]);
   useEffect(() => { isPunchingRef.current = isPunching; }, [isPunching]);
   useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
+  useEffect(() => { currentPunchTypeRef.current = punchType; }, [punchType]);
 
   useEffect(() => {
     if (isInitialized) {
@@ -157,63 +151,95 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const pillarBg = isDark ? '#3A3A3C' : '#E5E7EB';
   const dividerColor = isDark ? '#3A3A3C' : '#F3F4F6';
 
-  // ============ 🆕 STORAGE HELPERS ============
-  const saveToStorage = useCallback(async (state: StoredState) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(state));
-      await AsyncStorage.setItem(STORAGE_KEY_DATE, state.date);
-      console.log('💾 Saved to storage:', state);
-    } catch (error) {
-      console.error('❌ Failed to save:', error);
-    }
-  }, []);
+  // ============ HELPER: Sleep for retry delays ============
+  const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
-  const loadFromStorage = useCallback(async (): Promise<StoredState | null> => {
+  // ============ HELPER: Fetch with timeout ============
+  const fetchWithTimeout = async <T,>(
+    fetchFn: () => Promise<T>,
+    timeoutMs: number = API_TIMEOUT_MS
+  ): Promise<T> => {
+    return Promise.race([
+      fetchFn(),
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+      ),
+    ]);
+  };
+
+
+  // ============ HELPER: Parse Time ============
+  const parsePunchTime = useCallback((timeString: string | null | undefined): Date | null => {
+    if (!timeString) return null;
+
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY_STATE);
-      if (!stored) return null;
-      
-      const state: StoredState = JSON.parse(stored);
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Only restore if same day
-      if (state.date !== today) {
-        console.log('🗑️ Storage from different day, clearing');
-        await AsyncStorage.multiRemove([STORAGE_KEY_STATE, STORAGE_KEY_DATE]);
-        return null;
+      if (timeString.includes('T')) {
+        const date = new Date(timeString);
+        if (!isNaN(date.getTime())) return date;
       }
-      
-      console.log('📂 Loaded from storage:', state);
-      return state;
+
+      const match1 = timeString.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
+      if (match1) {
+        const [, year, month, day, hours, minutes, seconds, period] = match1;
+        let hour = parseInt(hours, 10);
+        if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
+        if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds));
+      }
+
+      const match2 = timeString.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
+      if (match2) {
+        const [, day, month, year, hours, minutes, seconds, period] = match2;
+        let hour = parseInt(hours, 10);
+        if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
+        if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds));
+      }
+
+      const nativeDate = new Date(timeString);
+      if (!isNaN(nativeDate.getTime())) return nativeDate;
+
+      return null;
     } catch (error) {
-      console.error('❌ Failed to load:', error);
+      console.error('Error parsing time:', timeString, error);
       return null;
     }
   }, []);
 
-  const clearStorage = useCallback(async () => {
-    try {
-      await AsyncStorage.multiRemove([STORAGE_KEY_STATE, STORAGE_KEY_DATE]);
-      console.log('🗑️ Storage cleared');
-    } catch (error) {
-      console.error('❌ Failed to clear:', error);
+  // ============ HELPER: Calculate working hours ============
+  const calculateWorkingHours = useCallback((checkInTime: Date | null): number => {
+    if (!checkInTime) return 0;
+
+    const now = new Date();
+    const currentHour = now.getHours() + now.getMinutes() / 60;
+    
+    const effectiveStart = OFFICE_START_HOUR + OFFICE_START_MINUTE / 60;
+    if (currentHour <= effectiveStart) return 0;
+
+    let workingHours = 0;
+
+    if (currentHour <= BREAK_START_HOUR) {
+      workingHours = currentHour - effectiveStart;
+    } else if (currentHour <= BREAK_END_HOUR) {
+      workingHours = BREAK_START_HOUR - effectiveStart;
+    } else {
+      workingHours = (BREAK_START_HOUR - effectiveStart) + (currentHour - BREAK_END_HOUR);
     }
+
+    return Math.max(0, Math.min(workingHours, TOTAL_WORKING_HOURS));
   }, []);
 
-  // ============ HELPER: Apply state (unified) ============
+  // ============ HELPER: Apply state from API ============
   const applyState = useCallback((
     type: 0 | 1 | 2,
     inTime: string | null,
     outTime: string | null,
-    workingMins: number,
-    saveToStore: boolean = true
+    workingMins: number
   ) => {
-    const today = new Date().toISOString().split('T')[0];
-
-    console.log('🔄 Applying state:', { type, inTime, outTime, workingMins });
+    console.log('🔄 Applying state from API:', { type, inTime, outTime, workingMins });
 
     switch (type) {
-      case 0: // Reset
+      case 0: // Not Punched (Reset)
         pan.setValue(0);
         colorAnim.setValue(0);
         progressAnim.setValue(0);
@@ -227,11 +253,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setSlotProgresses([]);
         setCompletedWorkingHours(0);
         setPunchType(0);
-        previousPunchType.current = 0;
-        
-        if (saveToStore) {
-          saveToStorage({ punchType: 0, punchInTime: null, punchOutTime: null, workingMinutes: 0, date: today });
-        }
         break;
 
       case 1: // Checked In
@@ -248,15 +269,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setPunchOutDate(null);
         setWorkingMinutes(workingMins);
         setPunchType(1);
-        previousPunchType.current = 1;
 
         if (parsedIn) {
           const progress = calculateWorkingHours(parsedIn) / TOTAL_WORKING_HOURS;
           progressAnim.setValue(progress);
-        }
-
-        if (saveToStore) {
-          saveToStorage({ punchType: 1, punchInTime: inTime, punchOutTime: null, workingMinutes: workingMins, date: today });
         }
         break;
 
@@ -282,14 +298,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setSlotProgresses([]);
         setCompletedWorkingHours(0);
         setPunchType(2);
-        previousPunchType.current = 2;
-
-        if (saveToStore) {
-          saveToStorage({ punchType: 2, punchInTime: inTime, punchOutTime: outTime, workingMinutes: workingMins, date: today });
-        }
         break;
     }
-  }, [pan, colorAnim, progressAnim, saveToStorage, parsePunchTime, calculateWorkingHours]);
+  }, [pan, colorAnim, progressAnim, parsePunchTime, calculateWorkingHours]);
 
   // ============ HELPER: Calculate slot progress ============
   const calculateSlotProgresses = useCallback((checkInTime: Date | null): SlotProgress[] => {
@@ -320,73 +331,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     });
   }, []);
 
-  // ============ HELPER: Calculate working hours ============
-  const calculateWorkingHours = useCallback((checkInTime: Date | null): number => {
-    if (!checkInTime) return 0;
-
-    const now = new Date();
-    const currentHour = now.getHours() + now.getMinutes() / 60;
-    
-    // Always start from office start time (9:30 AM = 9.5)
-    const effectiveStart = OFFICE_START_HOUR + OFFICE_START_MINUTE / 60;
-
-    // If current time is before office start, return 0
-    if (currentHour <= effectiveStart) return 0;
-
-    let workingHours = 0;
-
-    if (currentHour <= BREAK_START_HOUR) {
-      // Before lunch break
-      workingHours = currentHour - effectiveStart;
-    } else if (currentHour <= BREAK_END_HOUR) {
-      // During lunch break
-      workingHours = BREAK_START_HOUR - effectiveStart;
-    } else {
-      // After lunch break
-      workingHours = (BREAK_START_HOUR - effectiveStart) + (currentHour - BREAK_END_HOUR);
-    }
-
-    return Math.max(0, Math.min(workingHours, TOTAL_WORKING_HOURS));
-  }, []);
-
-  // ============ HELPER: Parse Time ============
-  const parsePunchTime = useCallback((timeString: string | null | undefined): Date | null => {
-    if (!timeString) return null;
-
-    try {
-      if (timeString.includes('T')) {
-        const date = new Date(timeString);
-        if (!isNaN(date.getTime())) return date;
-      }
-
-      const match1 = timeString.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
-      if (match1) {
-        const [, year, month, day, hours, minutes, seconds, period] = match1;
-        let hour = parseInt(hours, 10);
-        if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
-        if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
-        return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds)));
-      }
-
-      const match2 = timeString.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
-      if (match2) {
-        const [, day, month, year, hours, minutes, seconds, period] = match2;
-        let hour = parseInt(hours, 10);
-        if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
-        if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
-        return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds)));
-      }
-
-      const nativeDate = new Date(timeString);
-      if (!isNaN(nativeDate.getTime())) return nativeDate;
-
-      return null;
-    } catch (error) {
-      console.error('Error parsing time:', timeString, error);
-      return null;
-    }
-  }, []);
-
   const formatTime = (date: Date | null): string => {
     if (!date) return '--:--';
     return date.toLocaleTimeString('en-IN', {
@@ -396,143 +340,160 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     });
   };
 
-  // ============ 🆕 FETCH PUNCH STATUS (REFACTORED) ============
-  const fetchPunchStatus = useCallback(async (showLoading = true, isRefresh = false): Promise<void> => {
-    try {
-      if (showLoading && !isRefresh) setIsLoading(true);
-      setError(null);
+  // ============ FETCH PUNCH STATUS (API-ONLY WITH RETRY) ============
+  const fetchPunchStatus = useCallback(async (showLoading = true): Promise<void> => {
+    let lastError: Error | null = null;
+    
+    // Retry loop with exponential backoff
+    for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        if (showLoading && attempt === 1) setIsLoading(true);
+        if (attempt === 1) setError(null);
 
-      const today = new Date().toISOString().split('T')[0];
-
-      // 1️⃣ Check for new day
-      const lastDate = await AsyncStorage.getItem(STORAGE_KEY_DATE);
-      if (lastDate && lastDate !== today) {
-        console.log('🌅 New day detected - clearing storage');
-        await clearStorage();
-        applyState(0, null, null, 0, true);
-      }
-
-      // 2️⃣ Try loading from storage first (instant UI)
-      if (!isRefresh) {
-        const stored = await loadFromStorage();
-        if (stored) {
-          console.log('⚡ Restoring from storage');
-          applyState(stored.punchType, stored.punchInTime, stored.punchOutTime, stored.workingMinutes, false);
-        }
-      }
-
-      // 3️⃣ Fetch from API (background sync)
-      const response: PunchStatusResponse = await getPunchStatus();
-      onStatusLoaded?.(response);
-      setLastUpdated(new Date());
-
-      const responseData = response.data || (response as any);
-      
-      // Handle both nested and flat API structures
-      let newType: 0 | 1 | 2 = 0;
-      let punchDateTime: string | null = null;
-      let workingMins = 0;
-      let punchInTimeStr: string | null = null;
-
-      if (responseData.punch) {
-        newType = (responseData.punch.PunchType ?? 0) as 0 | 1 | 2;
-        punchDateTime = responseData.punch.PunchDateTimeISO || responseData.punch.PunchDateTime;
-        workingMins = responseData.punch.WorkingMinutes || 0;
-        punchInTimeStr = responseData.punch.PunchInTime;
-      } else {
-        newType = (responseData.PunchType ?? 0) as 0 | 1 | 2;
-        punchDateTime = responseData.PunchDateTimeISO || responseData.PunchDateTime;
-        workingMins = responseData.WorkingMinutes || 0;
-        punchInTimeStr = responseData.PunchInTime;
-      }
-
-      console.log('📡 API Response:', { newType, punchDateTime });
-
-      // Update late/early counts
-      const lateEarly = responseData.lateEarly ?? {
-        lateCheckins: 0,
-        earlyCheckouts: 0,
-        remainingLateCheckins: 5,
-      };
-
-      setLateCheckInCount(lateEarly.lateCheckins);
-      setEarlyCheckOutCount(lateEarly.earlyCheckouts);
-      setRemainingLateCheckins(lateEarly.remainingLateCheckins);
-      onLateEarlyCountChange?.(lateEarly.lateCheckins, lateEarly.earlyCheckouts);
-
-      // 4️⃣ Guard: Check if checkout is from today
-      if (newType === 2) {
-        const checkoutDate = parsePunchTime(punchDateTime);
-        if (checkoutDate) {
-          const checkoutDay = checkoutDate.toISOString().split('T')[0];
-          if (checkoutDay !== today) {
-            console.log('🛡️ Checkout from previous day detected - resetting');
-            newType = 0;
-            punchDateTime = null;
-          }
-        }
-      }
-
-      // 5️⃣ Apply API state (with storage priority)
-      // If we have stored state and API returns checkout, check if it's a manual checkout
-      const stored = await loadFromStorage();
-      
-      if (stored && stored.punchType === 1 && newType === 2) {
-        // User was checked in (in storage), but API says checked out
-        // This could mean:
-        // 1. App was closed and reopened (storage has check-in, API has old checkout)
-        // 2. Admin manually checked out the user
+        console.log(`📡 Fetching punch status from API (attempt ${attempt}/${MAX_RETRY_ATTEMPTS})...`);
         
-        // Check if the checkout time is AFTER the stored check-in time
-        const storedCheckInDate = parsePunchTime(stored.punchInTime);
-        const apiCheckOutDate = parsePunchTime(punchDateTime);
+        // Fetch with timeout
+        const response: PunchStatusResponse = await fetchWithTimeout(
+          () => getPunchStatus(),
+          API_TIMEOUT_MS
+        );
         
-        if (storedCheckInDate && apiCheckOutDate && apiCheckOutDate > storedCheckInDate) {
-          // API checkout is newer than stored check-in - this is a real checkout
-          console.log('✅ API checkout is newer - applying checkout state');
-          applyState(2, punchInTimeStr, punchDateTime, workingMins, true);
-        } else {
-          // API checkout is older or same - keep stored check-in state
-          console.log('🛡️ Keeping stored check-in state - API checkout is stale');
-          // Don't change anything, storage state is already applied
+        onStatusLoaded?.(response);
+        setLastUpdated(new Date());
+
+        const responseData = response.data;
+        
+        // Extract punch data from API response
+        let newType: 0 | 1 | 2 = 0;
+        let punchDateTime: string | null = null;
+        let workingMins = 0;
+        let punchInTimeStr: string | null = null;
+
+        if (responseData.punch) {
+          newType = (responseData.punch.PunchType ?? 0) as 0 | 1 | 2;
+          punchDateTime = responseData.punch.PunchDateTimeISO || responseData.punch.PunchDateTime || null;
+          workingMins = responseData.punch.WorkingMinutes || 0;
+          punchInTimeStr = responseData.punch.PunchInTime || null;
         }
-      } else if (newType !== previousPunchType.current || !isInitialized) {
-        // Normal state change or first load
-        console.log('🔄 State changed:', previousPunchType.current, '→', newType);
+
+        console.log('✅ API Response:', { newType, punchDateTime, punchInTimeStr, workingMins });
+
+        // Update late/early counts
+        const lateEarly = responseData.lateEarly ?? {
+          lateCheckins: 0,
+          earlyCheckouts: 0,
+          remainingLateCheckins: 5,
+        };
+
+        setLateCheckInCount(lateEarly.lateCheckins);
+        setEarlyCheckOutCount(lateEarly.earlyCheckouts);
+        setRemainingLateCheckins(lateEarly.remainingLateCheckins);
+        onLateEarlyCountChange?.(lateEarly.lateCheckins, lateEarly.earlyCheckouts);
+
+        // 🛡️ STATE PROTECTION: Prevent downgrading state from stale API responses
+
         
+        // 🛡️ STATE PROTECTION: Timestamp-based Guard
+        // Initialize State variables
+        const currentPunchType = currentPunchTypeRef.current;
+        const isPunching = isPunchingRef.current;
+        
+        console.log('🛡️ State Guard:', { 
+          currentPunchType, 
+          newType, 
+          isPunching,
+          willApply: true 
+        });
+
+        const lastActionTime = lastLocalActionTimeRef.current;
+
+        
+        let isStale = false;
+
+        // Check 1: If we have a server timestamp and a local action timestamp, compare them
+        // (Server time must be NEWER than local action to supersede it)
+        if (punchDateTime && lastActionTime) {
+            const serverTime = new Date(punchDateTime);
+            if (serverTime < lastActionTime) {
+                console.log('🛡️ DETECTED STALE DATA: Server timestamp is older than local action.');
+                isStale = true;
+            }
+        }
+
+        // Check 2: Downgrade Protection (1/2 -> 0)
+        // If server says "0" (No Punch/Reset), we must be careful.
+        // It's valid ONLY if it's a Midnight Reset (different day) or Admin Reset.
+        // It's STALE if recent local action hasn't propagated.
+        if ((currentPunchType === 1 || currentPunchType === 2) && newType === 0 && !isPunching) {
+            if (lastActionTime) {
+                const now = new Date();
+                const timeSinceAction = now.getTime() - lastActionTime.getTime();
+                
+                // If local action was very recent (< 5 mins), treat "status 0" as stale server data
+                if (timeSinceAction < 5 * 60 * 1000) {
+                    console.log(`🛡️ DETECTED STALE RESET: Server shows 0 but local action was ${timeSinceAction/1000}s ago.`);
+                    isStale = true;
+                }
+                // Also check if it's the SAME day. If so, a reset to 0 is suspicious (unless admin deleted it).
+                // But for now, the time buffer is a good heuristic.
+            }
+        }
+
+        if (isStale) {
+          console.log('⚠️ BLOCKED: API Data is stale. Keeping local state.');
+          if (!isInitialized) setIsInitialized(true);
+          setIsLoading(false);
+          return; 
+        }
+
+        // Apply state based on API response
         if (newType === 0) {
-          applyState(0, null, null, 0, true);
+          applyState(0, null, null, 0);
         } else if (newType === 1) {
-          applyState(1, punchDateTime, null, workingMins, true);
+          applyState(1, punchDateTime, null, workingMins);
         } else if (newType === 2) {
-          applyState(2, punchInTimeStr, punchDateTime, workingMins, true);
+          applyState(2, punchInTimeStr, punchDateTime, workingMins);
+        }
+
+        if (!isInitialized) {
+          setIsInitialized(true);
+        }
+
+        setIsLoading(false);
+        return; // Success - exit retry loop
+
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+        console.error(`❌ Attempt ${attempt}/${MAX_RETRY_ATTEMPTS} failed:`, lastError.message);
+
+        // If this is not the last attempt, wait before retrying (exponential backoff)
+        if (attempt < MAX_RETRY_ATTEMPTS) {
+          const delayMs = RETRY_DELAY_BASE_MS * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+          console.log(`⏳ Retrying in ${delayMs}ms...`);
+          await sleep(delayMs);
         }
       }
-
-      if (!isInitialized) {
-        setIsInitialized(true);
-      }
-
-    } catch (error) {
-      console.error('❌ Failed to fetch punch status:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load status');
-
-      if (!isInitialized) {
-        applyState(0, null, null, 0, true);
-        setIsInitialized(true);
-      }
-    } finally {
-      setIsLoading(false);
     }
-  }, [
-    onStatusLoaded,
-    onLateEarlyCountChange,
-    isInitialized,
-    loadFromStorage,
-    clearStorage,
-    applyState,
-    parsePunchTime,
-  ]);
+
+    // All retry attempts failed
+    console.error('❌ All retry attempts failed. Last error:', lastError?.message);
+    
+    const errorMessage = lastError?.message.includes('timeout')
+      ? 'Request timed out. Please check your internet connection.'
+      : lastError?.message.includes('Network')
+      ? 'Network error. Please check your internet connection.'
+      : lastError?.message || 'Failed to load attendance status';
+    
+    setError(errorMessage);
+
+    // Don't force a default "not checked in" state on API failure
+    // Instead, preserve unknown state and show error UI
+    if (!isInitialized) {
+      setIsInitialized(true);
+    }
+    
+    setIsLoading(false);
+  }, [onStatusLoaded, onLateEarlyCountChange, isInitialized, applyState, punchType, fetchWithTimeout, sleep]);
 
   // Initial mount
   useEffect(() => {
@@ -543,8 +504,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   useFocusEffect(
     useCallback(() => {
       if (isInitialized && !isPunchingRef.current) {
-        console.log('📱 Screen focused - refreshing');
-        fetchPunchStatus(false, true);
+        console.log('📱 Screen focused - refreshing from API');
+        fetchPunchStatus(false);
       }
     }, [fetchPunchStatus, isInitialized])
   );
@@ -553,49 +514,20 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   useEffect(() => {
     if (isInitialized && refreshKey !== undefined && refreshKey > 0 && !isPunchingRef.current) {
       console.log('🔄 Pull-to-refresh');
-      fetchPunchStatus(false, true);
+      fetchPunchStatus(false);
     }
   }, [refreshKey, isInitialized, fetchPunchStatus]);
 
-  // Background polling
+  // Background polling (every 5 minutes)
   useEffect(() => {
     const interval = setInterval(() => {
       if (!isPunchingRef.current && !isLoadingRef.current && isInitialized) {
-        fetchPunchStatus(false, true);
+        console.log('⏰ Background refresh');
+        fetchPunchStatus(false);
       }
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchPunchStatus, isInitialized]);
-
-  // Midnight reset
-  useEffect(() => {
-    let lastDate = new Date().toISOString().split('T')[0];
-
-    const checkNewDay = async () => {
-      const currentDate = new Date().toISOString().split('T')[0];
-      if (currentDate !== lastDate) {
-        lastDate = currentDate;
-        console.log('🌅 Midnight reset');
-        await clearStorage();
-        applyState(0, null, null, 0, true);
-        fetchPunchStatus(true);
-      }
-    };
-
-    const interval = setInterval(checkNewDay, 60 * 1000);
-
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-
-    const midnightTimeout = setTimeout(checkNewDay, tomorrow.getTime() - now.getTime());
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(midnightTimeout);
-    };
-  }, [fetchPunchStatus, clearStorage, applyState]);
 
   // Progress update
   useEffect(() => {
@@ -635,12 +567,25 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
   // ============ PUNCH HANDLERS ============
   const handlePunchIn = async (): Promise<boolean> => {
-    if (isPunchingRef.current) return false;
+    // Guard: Prevent duplicate taps
+    if (isPunchingRef.current) {
+      console.log('⚠️ Punch already in progress, ignoring duplicate tap');
+      return false;
+    }
+
+    // Capture previous state for rollback
+    const prevState = {
+      type: punchType,
+      inTime: punchInTime,
+      outTime: punchOutTime,
+      workingMins: workingMinutes,
+    };
+
+    // Set isPunching flag IMMEDIATELY to prevent re-entry
+    setIsPunching(true);
+    isPunchingRef.current = true;
 
     try {
-      setIsPunching(true);
-      isPunchingRef.current = true;
-
       const hasPermission = await hasLocationPermission();
       if (!hasPermission) {
         const granted = await requestLocationPermission();
@@ -662,22 +607,31 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       }
 
       const response: PunchResponse = await recordPunch('IN', false, true);
-      const responseData = response.data || (response as any);
+      
+      console.log('📦 Punch IN Response:', response);
 
-      const punchTime = responseData.PunchTimeISO || responseData.PunchTime || now.toISOString();
-      const workingMins = responseData.WorkingMinutes || 0;
+      // Apply state directly - trust the punch action
+      const punchTime = now.toISOString();
+      lastLocalActionTimeRef.current = now; // Track local action time
+      applyState(1, punchTime, null, 0);
 
-      // Apply state and save
-      applyState(1, punchTime, null, workingMins, true);
+      // Verify backend state after 15 seconds (giving DB time to commit)
+      // This prevents immediate stale data overwrites but ensures eventual consistency
+      setTimeout(() => {
+        console.log('🕒 Running post-punch verification...');
+        fetchPunchStatus(false);
+      }, 15000);
 
-      if (responseData.IsLate) {
+      const isLateNow = isLateCheckIn(now);
+      
+      if (isLateNow) {
         Alert.alert(
           'Checked In (Late) ⚠️',
-          `You are ${responseData.LateByMinutes} minutes late.\n\nRemaining: ${remainingLateCheckins - 1}/5`,
+          `You are checking in late.\n\nRemaining: ${remainingLateCheckins}/5`,
           [{ text: 'OK' }]
         );
       } else {
-        Alert.alert('Checked In! ✅', `Punch Time: ${responseData.PunchTime || formatTime(now)}`, [{ text: 'OK' }]);
+        Alert.alert('Checked In! ✅', `Punch Time: ${formatTime(now)}`, [{ text: 'OK' }]);
       }
 
       Animated.timing(colorAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start();
@@ -685,8 +639,23 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
     } catch (error) {
       console.error('Punch IN error:', error);
-      Alert.alert('Check-In Failed', error instanceof Error ? error.message : 'Unable to check in.');
-      applyState(0, null, null, 0, true);
+      
+      // Rollback to previous state
+      console.log('↺ Rolling back to previous state:', prevState);
+      applyState(prevState.type, prevState.inTime, prevState.outTime, prevState.workingMins);
+
+      Alert.alert(
+        'Check-In Failed', 
+        error instanceof Error ? error.message : 'Unable to check in.',
+        [
+            { text: 'OK' },
+            { 
+                text: 'Retry', 
+                onPress: () => handlePunchIn() 
+            }
+        ]
+      );
+      
       return false;
     } finally {
       setIsPunching(false);
@@ -695,12 +664,25 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   };
 
   const handlePunchOut = async (): Promise<boolean> => {
-    if (isPunchingRef.current) return false;
+    // Guard: Prevent duplicate taps
+    if (isPunchingRef.current) {
+      console.log('⚠️ Punch already in progress, ignoring duplicate tap');
+      return false;
+    }
+
+    // Capture previous state for rollback
+    const prevState = {
+      type: punchType,
+      inTime: punchInTime,
+      outTime: punchOutTime,
+      workingMins: workingMinutes,
+    };
+
+    // Set isPunching flag IMMEDIATELY to prevent re-entry
+    setIsPunching(true);
+    isPunchingRef.current = true;
 
     try {
-      setIsPunching(true);
-      isPunchingRef.current = true;
-
       const hasPermission = await hasLocationPermission();
       if (!hasPermission) {
         const granted = await requestLocationPermission();
@@ -714,36 +696,51 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       if (!location) throw new Error('Unable to get location.');
 
       const response: PunchResponse = await recordPunch('OUT', false, true);
-      const responseData = response.data || (response as any);
+      
+      console.log('📦 Punch OUT Response:', response);
 
-      const punchTime = responseData.PunchTimeISO || responseData.PunchTime || new Date().toISOString();
-      const workingMins = responseData.WorkingMinutes || workingMinutes;
+      // Apply state directly - trust the punch action
+      const punchTime = new Date().toISOString();
+      lastLocalActionTimeRef.current = new Date(); // Track local action time
+      applyState(2, punchInTime, punchTime, workingMinutes);
 
-      // Apply state and save
-      applyState(2, punchInTime, punchTime, workingMins, true);
+      // Verify backend state after 15 seconds (giving DB time to commit)
+      // This prevents immediate stale data overwrites but ensures eventual consistency
+      setTimeout(() => {
+        console.log('🕒 Running post-punch verification...');
+        fetchPunchStatus(false);
+      }, 15000);
 
-      const workingHrs = responseData.WorkingHours || getDisplayWorkingHours();
-      if (responseData.IsEarly) {
-        Alert.alert(
-          'Checked Out (Early) ⚠️',
-          `Early by ${responseData.EarlyByMinutes} min\n\nWorking: ${workingHrs}`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        Alert.alert(
-          'Checked Out! 🏁',
-          `Working: ${workingHrs}${responseData.OvertimeHours ? `\nOT: ${responseData.OvertimeHours}` : ''}`,
-          [{ text: 'OK' }]
-        );
-      }
+      const workingHrs = getDisplayWorkingHours();
+      
+      Alert.alert(
+        'Checked Out! 🏁',
+        `Working Hours: ${workingHrs}`,
+        [{ text: 'OK' }]
+      );
 
       Animated.timing(colorAnim, { toValue: 2, duration: 800, useNativeDriver: false }).start();
       return true;
 
     } catch (error) {
       console.error('Punch OUT error:', error);
-      Alert.alert('Check-Out Failed', error instanceof Error ? error.message : 'Unknown error');
-      applyState(1, punchInTime, null, workingMinutes, true);
+      
+      // Rollback to previous state
+      console.log('↺ Rolling back to previous state:', prevState);
+      applyState(prevState.type, prevState.inTime, prevState.outTime, prevState.workingMins);
+
+      Alert.alert(
+        'Check-Out Failed', 
+        error instanceof Error ? error.message : 'Unknown error',
+        [
+            { text: 'OK' },
+            { 
+                text: 'Retry', 
+                onPress: () => handlePunchOut() 
+            }
+        ]
+      );
+      
       return false;
     } finally {
       setIsPunching(false);
@@ -927,7 +924,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           <View style={[styles.errorIconWrapper, { backgroundColor: isDark ? '#3A1A1A' : '#FEE2E2' }]}>
             <Feather name="alert-circle" size={28} color="#EF4444" />
           </View>
-          <Text style={[styles.errorText, { color: colors.text }]}>{error}</Text>
+          <Text style={[styles.errorText, { color: colors.text }]}>
+            {error}
+          </Text>
+          <Text style={[styles.errorSubtext, { color: colors.textSecondary }]}>
+            Unable to load attendance status. The displayed state may be stale.
+          </Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: isDark ? '#2A2A2E' : '#F3F4F6' }]}
             onPress={() => fetchPunchStatus(true)}
@@ -941,7 +943,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     );
   }
 
-  // ============ RENDER (UI remains same - keeping rest of code) ============
+  // ============ RENDER ============
   return (
     <View style={styles.container}>
       {lastUpdated && (
@@ -1199,6 +1201,7 @@ const styles = StyleSheet.create({
   errorCard: { minHeight: 160, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 },
   errorIconWrapper: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
   errorText: { fontSize: 14, fontWeight: '500', textAlign: 'center' },
+  errorSubtext: { fontSize: 12, fontWeight: '400', textAlign: 'center', marginTop: 4 },
   retryButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
   retryText: { fontSize: 14, fontWeight: '600', color: '#6366F1' },
   swipeSection: { padding: 20, paddingBottom: 16 },

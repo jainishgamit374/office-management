@@ -43,7 +43,7 @@ const NotificationCard: React.FC<NotificationCardProps> = ({
 }) => {
     const { colors, theme } = useTheme();
     const [pan] = useState(new Animated.ValueXY());
-    const [dismissed, setDismissed] = useState(false);
+    const [opacity] = useState(new Animated.Value(1));
 
     const panResponder = PanResponder.create({
         onStartShouldSetPanResponder: () => enableSwipe && notification.dismissible,
@@ -58,12 +58,18 @@ const NotificationCard: React.FC<NotificationCardProps> = ({
         onPanResponderRelease: (_, gestureState) => {
             if (enableSwipe && notification.dismissible && Math.abs(gestureState.dx) > SWIPE_THRESHOLD) {
                 // Swipe to dismiss
-                Animated.timing(pan, {
-                    toValue: { x: gestureState.dx > 0 ? SCREEN_WIDTH : -SCREEN_WIDTH, y: 0 },
-                    duration: 200,
-                    useNativeDriver: false,
-                }).start(() => {
-                    setDismissed(true);
+                Animated.parallel([
+                    Animated.timing(pan, {
+                        toValue: { x: gestureState.dx > 0 ? SCREEN_WIDTH : -SCREEN_WIDTH, y: 0 },
+                        duration: 200,
+                        useNativeDriver: false,
+                    }),
+                    Animated.timing(opacity, {
+                        toValue: 0,
+                        duration: 200,
+                        useNativeDriver: false,
+                    })
+                ]).start(() => {
                     onDismiss?.(notification.id);
                 });
             } else {
@@ -118,7 +124,22 @@ const NotificationCard: React.FC<NotificationCardProps> = ({
 
     const config = getNotificationConfig(notification.type);
 
-    if (dismissed) return null;
+    const handleDismiss = () => {
+        Animated.parallel([
+            Animated.timing(opacity, {
+                toValue: 0,
+                duration: 200,
+                useNativeDriver: false,
+            }),
+            Animated.timing(pan, {
+                toValue: { x: SCREEN_WIDTH, y: 0 },
+                duration: 200,
+                useNativeDriver: false,
+            })
+        ]).start(() => {
+            onDismiss?.(notification.id);
+        });
+    };
 
     return (
         <Animated.View
@@ -127,6 +148,7 @@ const NotificationCard: React.FC<NotificationCardProps> = ({
                 {
                     backgroundColor: config.bgColor,
                     transform: [{ translateX: pan.x }],
+                    opacity: opacity,
                 },
             ]}
             {...panResponder.panHandlers}
@@ -162,10 +184,8 @@ const NotificationCard: React.FC<NotificationCardProps> = ({
                 {notification.dismissible && (
                     <TouchableOpacity
                         style={styles.dismissButton}
-                        onPress={() => {
-                            setDismissed(true);
-                            onDismiss?.(notification.id);
-                        }}
+                        onPress={handleDismiss}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
                         <Feather name="x" size={20} color={colors.textSecondary} />
                     </TouchableOpacity>

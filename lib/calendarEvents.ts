@@ -37,9 +37,12 @@ const HOLIDAY_IMAGES = {
     'Independence Day': 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=800&q=80',
     'Diwali': 'https://images.unsplash.com/photo-1605641461241-f0b3f5e1e8c0?w=800&q=80',
     'Holi': 'https://images.unsplash.com/photo-1583241800698-c8e8e6e8e0c4?w=800&q=80',
+    'Dhuleti': 'https://images.unsplash.com/photo-1583241800698-c8e8e6e8e0c4?w=800&q=80', // Same as Holi
     'Christmas': 'https://images.unsplash.com/photo-1512389142860-9c449e58a543?w=800&q=80',
     'New Year': 'https://images.unsplash.com/photo-1467810563316-b5476525c0f9?w=800&q=80',
     'Uttarayan': 'https://images.unsplash.com/photo-1516361839211-1c36b85d9284?w=800&q=80', // Kite festival image
+    'Uttarayan (Vasi)': 'https://images.unsplash.com/photo-1516361839211-1c36b85d9284?w=800&q=80',
+    'Maha Shivaratri': 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=800&q=80', // Temple/spiritual image
 };
 
 /**
@@ -126,29 +129,37 @@ export const getUpcomingHolidays = async (): Promise<CalendarEvent[]> => {
     const events: CalendarEvent[] = [];
     const currentYear = today.getFullYear();
 
-    // List of holidays to check
+    // Comprehensive list of holidays for next 2 months (Jan-Mar 2026)
     const upcomingHolidaysList = [
-        { name: 'Uttarayan', month: 0, day: 14, dateStr: 'Jan 14' }, // Month is 0-indexed
+        { name: 'Uttarayan', month: 0, day: 14, dateStr: 'Jan 14' },
+        { name: 'Uttarayan (Vasi)', month: 0, day: 15, dateStr: 'Jan 15' },
         { name: 'Republic Day', month: 0, day: 26, dateStr: 'Jan 26' },
-        { name: 'Holi', month: 2, day: 25, dateStr: 'Mar 25' }, // Approx date
+        { name: 'Maha Shivaratri', month: 1, day: 26, dateStr: 'Feb 26' },
+        { name: 'Holi', month: 2, day: 14, dateStr: 'Mar 14' },
+        { name: 'Dhuleti', month: 2, day: 15, dateStr: 'Mar 15' },
     ];
 
     upcomingHolidaysList.forEach(holiday => {
         // Create date object for this holiday in current year
         let holidayDate = new Date(currentYear, holiday.month, holiday.day);
 
-        // If date has passed this year, check next year (though mainly relevant for Dec/Jan transition)
+        // If date has passed this year, check next year
         if (holidayDate < today) {
             holidayDate = new Date(currentYear + 1, holiday.month, holiday.day);
         }
 
         // Check if within our 2-month window
         if (holidayDate > today && holidayDate <= nextTwoMonths) {
+            const daysUntil = Math.ceil((holidayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            const timeMessage = daysUntil === 1 ? 'tomorrow' :
+                daysUntil < 7 ? `in ${daysUntil} days` :
+                    `on ${holiday.dateStr}`;
+
             events.push({
                 id: `holiday-${holiday.name.replace(/\s+/g, '-').toLowerCase()}`,
                 type: 'holiday',
                 title: `📅 Upcoming: ${holiday.name}`,
-                message: `${holiday.name} is coming up on ${holiday.dateStr}.`,
+                message: `${holiday.name} is coming up ${timeMessage}. Plan your schedule accordingly!`,
                 date: holiday.dateStr,
                 imageUrl: HOLIDAY_IMAGES[holiday.name as keyof typeof HOLIDAY_IMAGES] || HOLIDAY_IMAGES['Republic Day'],
                 imageLayout: 'horizontal',
@@ -192,6 +203,41 @@ export const getActiveAnnouncements = async (): Promise<CalendarEvent[]> => {
 };
 
 /**
+ * Get new employee notifications
+ * In production, this would fetch from /employees/recent-joiners/ API
+ */
+export const getNewEmployeeNotifications = async (): Promise<CalendarEvent[]> => {
+    // Sample new employees - replace with actual API call
+    // This would typically fetch employees who joined in the last 7 days
+    const newEmployees = [
+        {
+            name: 'Sneha Desai',
+            department: 'Engineering',
+            joinDate: 'Jan 20, 2026',
+            imageUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=800&q=80',
+        },
+        {
+            name: 'Karan Mehta',
+            department: 'Marketing',
+            joinDate: 'Jan 18, 2026',
+            imageUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=800&q=80',
+        },
+    ];
+
+    return newEmployees.map((employee, index) => ({
+        id: `new-employee-${index}`,
+        type: 'announcement',
+        title: `👋 Welcome ${employee.name}!`,
+        message: `${employee.name} joined the ${employee.department} team on ${employee.joinDate}. Let's give them a warm welcome!`,
+        date: employee.joinDate,
+        imageUrl: employee.imageUrl,
+        imageLayout: 'horizontal',
+        priority: 'medium',
+        employeeName: employee.name,
+    }));
+};
+
+/**
  * Aggregate all calendar events
  * Returns events in priority order: Holidays → Announcements → Birthdays (last)
  */
@@ -199,16 +245,18 @@ export const aggregateCalendarEvents = async (): Promise<Notification[]> => {
     try {
         console.log('📅 Fetching calendar events...');
 
-        const [birthdays, holidays, upcomingHolidays, announcements] = await Promise.all([
+        const [birthdays, holidays, upcomingHolidays, announcements, newEmployees] = await Promise.all([
             getTodaysBirthdays(),
             getTodaysHolidays(),
             getUpcomingHolidays(),
             getActiveAnnouncements(),
+            getNewEmployeeNotifications(),
         ]);
 
         // Combine all events - birthdays at the end
         const allEvents: CalendarEvent[] = [
             ...holidays,          // High priority - shown first
+            ...newEmployees,      // Medium priority - new employees
             ...announcements,     // Medium priority - shown second
             ...upcomingHolidays,  // Medium priority - shown third
             ...birthdays,         // Low priority - shown last
@@ -264,6 +312,28 @@ export const getSampleCalendarEvents = (): Notification[] => {
             imageLayout: 'banner',
         },
         {
+            id: 'sample-upcoming-holi',
+            type: 'holiday',
+            title: '📅 Upcoming: Holi',
+            message: 'Holi is coming up on Mar 14. Plan your schedule accordingly!',
+            date: 'Mar 14',
+            priority: 'medium',
+            dismissible: true,
+            imageUrl: HOLIDAY_IMAGES['Holi'],
+            imageLayout: 'horizontal',
+        },
+        {
+            id: 'sample-new-employee',
+            type: 'announcement',
+            title: '👋 Welcome Sneha Desai!',
+            message: 'Sneha Desai joined the Engineering team on Jan 20, 2026. Let\'s give them a warm welcome!',
+            date: 'Jan 20',
+            priority: 'medium',
+            dismissible: true,
+            imageUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=800&q=80',
+            imageLayout: 'horizontal',
+        },
+        {
             id: 'sample-birthday-1',
             type: 'birthday',
             title: '🎉 Happy Birthday Rajesh!',
@@ -293,6 +363,7 @@ export default {
     getTodaysHolidays,
     getUpcomingHolidays,
     getActiveAnnouncements,
+    getNewEmployeeNotifications,
     aggregateCalendarEvents,
     getSampleCalendarEvents,
 };

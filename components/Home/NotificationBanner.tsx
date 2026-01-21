@@ -5,14 +5,13 @@ import Carousel from 'react-native-reanimated-carousel';
 import NotificationCard, { Notification } from './NotificationCard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH - 64; // Keeping the same card width logic
 
 const NotificationBanner: React.FC = () => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        // Load calendar events (birthdays, holidays, announcements)
         loadCalendarEvents();
     }, []);
 
@@ -42,7 +41,8 @@ const NotificationBanner: React.FC = () => {
     };
 
     const handleDismiss = (id: string) => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        // Add notification ID to dismissed set
+        setDismissedIds((prev) => new Set(prev).add(id));
     };
 
     const handlePress = (notification: Notification) => {
@@ -50,19 +50,26 @@ const NotificationBanner: React.FC = () => {
         // Handle notification press - navigate to details, etc.
     };
 
-    if (notifications.length === 0) return null;
+    // Filter out dismissed notifications
+    const visibleNotifications = notifications.filter((n) => !dismissedIds.has(n.id));
+
+    if (visibleNotifications.length === 0) return null;
+
+    // Generate a unique key for the carousel based on visible notifications
+    // This forces the carousel to re-render when notifications are dismissed
+    const carouselKey = visibleNotifications.map(n => n.id).join('-');
 
     return (
         <View style={styles.container}>
             <Carousel
-                loop
+                key={carouselKey} // Force re-render when notifications change
+                loop={visibleNotifications.length > 1} // Only loop if more than 1 notification
                 width={SCREEN_WIDTH}
-                height={160} // Adjust height as needed based on card content
-                autoPlay={true}
+                height={160}
+                autoPlay={visibleNotifications.length > 1}
                 autoPlayInterval={5000}
-                data={notifications}
+                data={visibleNotifications}
                 scrollAnimationDuration={1000}
-                // Parallax effect config
                 mode="parallax"
                 modeConfig={{
                     parallaxScrollingScale: 0.9,
@@ -74,7 +81,7 @@ const NotificationBanner: React.FC = () => {
                             notification={item}
                             onDismiss={handleDismiss}
                             onPress={handlePress}
-                            enableSwipe={false} // Disable swipe-to-dismiss in carousel to prevent gesture conflicts
+                            enableSwipe={false}
                         />
                     </View>
                 )}
@@ -85,15 +92,13 @@ const NotificationBanner: React.FC = () => {
 
 const styles = StyleSheet.create({
     container: {
-        marginTop: 10,
-        marginBottom: 8,
-        height: 100, // Match carousel height
+        height: 120,
         justifyContent: 'center',
     },
     cardWrapper: {
         flex: 1,
         justifyContent: 'center',
-        paddingHorizontal: 0, // Carousel handles spacing via modeConfig or width
+        paddingHorizontal: 0,
         marginHorizontal: 2,
     },
 });

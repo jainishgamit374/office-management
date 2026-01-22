@@ -420,7 +420,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         applyState(0, null, null, 0, true);
       }
 
-      // 2️⃣ Try loading from storage first (instant UI)
+      // 2️⃣ Try loading from storage first (instant UI) - only if not refreshing
       if (!isRefresh) {
         const stored = await loadFromStorage();
         if (stored) {
@@ -455,7 +455,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         punchInTimeStr = flatData.PunchInTime;
       }
 
-      console.log('📡 API Response:', { newType, punchDateTime });
+      console.log('📡 API Response:', { newType, punchDateTime, punchInTimeStr, workingMins });
 
       // Update late/early counts
       const lateEarly = responseData.lateEarly ?? {
@@ -469,53 +469,17 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       setRemainingLateCheckins(lateEarly.remainingLateCheckins);
       onLateEarlyCountChange?.(lateEarly.lateCheckins, lateEarly.earlyCheckouts);
 
-      // 4️⃣ Guard: Check if checkout is from today
-      if (newType === 2) {
-        const checkoutDate = parsePunchTime(punchDateTime);
-        if (checkoutDate) {
-          const checkoutDay = getLocalDateString(checkoutDate);
-          if (checkoutDay !== today) {
-            console.log('🛡️ Checkout from previous day detected - resetting');
-            newType = 0;
-            punchDateTime = null;
-          }
-        }
-      }
-
-      // 5️⃣ Apply API state (with storage priority)
-      // If we have stored state and API returns checkout, check if it's a manual checkout
-      const stored = await loadFromStorage();
+      // 4️⃣ Apply API state - always trust the API response
+      console.log('🔁 Applying API state:', previousPunchType.current, '→', newType);
       
-      if (stored && stored.punchType === 1 && newType === 2) {
-        // User was checked in (in storage), but API says checked out
-        // This could mean:
-        // 1. App was closed and reopened (storage has check-in, API has old checkout)
-        // 2. Admin manually checked out the user
-        
-        // Check if the checkout time is AFTER the stored check-in time
-        const storedCheckInDate = parsePunchTime(stored.punchInTime);
-        const apiCheckOutDate = parsePunchTime(punchDateTime);
-        
-        if (storedCheckInDate && apiCheckOutDate && apiCheckOutDate > storedCheckInDate) {
-          // API checkout is newer than stored check-in - this is a real checkout
-          console.log('✅ API checkout is newer - applying checkout state');
-          applyState(2, punchInTimeStr, punchDateTime, workingMins, true);
-        } else {
-          // API checkout is older or same - keep stored check-in state
-          console.log('🛡️ Keeping stored check-in state - API checkout is stale');
-          // Don't change anything, storage state is already applied
-        }
-      } else if (newType !== previousPunchType.current || !isInitialized) {
-        // Normal state change or first load
-        console.log('🔄 State changed:', previousPunchType.current, '→', newType);
-        
-        if (newType === 0) {
-          applyState(0, null, null, 0, true);
-        } else if (newType === 1) {
-          applyState(1, punchDateTime, null, workingMins, true);
-        } else if (newType === 2) {
-          applyState(2, punchInTimeStr, punchDateTime, workingMins, true);
-        }
+      if (newType === 0) {
+        applyState(0, null, null, 0, true);
+      } else if (newType === 1) {
+        // For check-in, punchDateTime is the check-in time
+        applyState(1, punchDateTime, null, workingMins, true);
+      } else if (newType === 2) {
+        // For check-out, punchInTimeStr is the check-in time, punchDateTime is the check-out time
+        applyState(2, punchInTimeStr, punchDateTime, workingMins, true);
       }
 
       if (!isInitialized) {
@@ -526,8 +490,19 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       console.error('❌ Failed to fetch punch status:', error);
       setError(error instanceof Error ? error.message : 'Failed to load status');
 
+      // Try to restore from storage on error
       if (!isInitialized) {
-        applyState(0, null, null, 0, true);
+        try {
+          const stored = await loadFromStorage();
+          if (stored) {
+            applyState(stored.punchType, stored.punchInTime, stored.punchOutTime, stored.workingMinutes, false);
+          } else {
+            applyState(0, null, null, 0, true);
+          }
+        } catch (storageError) {
+          console.error('❌ Failed to load from storage in error recovery:', storageError);
+          applyState(0, null, null, 0, true);
+        }
         setIsInitialized(true);
       }
     } finally {
@@ -540,7 +515,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     loadFromStorage,
     clearStorage,
     applyState,
-    parsePunchTime,
   ]);
 
   // Initial mount
@@ -670,11 +644,15 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         return false;
       }
 
+      console.log('📤 Sending punch-in request...');
       const response: PunchResponse = await recordPunch('IN', false, true);
       const responseData = response.data || (response as any);
 
       const punchTime = responseData.PunchTimeISO || responseData.PunchTime || now.toISOString();
       const workingMins = responseData.WorkingMinutes || 0;
+
+      console.log('✅ Punch-in successful:', { punchTime, workingMins });
+      console.log('🔍 DEBUG - Backend returned PunchType:', responseData.PunchType, '| Expected: 1 (IN)');
 
       // Apply state and save
       applyState(1, punchTime, null, workingMins, true);
@@ -690,12 +668,23 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       }
 
       Animated.timing(colorAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start();
+      
+      // ⚠️ DISABLED: Auto-refresh was causing automatic checkout because backend returns wrong PunchType
+      // The backend is likely returning PunchType: 0 or 2 instead of 1 after check-in
+      // Uncomment this ONLY after backend is fixed to return correct PunchType
+      // setTimeout(() => {
+      //   console.log('🔄 Auto-refreshing after check-in...');
+      //   fetchPunchStatus(false, true);
+      // }, 1000);
+      
       return true;
 
     } catch (error) {
-      console.error('Punch IN error:', error);
+      console.error('❌ Punch IN error:', error);
       Alert.alert('Check-In Failed', error instanceof Error ? error.message : 'Unable to check in.');
-      applyState(0, null, null, 0, false);
+      
+      // Refresh to get actual state from server
+      fetchPunchStatus(false, true);
       return false;
     } finally {
       setIsPunching(false);
@@ -722,11 +711,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       const location = await getCurrentLocation();
       if (!location) throw new Error('Unable to get location.');
 
+      console.log('📤 Sending punch-out request...');
       const response: PunchResponse = await recordPunch('OUT', false, true);
       const responseData = response.data || (response as any);
 
       const punchTime = responseData.PunchTimeISO || responseData.PunchTime || new Date().toISOString();
       const workingMins = responseData.WorkingMinutes || workingMinutes;
+
+      console.log('✅ Punch-out successful:', { punchTime, workingMins });
 
       // Apply state and save
       applyState(2, punchInTime, punchTime, workingMins, true);
@@ -747,12 +739,22 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       }
 
       Animated.timing(colorAnim, { toValue: 2, duration: 800, useNativeDriver: false }).start();
+      
+      // ⚠️ DISABLED: Auto-refresh disabled to prevent state inconsistencies
+      // Uncomment this ONLY after backend is fixed to return correct PunchType
+      // setTimeout(() => {
+      //   console.log('🔄 Auto-refreshing after check-out...');
+      //   fetchPunchStatus(false, true);
+      // }, 1000);
+      
       return true;
 
     } catch (error) {
-      console.error('Punch OUT error:', error);
+      console.error('❌ Punch OUT error:', error);
       Alert.alert('Check-Out Failed', error instanceof Error ? error.message : 'Unknown error');
-      applyState(1, punchInTime, null, workingMinutes, true);
+      
+      // Refresh to get actual state from server
+      fetchPunchStatus(false, true);
       return false;
     } finally {
       setIsPunching(false);

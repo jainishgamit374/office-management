@@ -3,18 +3,20 @@ import { getMissingPunchOut } from '@/lib/attendance';
 import { getMissingPunchDetails, submitMissPunch } from '@/lib/missPunchList';
 
 import Feather from '@expo/vector-icons/Feather';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 interface MissedPunch {
@@ -52,6 +54,11 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
   const [formDateTimeLabel, setFormDateTimeLabel] = useState<string>(''); // display formatted
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Date/Time picker state
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const fetchMissedPunches = useCallback(async () => {
     try {
@@ -134,8 +141,33 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
     }
   };
 
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const updateDateTime = (newDate: Date) => {
+    setSelectedDate(newDate);
+    const iso = newDate.toISOString();
+    setFormDateTimeISO(iso);
+    setFormDateTimeLabel(formatDateTime(iso));
+  };
+
   const openSubmitModalForRequest = (punch: MissedPunch) => {
     setFormType(punch.type);                       // check-in/check-out
+    const dateObj = new Date(punch.date);
+    setSelectedDate(dateObj);
     setFormDateTimeISO(punch.date);                // prefill
     setFormDateTimeLabel(formatDateTime(punch.date));
     setReason('');                                  // user must write new reason
@@ -150,7 +182,8 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
     defaultDate.setHours(18, 30, 0, 0); // 6:30 PM default suggestion
 
     const iso = defaultDate.toISOString();
-
+    
+    setSelectedDate(defaultDate);
     setFormType('check-out');
     setFormDateTimeISO(iso);
     setFormDateTimeLabel(formatDateTime(iso));
@@ -162,6 +195,14 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
     setShowModal(false);
     setReason('');
     setIsSubmitting(false);
+    // Reset date/time picker states
+    setShowDatePicker(false);
+    setShowTimePicker(false);
+    // Reset form state
+    setFormType('check-in');
+    setSelectedDate(new Date());
+    setFormDateTimeISO('');
+    setFormDateTimeLabel('');
   };
 
   const submit = async () => {
@@ -288,13 +329,33 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
               </TouchableOpacity>
             </View>
 
-            {/* Date & Time box */}
+            {/* Date & Time Inputs */}
             <Text style={styles.fieldLabel}>Date & Time</Text>
-            <View style={styles.dateTimeBox}>
-              <Feather name="calendar" size={16} color={colors.primary} />
-              <Text style={styles.dateTimeText}>{formDateTimeLabel || '--'}</Text>
+            <View style={styles.dateTimeRow}>
+              <TouchableOpacity
+                style={styles.dateTimeInput}
+                onPress={() => setShowDatePicker(true)}
+                activeOpacity={0.7}
+              >
+                <Feather name="calendar" size={18} color={colors.primary} />
+                <View style={styles.dateTimeTextContainer}>
+                  <Text style={styles.dateTimeLabel}>Date</Text>
+                  <Text style={styles.dateTimeValue}>{formatDate(selectedDate)}</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.dateTimeInput}
+                onPress={() => setShowTimePicker(true)}
+                activeOpacity={0.7}
+              >
+                <Feather name="clock" size={18} color={colors.primary} />
+                <View style={styles.dateTimeTextContainer}>
+                  <Text style={styles.dateTimeLabel}>Time</Text>
+                  <Text style={styles.dateTimeValue}>{formatTime(selectedDate)}</Text>
+                </View>
+              </TouchableOpacity>
             </View>
-            {/* If you want editable date/time later, we can add a DateTimePicker here */}
 
             {/* Reason */}
             <Text style={styles.fieldLabel}>Reason</Text>
@@ -330,6 +391,32 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
           </View>
         </View>
       </Modal>
+
+      {/* Date/Time Pickers */}
+      {(showDatePicker || showTimePicker) && (Platform.OS === 'android' || Platform.OS === 'ios') && (
+        <DateTimePicker
+          value={selectedDate}
+          mode={showDatePicker ? 'date' : 'time'}
+          display="default"
+          onChange={(event, date) => {
+            setShowDatePicker(false);
+            setShowTimePicker(false);
+            if (event.type === 'set' && date) {
+              if (showDatePicker) {
+                // Update date part, keep time part
+                const newDate = new Date(selectedDate);
+                newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                updateDateTime(newDate);
+              } else {
+                // Update time part, keep date part
+                const newDate = new Date(selectedDate);
+                newDate.setHours(date.getHours(), date.getMinutes());
+                updateDateTime(newDate);
+              }
+            }
+          }}
+        />
+      )}
     </>
   );
 };
@@ -456,7 +543,12 @@ const createStyles = (colors: ThemeColors) =>
     segmentText: { fontSize: 13, fontWeight: '700', color: colors.text },
     segmentTextActive: { color: '#fff' },
 
-    dateTimeBox: {
+    dateTimeRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    dateTimeInput: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
@@ -464,11 +556,21 @@ const createStyles = (colors: ThemeColors) =>
       borderRadius: 12,
       backgroundColor: colors.background,
     },
-    dateTimeText: {
-      fontSize: 14,
+    dateTimeTextContainer: {
+      flex: 1,
+    },
+    dateTimeLabel: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 2,
+    },
+    dateTimeValue: {
+      fontSize: 13,
       fontWeight: '700',
       color: colors.text,
-      flex: 1,
     },
 
     reasonInput: {

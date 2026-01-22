@@ -12,12 +12,10 @@ import {
   type PunchStatusResponse
 } from '@/lib/attendance';
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
   PanResponder,
@@ -59,9 +57,7 @@ const TIME_SLOTS = [
   { label: '5:00', start: 17, end: 18.5, isBreak: false },
 ];
 
-// 🔑 STORAGE KEYS
-const STORAGE_KEY_DATE = '@attendance_date';
-const STORAGE_KEY_STATE = '@attendance_state';
+
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -82,13 +78,7 @@ interface SlotProgress {
   isBreak: boolean;
 }
 
-interface StoredState {
-  punchType: 0 | 1 | 2;
-  punchInTime: string | null;
-  punchOutTime: string | null;
-  workingMinutes: number;
-  date: string;
-}
+
 
 // ============ COMPONENT ============
 const CheckInCard: React.FC<CheckInCardProps> = ({
@@ -126,10 +116,24 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
   const [error, setError] = useState<string | null>(null);
 
+  // ============ NOTIFICATION STATE ============
+  const [notification, setNotification] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    time: string;
+    type: 'success' | 'warning' | 'error' | 'info';
+  }>({ visible: false, title: '', message: '', time: '', type: 'success' });
+  const [notificationKey, setNotificationKey] = useState(0);
+
   // ============ ANIMATION REFS ============
   const pan = useRef(new Animated.Value(0)).current;
   const colorAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const notificationTranslateY = useRef(new Animated.Value(-120)).current;
+  const notificationOpacity = useRef(new Animated.Value(0)).current;
+  const notificationScale = useRef(new Animated.Value(0.9)).current;
+  const notificationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ============ STATE REFS ============
   const isCheckedInRef = useRef(false);
@@ -137,6 +141,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const isPunchingRef = useRef(false);
   const isLoadingRef = useRef(true);
   const previousPunchType = useRef<0 | 1 | 2>(0);
+  const lastPunchTime = useRef<number>(0); // Timestamp of last punch action
+  const lastPunchAction = useRef<'IN' | 'OUT' | null>(null); // Last punch action type
+  const COOLDOWN_MS = 60000; // 60 second cooldown to ignore conflicting API responses
 
   useEffect(() => { isCheckedInRef.current = isCheckedIn; }, [isCheckedIn]);
   useEffect(() => { hasCheckedOutRef.current = hasCheckedOut; }, [hasCheckedOut]);
@@ -148,6 +155,83 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       onCheckInChange?.(isCheckedIn, hasCheckedOut);
     }
   }, [isCheckedIn, hasCheckedOut, isInitialized, onCheckInChange]);
+
+  // ============ NOTIFICATION HELPERS ============
+  const showNotification = useCallback((type: 'success' | 'warning' | 'error' | 'info', title: string, message: string, time?: string) => {
+    // Clear existing timeout
+    if (notificationTimeout.current) {
+      clearTimeout(notificationTimeout.current);
+    }
+
+    // Get current time if not provided
+    const displayTime = time || new Date().toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    // Reset animation values immediately
+    notificationTranslateY.setValue(-150);
+    notificationOpacity.setValue(0);
+    notificationScale.setValue(0.8);
+
+    // Force re-render with new key
+    setNotificationKey(prev => prev + 1);
+    setNotification({ visible: true, title, message, time: displayTime, type });
+
+    // Small delay then animate in with smooth spring
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.spring(notificationTranslateY, {
+          toValue: 0,
+          friction: 7,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+        Animated.spring(notificationOpacity, {
+          toValue: 1,
+          friction: 7,
+          tension: 50,
+          useNativeDriver: true,
+        }),
+        Animated.spring(notificationScale, {
+          toValue: 1,
+          friction: 6,
+          tension: 60,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, 50);
+
+    // Auto dismiss after 4 seconds
+    notificationTimeout.current = setTimeout(() => {
+      hideNotification();
+    }, 4000);
+  }, [notificationTranslateY, notificationOpacity, notificationScale]);
+
+  const hideNotification = useCallback(() => {
+    Animated.parallel([
+      Animated.spring(notificationTranslateY, {
+        toValue: -150,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(notificationOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(notificationScale, {
+        toValue: 0.8,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setNotification(prev => ({ ...prev, visible: false }));
+    });
+  }, [notificationTranslateY, notificationOpacity, notificationScale]);
 
   // ============ THEME COLORS ============
   const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
@@ -165,59 +249,15 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     return `${year}-${month}-${day}`;
   };
 
-  // ============ 🆕 STORAGE HELPERS ============
-  const saveToStorage = useCallback(async (state: StoredState) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(state));
-      await AsyncStorage.setItem(STORAGE_KEY_DATE, state.date);
-      console.log('💾 Saved to storage:', state);
-    } catch (error) {
-      console.error('❌ Failed to save:', error);
-    }
-  }, []);
 
-  const loadFromStorage = useCallback(async (): Promise<StoredState | null> => {
-    try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY_STATE);
-      if (!stored) return null;
-      
-      const state: StoredState = JSON.parse(stored);
-      const today = getLocalDateString();
-      
-      // Only restore if same day
-      if (state.date !== today) {
-        console.log('🗑️ Storage from different day, clearing');
-        await AsyncStorage.multiRemove([STORAGE_KEY_STATE, STORAGE_KEY_DATE]);
-        return null;
-      }
-      
-      console.log('📂 Loaded from storage:', state);
-      return state;
-    } catch (error) {
-      console.error('❌ Failed to load:', error);
-      return null;
-    }
-  }, []);
-
-  const clearStorage = useCallback(async () => {
-    try {
-      await AsyncStorage.multiRemove([STORAGE_KEY_STATE, STORAGE_KEY_DATE]);
-      console.log('🗑️ Storage cleared');
-    } catch (error) {
-      console.error('❌ Failed to clear:', error);
-    }
-  }, []);
 
   // ============ HELPER: Apply state (unified) ============
   const applyState = useCallback((
     type: 0 | 1 | 2,
     inTime: string | null,
     outTime: string | null,
-    workingMins: number,
-    saveToStore: boolean = true
+    workingMins: number
   ) => {
-    const today = getLocalDateString();
-
     console.log('🔄 Applying state:', { type, inTime, outTime, workingMins });
 
     switch (type) {
@@ -236,10 +276,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setCompletedWorkingHours(0);
         setPunchType(0);
         previousPunchType.current = 0;
-        
-        if (saveToStore) {
-          saveToStorage({ punchType: 0, punchInTime: null, punchOutTime: null, workingMinutes: 0, date: today });
-        }
         break;
 
       case 1: // Checked In
@@ -261,10 +297,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         if (parsedIn) {
           const progress = calculateWorkingHours(parsedIn) / TOTAL_WORKING_HOURS;
           progressAnim.setValue(progress);
-        }
-
-        if (saveToStore) {
-          saveToStorage({ punchType: 1, punchInTime: inTime, punchOutTime: null, workingMinutes: workingMins, date: today });
         }
         break;
 
@@ -291,13 +323,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setCompletedWorkingHours(0);
         setPunchType(2);
         previousPunchType.current = 2;
-
-        if (saveToStore) {
-          saveToStorage({ punchType: 2, punchInTime: inTime, punchOutTime: outTime, workingMinutes: workingMins, date: today });
-        }
         break;
     }
-  }, [pan, colorAnim, progressAnim, saveToStorage, parsePunchTime, calculateWorkingHours]);
+  }, [pan, colorAnim, progressAnim, parsePunchTime, calculateWorkingHours]);
 
   // ============ HELPER: Calculate slot progress ============
   const calculateSlotProgresses = useCallback((checkInTime: Date | null): SlotProgress[] => {
@@ -404,32 +432,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     });
   };
 
-  // ============ 🆕 FETCH PUNCH STATUS (REFACTORED) ============
+  // ============ FETCH PUNCH STATUS (API-ONLY) ============
   const fetchPunchStatus = useCallback(async (showLoading = true, isRefresh = false): Promise<void> => {
     try {
       if (showLoading && !isRefresh) setIsLoading(true);
       setError(null);
 
-      const today = getLocalDateString();
-
-      // 1️⃣ Check for new day
-      const lastDate = await AsyncStorage.getItem(STORAGE_KEY_DATE);
-      if (lastDate && lastDate !== today) {
-        console.log('🌅 New day detected - clearing storage');
-        await clearStorage();
-        applyState(0, null, null, 0, true);
-      }
-
-      // 2️⃣ Try loading from storage first (instant UI) - only if not refreshing
-      if (!isRefresh) {
-        const stored = await loadFromStorage();
-        if (stored) {
-          console.log('⚡ Restoring from storage');
-          applyState(stored.punchType, stored.punchInTime, stored.punchOutTime, stored.workingMinutes, false);
-        }
-      }
-
-      // 3️⃣ Fetch from API (background sync)
+      // Fetch from API
       const response: PunchStatusResponse = await getPunchStatus();
       onStatusLoaded?.(response);
       setLastUpdated(new Date());
@@ -456,6 +465,30 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       }
 
       console.log('📡 API Response:', { newType, punchDateTime, punchInTimeStr, workingMins });
+      console.log('🔍 DEBUG - Full API responseData:', JSON.stringify(responseData, null, 2));
+      console.log('🔍 DEBUG - Previous PunchType:', previousPunchType.current, '| New PunchType:', newType);
+
+      // ⚠️ COOLDOWN PROTECTION: Ignore API responses that conflict with recent punch action
+      const timeSinceLastPunch = Date.now() - lastPunchTime.current;
+      const isInCooldown = timeSinceLastPunch < COOLDOWN_MS;
+      
+      if (isInCooldown && lastPunchAction.current === 'IN' && newType === 2) {
+        console.log('🛡️ PROTECTION: Ignoring auto-checkout from API (within cooldown period)');
+        console.log(`   Last punch: IN, ${Math.round(timeSinceLastPunch / 1000)}s ago`);
+        console.log('   API returned PunchType: 2 but we just checked IN - ignoring');
+        setLastUpdated(new Date());
+        setIsLoading(false);
+        return; // Don't apply this state change
+      }
+      
+      if (isInCooldown && lastPunchAction.current === 'IN' && newType === 0) {
+        console.log('🛡️ PROTECTION: Ignoring reset from API (within cooldown period)');
+        console.log(`   Last punch: IN, ${Math.round(timeSinceLastPunch / 1000)}s ago`);
+        console.log('   API returned PunchType: 0 but we just checked IN - ignoring');
+        setLastUpdated(new Date());
+        setIsLoading(false);
+        return; // Don't apply this state change
+      }
 
       // Update late/early counts
       const lateEarly = responseData.lateEarly ?? {
@@ -469,17 +502,17 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       setRemainingLateCheckins(lateEarly.remainingLateCheckins);
       onLateEarlyCountChange?.(lateEarly.lateCheckins, lateEarly.earlyCheckouts);
 
-      // 4️⃣ Apply API state - always trust the API response
-      console.log('🔁 Applying API state:', previousPunchType.current, '→', newType);
+      // Apply API state - always trust the API response
+      console.log('� Applying API state:', previousPunchType.current, '→', newType);
       
       if (newType === 0) {
-        applyState(0, null, null, 0, true);
+        applyState(0, null, null, 0);
       } else if (newType === 1) {
         // For check-in, punchDateTime is the check-in time
-        applyState(1, punchDateTime, null, workingMins, true);
+        applyState(1, punchDateTime, null, workingMins);
       } else if (newType === 2) {
         // For check-out, punchInTimeStr is the check-in time, punchDateTime is the check-out time
-        applyState(2, punchInTimeStr, punchDateTime, workingMins, true);
+        applyState(2, punchInTimeStr, punchDateTime, workingMins);
       }
 
       if (!isInitialized) {
@@ -489,20 +522,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     } catch (error) {
       console.error('❌ Failed to fetch punch status:', error);
       setError(error instanceof Error ? error.message : 'Failed to load status');
-
-      // Try to restore from storage on error
+      
       if (!isInitialized) {
-        try {
-          const stored = await loadFromStorage();
-          if (stored) {
-            applyState(stored.punchType, stored.punchInTime, stored.punchOutTime, stored.workingMinutes, false);
-          } else {
-            applyState(0, null, null, 0, true);
-          }
-        } catch (storageError) {
-          console.error('❌ Failed to load from storage in error recovery:', storageError);
-          applyState(0, null, null, 0, true);
-        }
+        applyState(0, null, null, 0);
         setIsInitialized(true);
       }
     } finally {
@@ -512,8 +534,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     onStatusLoaded,
     onLateEarlyCountChange,
     isInitialized,
-    loadFromStorage,
-    clearStorage,
     applyState,
   ]);
 
@@ -526,6 +546,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   useFocusEffect(
     useCallback(() => {
       if (isInitialized && !isPunchingRef.current) {
+        // Check if we're in cooldown period
+        const timeSinceLastPunch = Date.now() - lastPunchTime.current;
+        if (timeSinceLastPunch < COOLDOWN_MS) {
+          console.log('📱 Screen focused - skipping refresh (in cooldown)');
+          return;
+        }
         console.log('📱 Screen focused - refreshing');
         fetchPunchStatus(false, true);
       }
@@ -535,6 +561,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   // Pull-to-refresh
   useEffect(() => {
     if (isInitialized && refreshKey !== undefined && refreshKey > 0 && !isPunchingRef.current) {
+      // Check if we're in cooldown period
+      const timeSinceLastPunch = Date.now() - lastPunchTime.current;
+      if (timeSinceLastPunch < COOLDOWN_MS) {
+        console.log('🔄 Pull-to-refresh - skipping (in cooldown)');
+        return;
+      }
       console.log('🔄 Pull-to-refresh');
       fetchPunchStatus(false, true);
     }
@@ -554,13 +586,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   useEffect(() => {
     let lastDate = getLocalDateString();
 
-    const checkNewDay = async () => {
+    const checkNewDay = () => {
       const currentDate = getLocalDateString();
       if (currentDate !== lastDate) {
         lastDate = currentDate;
         console.log('🌅 Midnight reset');
-        await clearStorage();
-        applyState(0, null, null, 0, true);
+        applyState(0, null, null, 0);
         fetchPunchStatus(true);
       }
     };
@@ -578,7 +609,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       clearInterval(interval);
       clearTimeout(midnightTimeout);
     };
-  }, [fetchPunchStatus, clearStorage, applyState]);
+  }, [fetchPunchStatus, applyState]);
 
   // Progress update
   useEffect(() => {
@@ -628,7 +659,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       if (!hasPermission) {
         const granted = await requestLocationPermission();
         if (!granted) {
-          Alert.alert('Location Required', 'Please enable location to check in.');
+          showNotification('error', 'Location Required', 'Please enable location to check in');
           return false;
         }
       }
@@ -640,7 +671,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       const isLate = isLateCheckIn(now);
 
       if (isLate && remainingLateCheckins <= 0) {
-        Alert.alert('Limit Reached', 'You have used all your late check-ins for this month.');
+        showNotification('error', 'Limit Reached', 'You have used all late check-ins this month');
         return false;
       }
 
@@ -654,17 +685,26 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       console.log('✅ Punch-in successful:', { punchTime, workingMins });
       console.log('🔍 DEBUG - Backend returned PunchType:', responseData.PunchType, '| Expected: 1 (IN)');
 
-      // Apply state and save
-      applyState(1, punchTime, null, workingMins, true);
+      // Set cooldown protection
+      lastPunchTime.current = Date.now();
+      lastPunchAction.current = 'IN';
+      console.log('🛡️ Cooldown protection activated for 30 seconds');
+
+      // Apply state
+      applyState(1, punchTime, null, workingMins);
 
       if (responseData.IsLate) {
-        Alert.alert(
-          'Checked In (Late) ⚠️',
-          `You are ${responseData.LateByMinutes} minutes late.\n\nRemaining: ${remainingLateCheckins - 1}/5`,
-          [{ text: 'OK' }]
+        showNotification(
+          'warning',
+          'Late Check-In',
+          `You're ${responseData.LateByMinutes || 'a few'} min late • ${remainingLateCheckins - 1} remaining`
         );
       } else {
-        Alert.alert('Checked In! ✅', `Punch Time: ${responseData.PunchTime || formatTime(now)}`, [{ text: 'OK' }]);
+        showNotification(
+          'success',
+          'Checked In Successfully',
+          'Have a productive day! 🚀'
+        );
       }
 
       Animated.timing(colorAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start();
@@ -681,7 +721,11 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
     } catch (error) {
       console.error('❌ Punch IN error:', error);
-      Alert.alert('Check-In Failed', error instanceof Error ? error.message : 'Unable to check in.');
+      showNotification(
+        'error',
+        'Check-In Failed',
+        error instanceof Error ? error.message : 'Unable to check in'
+      );
       
       // Refresh to get actual state from server
       fetchPunchStatus(false, true);
@@ -703,7 +747,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       if (!hasPermission) {
         const granted = await requestLocationPermission();
         if (!granted) {
-          Alert.alert('Location Required', 'Please enable location to check out.');
+          showNotification('error', 'Location Required', 'Please enable location to check out');
           return false;
         }
       }
@@ -720,21 +764,26 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
       console.log('✅ Punch-out successful:', { punchTime, workingMins });
 
-      // Apply state and save
-      applyState(2, punchInTime, punchTime, workingMins, true);
+      // Set cooldown protection
+      lastPunchTime.current = Date.now();
+      lastPunchAction.current = 'OUT';
+      console.log('🛡️ Cooldown protection activated for 30 seconds');
+
+      // Apply state
+      applyState(2, punchInTime, punchTime, workingMins);
 
       const workingHrs = responseData.WorkingHours || getDisplayWorkingHours();
       if (responseData.IsEarly) {
-        Alert.alert(
-          'Checked Out (Early) ⚠️',
-          `Early by ${responseData.EarlyByMinutes} min\n\nWorking: ${workingHrs}`,
-          [{ text: 'OK' }]
+        showNotification(
+          'warning',
+          'Early Check-Out',
+          `Left ${responseData.EarlyByMinutes || 'a few'} min early • Worked ${workingHrs}`
         );
       } else {
-        Alert.alert(
-          'Checked Out! 🏁',
-          `Working: ${workingHrs}${responseData.OvertimeHours ? `\nOT: ${responseData.OvertimeHours}` : ''}`,
-          [{ text: 'OK' }]
+        showNotification(
+          'success',
+          'Checked Out Successfully',
+          `Great work today! Total: ${workingHrs}${responseData.OvertimeHours ? ` (+${responseData.OvertimeHours} OT)` : ''} ✨`
         );
       }
 
@@ -751,7 +800,11 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
     } catch (error) {
       console.error('❌ Punch OUT error:', error);
-      Alert.alert('Check-Out Failed', error instanceof Error ? error.message : 'Unknown error');
+      showNotification(
+        'error',
+        'Check-Out Failed',
+        error instanceof Error ? error.message : 'Something went wrong'
+      );
       
       // Refresh to get actual state from server
       fetchPunchStatus(false, true);
@@ -952,9 +1005,134 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     );
   }
 
-  // ============ RENDER (UI remains same - keeping rest of code) ============
+  // ============ NOTIFICATION COLORS ============
+  const getNotificationColors = () => {
+    const colors = {
+      success: {
+        bg: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ECFDF5',
+        border: '#10B981',
+        iconBg: isDark ? '#10B981' : '#D1FAE5',
+        iconColor: isDark ? '#fff' : '#10B981',
+        title: isDark ? '#6EE7B7' : '#065F46',
+        message: isDark ? '#A7F3D0' : '#047857',
+      },
+      warning: {
+        bg: isDark ? 'rgba(245, 158, 11, 0.15)' : '#FFFBEB',
+        border: '#F59E0B',
+        iconBg: isDark ? '#F59E0B' : '#FEF3C7',
+        iconColor: isDark ? '#fff' : '#F59E0B',
+        title: isDark ? '#FCD34D' : '#92400E',
+        message: isDark ? '#FDE68A' : '#B45309',
+      },
+      error: {
+        bg: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2',
+        border: '#EF4444',
+        iconBg: isDark ? '#EF4444' : '#FEE2E2',
+        iconColor: isDark ? '#fff' : '#EF4444',
+        title: isDark ? '#FCA5A5' : '#991B1B',
+        message: isDark ? '#FECACA' : '#B91C1C',
+      },
+      info: {
+        bg: isDark ? 'rgba(99, 102, 241, 0.15)' : '#EEF2FF',
+        border: '#6366F1',
+        iconBg: isDark ? '#6366F1' : '#E0E7FF',
+        iconColor: isDark ? '#fff' : '#6366F1',
+        title: isDark ? '#A5B4FC' : '#3730A3',
+        message: isDark ? '#C7D2FE' : '#4338CA',
+      },
+    };
+    return colors[notification.type] || colors.info;
+  };
+
+  const notificationColors = getNotificationColors();
+  const notificationIcon = notification.type === 'success' ? 'check-circle' 
+    : notification.type === 'warning' ? 'alert-circle' 
+    : notification.type === 'error' ? 'x-circle' 
+    : 'info';
+
+  // ============ RENDER ============
   return (
-    <View style={styles.container}>
+    <>
+      {/* NOTIFICATION TOAST - Modern Minimal Design */}
+      {notification.visible && (
+        <Animated.View
+          key={notificationKey}
+          style={[
+            styles.notificationContainer,
+            {
+              transform: [
+                { translateY: notificationTranslateY },
+                { scale: notificationScale },
+              ],
+              opacity: notificationOpacity,
+            },
+          ]}
+          pointerEvents="box-only"
+        >
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={hideNotification}
+            style={[
+              styles.notification,
+              {
+                backgroundColor: notificationColors.bg,
+                borderColor: notificationColors.border,
+              },
+            ]}
+          >
+            {/* Accent Line */}
+            <View style={[styles.notificationAccent, { backgroundColor: notificationColors.border }]} />
+            
+            {/* Icon */}
+            <View style={[
+              styles.notificationIconWrapper,
+              { backgroundColor: notificationColors.iconBg },
+            ]}>
+              <Feather
+                name={notificationIcon}
+                size={20}
+                color={notificationColors.iconColor}
+              />
+            </View>
+            
+            {/* Content */}
+            <View style={styles.notificationContent}>
+              <View style={styles.notificationHeader}>
+                <Text style={[
+                  styles.notificationTitle,
+                  { color: notificationColors.title },
+                ]} numberOfLines={1}>
+                  {notification.title}
+                </Text>
+                <View style={styles.notificationTimeBadge}>
+                  <Text style={[styles.notificationTime, { color: notificationColors.message }]}>
+                    {notification.time}
+                  </Text>
+                </View>
+              </View>
+              {notification.message ? (
+                <Text style={[
+                  styles.notificationMessage,
+                  { color: notificationColors.message },
+                ]} numberOfLines={2}>
+                  {notification.message}
+                </Text>
+              ) : null}
+            </View>
+            
+            {/* Close Button */}
+            <TouchableOpacity
+              onPress={hideNotification}
+              style={styles.notificationClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Feather name="x" size={16} color={notificationColors.message} />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      <View style={styles.container}>
       {lastUpdated && (
         <View style={styles.lastUpdatedWrapper}>
           <Feather name="clock" size={10} color={colors.textSecondary} />
@@ -1196,7 +1374,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           </View>
         )}
       </View>
-    </View>
+      </View>
+    </>
   );
 };
 
@@ -1249,6 +1428,92 @@ const styles = StyleSheet.create({
   warningBox: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 20, marginBottom: 20, padding: 14, borderRadius: 14 },
   warningIconWrapper: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   warningText: { flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 18 },
+  // Notification styles - Modern Minimal Design
+  notificationContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 20,
+    left: 12,
+    right: 12,
+    zIndex: 99999,
+    elevation: 99999,
+  },
+  notification: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingLeft: 0,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 24,
+      },
+      android: {
+        elevation: 24,
+      },
+    }),
+  },
+  notificationAccent: {
+    width: 4,
+    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  notificationIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  notificationContent: {
+    flex: 1,
+    gap: 4,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  notificationTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+    flex: 1,
+  },
+  notificationTimeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  notificationMessage: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+    opacity: 0.9,
+  },
+  notificationClose: {
+    padding: 4,
+    marginLeft: 4,
+    opacity: 0.6,
+  },
+  notificationTime: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
 });
 
 export default CheckInCard;

@@ -869,10 +869,15 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     if (isOnBreak) return '🍽️ Lunch Break';
     if (isCheckedIn) {
       const remaining = TOTAL_WORKING_HOURS - completedWorkingHours;
-      if (remaining <= 0) return '🎉 Full Day Complete!';
-      return formatCheckInDateTime();
+      if (remaining <= 0) return '🎉 Full Day! ← Swipe Left';
+      if (completedWorkingHours >= 4) {
+        const minsToFull = Math.ceil(remaining * 60);
+        return `Half-Day ✓ • ${minsToFull}m to Full`;
+      }
+      const minsToHalf = Math.ceil((4 - completedWorkingHours) * 60);
+      return `${minsToHalf}m to Half-Day`;
     }
-    return 'Swipe to Check-In →';
+    return 'Swipe Right to Check-In →';
   };
 
   const getButtonColor = () => {
@@ -1229,32 +1234,35 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         {(isCheckedIn || hasCheckedOut) && (
           <View style={[styles.timeSection, { borderTopColor: dividerColor }]}>
             <View style={styles.timeRow}>
-              <View style={[styles.timeBox, { backgroundColor: timeBoxBg }]}>
-                <View style={[styles.timeIconWrapper, { backgroundColor: isDark ? '#1E1E3F' : '#EEF2FF' }]}>
-                  <Feather name="log-in" size={12} color={colors.primary} />
-                </View>
-                <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Check In</Text>
-                <Text style={[styles.timeValue, { color: colors.primary }]}>
+              {/* Check-In Box - Emerald/Green gradient */}
+              <View style={[
+                styles.timeBox,
+                { backgroundColor: isDark ? '#064E3B' : '#ECFDF5', borderColor: isDark ? '#065F46' : '#A7F3D0', borderWidth: 1 }
+              ]}>
+                <Text style={[styles.timeLabel, { color: isDark ? '#6EE7B7' : '#6B7280' }]}>Check-In</Text>
+                <Text style={[styles.timeValue, { color: isDark ? '#34D399' : '#10B981' }]}>
                   {formatTime(punchInDate)}
                 </Text>
               </View>
 
-              <View style={[styles.timeBox, { backgroundColor: timeBoxBg }]}>
-                <View style={[styles.timeIconWrapper, { backgroundColor: isDark ? '#1E1E3F' : '#EEF2FF' }]}>
-                  <Feather name="clock" size={12} color="#818CF8" />
-                </View>
-                <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Working</Text>
-                <Text style={[styles.timeValue, { color: '#818CF8' }]}>
+              {/* Working Box - Blue/Indigo gradient */}
+              <View style={[
+                styles.timeBox,
+                { backgroundColor: isDark ? '#1E1B4B' : '#EEF2FF', borderColor: isDark ? '#312E81' : '#C7D2FE', borderWidth: 1 }
+              ]}>
+                <Text style={[styles.timeLabel, { color: isDark ? '#A5B4FC' : '#6B7280' }]}>Working</Text>
+                <Text style={[styles.timeValue, { color: isDark ? '#818CF8' : '#3B82F6' }]}>
                   {getDisplayWorkingHours()}
                 </Text>
               </View>
 
-              <View style={[styles.timeBox, { backgroundColor: timeBoxBg }]}>
-                <View style={[styles.timeIconWrapper, { backgroundColor: isDark ? '#1E1E3F' : '#EEF2FF' }]}>
-                  <Feather name="log-out" size={12} color={hasCheckedOut ? '#A5B4FC' : colors.textSecondary} />
-                </View>
-                <Text style={[styles.timeLabel, { color: colors.textSecondary }]}>Check Out</Text>
-                <Text style={[styles.timeValue, { color: hasCheckedOut ? '#A5B4FC' : colors.textSecondary }]}>
+              {/* Check-Out Box - Gray gradient */}
+              <View style={[
+                styles.timeBox,
+                { backgroundColor: isDark ? '#1F2937' : '#F9FAFB', borderColor: isDark ? '#374151' : '#E5E7EB', borderWidth: 1 }
+              ]}>
+                <Text style={[styles.timeLabel, { color: isDark ? '#9CA3AF' : '#6B7280' }]}>Check-Out</Text>
+                <Text style={[styles.timeValue, { color: hasCheckedOut ? (isDark ? '#D1D5DB' : '#374151') : (isDark ? '#6B7280' : '#9CA3AF') }]}>
                   {formatTime(punchOutDate)}
                 </Text>
               </View>
@@ -1264,85 +1272,90 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
         {isCheckedIn && !hasCheckedOut && slotProgresses.length > 0 && (
           <View style={[styles.pillarsSection, { borderTopColor: dividerColor }]}>
-            {isOnBreak && (
-              <View style={[styles.breakBanner, { backgroundColor: isDark ? '#2E2A1A' : '#FEF3C7' }]}>
-                <Text style={styles.breakEmoji}>🍽️</Text>
-                <Text style={[styles.breakText, { color: isDark ? '#FCD34D' : '#D97706' }]}>
-                  Lunch Break (1:00 - 2:00 PM)
-                </Text>
-              </View>
-            )}
+            {/* Time Labels Row */}
+            <View style={styles.timeLabelsRow}>
+              <Text style={[styles.timeLabelLeft, { color: colors.textSecondary }]}>9:30 AM</Text>
+              <Text style={[styles.timeLabelCenter, { color: isDark ? '#FCD34D' : '#F59E0B' }]}>1-2 PM Break</Text>
+              <Text style={[styles.timeLabelRight, { color: colors.textSecondary }]}>6:30 PM</Text>
+            </View>
 
+            {/* Pillars Container */}
             <View style={styles.pillarsContainer}>
               {TIME_SLOTS.map((slot, index) => {
                 const progress = slotProgresses[index];
-                const color = getPillarColor(index, slot.isBreak, progress?.filled || false, progress?.current || false);
+                const isMorning = index < 4;
+                const isBreak = slot.isBreak;
+                const isAfternoon = index > 4;
+                
+                // Get colors based on slot type
+                const getBgColor = () => {
+                  if (isBreak) return isDark ? '#422006' : '#FEF3C7';
+                  if (isMorning) return isDark ? '#1E3A5F' : '#DBEAFE';
+                  return isDark ? '#064E3B' : '#D1FAE5';
+                };
+                
+                const getBorderColor = () => {
+                  if (isBreak) return isDark ? '#854D0E' : '#FDE68A';
+                  if (isMorning) return isDark ? '#1E40AF' : '#BFDBFE';
+                  return isDark ? '#065F46' : '#A7F3D0';
+                };
+                
+                const getFillColor = () => {
+                  if (isBreak) return '#F59E0B';
+                  if (isMorning) return '#3B82F6';
+                  return '#10B981';
+                };
 
                 return (
                   <View key={index} style={styles.pillarWrapper}>
                     <View style={[
                       styles.pillarOuter,
-                      { backgroundColor: pillarBg },
-                      slot.isBreak && [styles.pillarBreak, { borderColor: isDark ? '#FCD34D' : '#F59E0B' }],
-                      progress?.current && [styles.pillarActive, { borderColor: color }]
+                      { 
+                        backgroundColor: getBgColor(),
+                        borderColor: getBorderColor(),
+                        borderWidth: 1,
+                      },
+                      progress?.current && { borderWidth: 2, borderColor: getFillColor() }
                     ]}>
                       <View
                         style={[
                           styles.pillarFill,
                           {
                             height: `${(progress?.progress || 0) * 100}%`,
-                            backgroundColor: color,
+                            backgroundColor: getFillColor(),
                           },
                         ]}
                       />
-                      {slot.isBreak && !progress?.filled && !progress?.current && (
-                        <View style={styles.breakIconWrapper}>
-                          <Text style={styles.breakIconText}>🍽️</Text>
-                        </View>
-                      )}
                     </View>
-                    <Text style={[
-                      styles.pillarLabel,
-                      { color: colors.textSecondary },
-                      progress?.current && { color: color, fontWeight: '700' },
-                    ]}>
-                      {slot.label}
-                    </Text>
                   </View>
                 );
               })}
             </View>
 
-            <View style={[styles.progressSummary, { backgroundColor: timeBoxBg }]}>
-              <View style={styles.progressHeader}>
-                <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>
-                  Progress
-                </Text>
-                <Text style={[styles.progressValue, { color: colors.text }]}>
-                  {completedWorkingHours.toFixed(1)} / {TOTAL_WORKING_HOURS}h
-                </Text>
-              </View>
-              <View style={[styles.progressBarSmall, { backgroundColor: pillarBg }]}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${(completedWorkingHours / TOTAL_WORKING_HOURS) * 100}%`,
-                      backgroundColor: completedWorkingHours >= 8 ? '#10B981' :
-                        completedWorkingHours >= 4 ? '#F59E0B' : '#EF4444'
-                    }
-                  ]}
-                />
-              </View>
-              <View style={styles.progressMilestones}>
-                <Text style={[styles.milestoneText, { color: colors.textSecondary }]}>
-                  Half Day: 4h
-                </Text>
-                <Text style={[styles.milestoneText, { color: colors.textSecondary }]}>
-                  Full Day: 8h
-                </Text>
-              </View>
+            {/* Hour Labels Row */}
+            <View style={styles.hourLabelsRow}>
+              {[1, 2, 3, 4, '☕', 5, 6, 7, 8].map((label, index) => (
+                <View key={index} style={styles.hourLabelWrapper}>
+                  <Text style={[
+                    styles.hourLabel,
+                    { color: label === '☕' ? (isDark ? '#FCD34D' : '#F59E0B') : (isDark ? '#A5B4FC' : '#6366F1') }
+                  ]}>
+                    {label}
+                  </Text>
+                </View>
+              ))}
             </View>
+
+            {/* Status Text */}
+            <Text style={[
+              styles.pillarsStatus,
+              { color: completedWorkingHours >= 8 ? '#10B981' : (isDark ? '#A5B4FC' : '#6366F1') }
+            ]}>
+              {completedWorkingHours >= 8 
+                ? '🎉 8 working hours completed!' 
+                : `Hour ${Math.floor(completedWorkingHours) + 1}/8 • ${Math.max(0, Math.ceil(8 - completedWorkingHours))}h remaining`
+              }
+            </Text>
           </View>
         )}
 
@@ -1392,42 +1405,33 @@ const styles = StyleSheet.create({
   retryButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
   retryText: { fontSize: 14, fontWeight: '600', color: '#6366F1' },
   swipeSection: { padding: 20, paddingBottom: 16 },
-  swipeTrack: { width: '100%', height: 72, borderRadius: 36, position: 'relative', justifyContent: 'center', overflow: 'hidden' },
-  progressBar: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 36 },
+  swipeTrack: { width: '100%', height: 70, borderRadius: 35, position: 'relative', justifyContent: 'center', overflow: 'hidden', borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.05)' },
+  progressBar: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 35 },
   swipeTextWrapper: { position: 'absolute', width: '100%', paddingHorizontal: 80, alignItems: 'center' },
-  swipeText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3, textAlign: 'center' },
+  swipeText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3, textAlign: 'center' },
   swipeButton: { position: 'absolute', left: 4, width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' },
-  swipeButtonText: { fontSize: 16, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5 },
-  timeSection: { paddingHorizontal: 20, paddingBottom: 20, borderTopWidth: 1, paddingTop: 16 },
+  swipeButtonText: { fontSize: 15, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5 },
+  timeSection: { paddingHorizontal: 20, paddingBottom: 20, borderTopWidth: 1, paddingTop: 20 },
   timeRow: { flexDirection: 'row', gap: 12 },
-  timeBox: { flex: 1, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 8, borderRadius: 16, gap: 8 },
-  timeIconWrapper: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  timeLabel: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  timeBox: { flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, gap: 6 },
+  timeLabel: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   timeValue: { fontSize: 14, fontWeight: '800' },
   pillarsSection: { paddingHorizontal: 20, paddingBottom: 20, borderTopWidth: 1, paddingTop: 16 },
-  breakBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, marginBottom: 16 },
-  breakEmoji: { fontSize: 16 },
-  breakText: { fontSize: 13, fontWeight: '600' },
-  pillarsContainer: { flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginBottom: 16 },
-  pillarWrapper: { flex: 1, alignItems: 'center', gap: 8 },
-  pillarOuter: { width: '100%', height: 52, borderRadius: 10, overflow: 'hidden', justifyContent: 'flex-end' },
-  pillarBreak: { borderWidth: 2, borderStyle: 'dashed' },
-  pillarActive: { borderWidth: 2 },
-  pillarFill: { width: '100%', borderRadius: 8 },
-  breakIconWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
-  breakIconText: { fontSize: 14 },
-  pillarLabel: { fontSize: 9, fontWeight: '600' },
-  progressSummary: { padding: 14, borderRadius: 14, gap: 10 },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  progressLabel: { fontSize: 12, fontWeight: '600' },
-  progressValue: { fontSize: 14, fontWeight: '800' },
-  progressBarSmall: { height: 8, borderRadius: 4, overflow: 'hidden' },
-  progressBarFill: { height: '100%', borderRadius: 4 },
-  progressMilestones: { flexDirection: 'row', justifyContent: 'space-between' },
-  milestoneText: { fontSize: 10, fontWeight: '500' },
-  warningBox: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 20, marginBottom: 20, padding: 14, borderRadius: 14 },
+  timeLabelsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingHorizontal: 4 },
+  timeLabelLeft: { fontSize: 9, fontWeight: '600' },
+  timeLabelCenter: { fontSize: 9, fontWeight: '600' },
+  timeLabelRight: { fontSize: 9, fontWeight: '600' },
+  pillarsContainer: { flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginBottom: 8 },
+  pillarWrapper: { flex: 1, alignItems: 'center' },
+  pillarOuter: { width: '100%', height: 48, borderRadius: 8, overflow: 'hidden', justifyContent: 'flex-end' },
+  pillarFill: { width: '100%', borderBottomLeftRadius: 6, borderBottomRightRadius: 6 },
+  hourLabelsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 2 },
+  hourLabelWrapper: { flex: 1, alignItems: 'center' },
+  hourLabel: { fontSize: 9, fontWeight: '700' },
+  pillarsStatus: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  warningBox: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 20, marginBottom: 20, padding: 14, borderRadius: 14, borderLeftWidth: 4, borderLeftColor: '#F59E0B' },
   warningIconWrapper: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  warningText: { flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 18 },
+  warningText: { flex: 1, fontSize: 11, fontWeight: '600', lineHeight: 18 },
   // Notification styles - Modern Minimal Design
   notificationContainer: {
     position: 'absolute',

@@ -307,37 +307,50 @@ if (state.punchType === 2 && state.checkoutTimestamp) {
 
 ---
 
-## 🎯 Recommended Fix
+## 🎯 Recommended Fix: Hybrid Option 4 (Modified)
 
-**Implement Option 1** with a small modification:
+**Implement a hybrid approach:**
 
-1. **Clear storage after checkout** to prevent stale state
-2. **Keep storage for check-in** for instant UI
-3. **Add a grace period** (5 minutes) to show checkout state
+1. **Keep storage for check-in** for instant UI
+2. **Save checkout state with a timestamp** (`checkoutTimestamp`)
+3. **Expire checkout state** after a short grace period (e.g., 5 minutes) when loading
 
+This balances the need for immediate feedback with the need to clear stale state.
+
+**Updated Interface:**
+```typescript
+interface StoredState {
+  punchType: 0 | 1 | 2;
+  punchInTime: string | null;
+  punchOutTime: string | null;
+  workingMinutes: number;
+  date: string;
+  checkoutTimestamp?: number; // Added to enable grace period logic
+}
+```
+
+**Implementation Logic:**
 ```typescript
 // In applyState, case 2 (checkout)
 if (saveToStore) {
   // Save checkout state with timestamp
-  const checkoutState = {
+  const checkoutState: StoredState = {
     punchType: 2,
     punchInTime: inTime,
     punchOutTime: outTime,
     workingMinutes: workingMins,
     date: today,
-    checkoutTimestamp: Date.now()
+    checkoutTimestamp: Date.now() // Store time for expiry check
   };
   saveToStorage(checkoutState);
-  
-  // Schedule storage clear after 5 minutes
-  setTimeout(async () => {
-    await clearStorage();
-  }, 5 * 60 * 1000);
+  // NO setTimeout here - rely on load logic to check expiry
 }
 
 // In loadFromStorage
 if (state.punchType === 2 && state.checkoutTimestamp) {
   const minutesSinceCheckout = (Date.now() - state.checkoutTimestamp) / (1000 * 60);
+  
+  // Expiry check: 5 minute grace period
   if (minutesSinceCheckout > 5) {
     console.log('🗑️ Checkout grace period expired - resetting');
     await clearStorage();
@@ -347,10 +360,10 @@ if (state.punchType === 2 && state.checkoutTimestamp) {
 ```
 
 This approach:
-- ✅ Shows checkout state immediately after checkout (good UX)
-- ✅ Resets to fresh state after 5 minutes
-- ✅ Prevents persistent checkout state on app reopen
-- ✅ Maintains instant UI for check-in state
+- ✅ **Reliable**: Works even if app is killed/restarted (no lost timers)
+- ✅ **Instant UI**: Shows checkout state immediately after checkout (good UX)
+- ✅ **Auto-Reset on Reopen**: Checks expiry in `loadFromStorage` to reset state if grace period has passed
+- ✅ **Clean**: User gets a fresh "Swipe to Check-In" screen on next launch after the grace period
 
 ---
 
@@ -369,8 +382,9 @@ This approach:
    - The logic doesn't properly handle the case where both storage and API return PunchType: 2
 
 3. **The Fix:**
-   - Clear storage after checkout (with optional grace period)
-   - Only persist check-in state for instant UI
-   - Let API be the source of truth for checkout state
+   - Use hybrid persistence with grace periods
+   - **Update `StoredState`** to include `checkoutTimestamp`
+   - Expire checkout state after ~5 minutes using timestamp checks on load
+   - Keep instant UI for check-ins but prevent stale checkouts
 
 Would you like me to implement the recommended fix?

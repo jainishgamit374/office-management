@@ -157,94 +157,9 @@ const handlePunchOut = async () => {
 ```
 
 
-**Flow:**
-1. User swipes left
-2. POST `/emp-punch/` (See **API Endpoints** section below for Auth/Idempotency details)
-3. Backend saves punch record
-4. Frontend applies state immediately (shows "Checked Out")
-5. GET `/dashboard-punch-status/` to confirm
-6. Backend returns `PunchType: 2`
-7. Frontend updates state with confirmed data
 
-### **4. Pull-to-Refresh**
-```typescript
-useEffect(() => {
-  if (refreshKey > 0) {
-    fetchPunchStatus(false); // GET /dashboard-punch-status/
-  }
-}, [refreshKey]);
-```
-- User pulls down to refresh
-- Fetches latest status from backend
-- Updates UI with current `PunchType`
 
-### **5. Controlled Background Polling**
-```typescript
-useEffect(() => {
-  let pollingTimer: NodeJS.Timeout;
-  let isMounted = true;
-  let abortController = new AbortController();
-  
-  // Backoff configuration
-  let failCount = 0;
-  const BASE_DELAY = 5 * 60 * 1000; // 5 minutes
-  const MAX_DELAY = 30 * 60 * 1000; // 30 minutes
-
-  const startPolling = async () => {
-    // 0. Guards: Only poll if visible, actively checked in, and not currently punching
-    if (AppState.currentState !== 'active' || !isCheckedIn || isPunchingRef.current) return;
-
-    try {
-      abortController = new AbortController();
-      await fetchPunchStatus(false, abortController.signal);
-      
-      // Success: Reset backoff
-      failCount = 0;
-      scheduleNext(BASE_DELAY);
-    } catch (error) {
-      if (!isMounted) return;
-      
-      // Failure: Exponential backoff + Jitter
-      failCount++;
-      const backoff = Math.min(BASE_DELAY * Math.pow(2, failCount), MAX_DELAY);
-      const jitter = Math.random() * 10000; // 0-10s jitter
-      scheduleNext(backoff + jitter);
-    }
-  };
-
-  const scheduleNext = (delay: number) => {
-    if (!isMounted) return;
-    clearTimeout(pollingTimer);
-    pollingTimer = setTimeout(startPolling, delay);
-  };
-
-  // Listen to AppState (pause when backgrounded, resume/refresh when active)
-  const subscription = AppState.addEventListener('change', (nextState) => {
-    if (nextState === 'active') {
-      startPolling(); // Immediate check on resume
-    } else {
-      clearTimeout(pollingTimer); // Pause in background
-      abortController.abort(); // Cancel in-flight
-    }
-  });
-
-  // Start loop
-  scheduleNext(BASE_DELAY);
-
-  return () => {
-    isMounted = false;
-    clearTimeout(pollingTimer);
-    abortController.abort();
-    subscription.remove();
-  };
-}, [isCheckedIn]); // Re-run if check-in state turns on/off
-```
-- **Guarded**: Only polls when app is ACTIVE and user is CHECKED IN.
-- **Smart Backoff**: Increases delay on failures (up to 30 mins) to save battery/server.
-- **Conflict Prevention**: Skips if `isPunching` is true (prevents race conditions).
-- **Clean**: Aborts in-flight requests and clears timers on unmount/background.
-
-### **6. Screen Focus**
+### **4. Screen Focus**
 ```typescript
 useFocusEffect(
   useCallback(() => {

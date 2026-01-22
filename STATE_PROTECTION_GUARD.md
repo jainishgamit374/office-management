@@ -18,34 +18,41 @@ Added a **State Protection Guard** that prevents downgrading state from stale AP
 ### **Guard Logic:**
 
 ```typescript
-// 🛡️ STATE PROTECTION (Smarter Logic)
+// 🛡️ STATE PROTECTION (Smarter Logic with 30s TTL)
 const currentPunchType = punchType; 
 const newType = apiResponse.PunchType;
 const apiTimestamp = new Date(apiResponse.PunchDateTime);
 const forceRefresh = apiResponse.forceRefresh || false;
 const isPunching = isPunchingRef.current;
+const lastActionTime = lastLocalActionTime; // Nullable (No fallback to Date(0))
+
+const hasLocalHistory = !!lastActionTime;
 
 // Allow valid resets if:
 // 1. Explicitly forced by backend (forceRefresh: true)
 // 2. Punch is from a different calendar day (Midnight reset)
 // 3. User is actively cancelling/punching (isPunching: true)
-// 4. API timestamp is NEWER than our last local action
+// 4. API timestamp is NEWER than local action (or we have no local history)
+// 5. TTL Expired: Local action was > 30s ago (or we have no local history)
 const isDifferentDay = !isSameDay(lastPunchDate, apiTimestamp);
-const isNewerData = apiTimestamp > lastLocalActionTime;
+const isNewerData = hasLocalHistory ? apiTimestamp > lastActionTime : true; // Permissive if no local history
+const isTTLExpired = hasLocalHistory ? (Date.now() - lastActionTime.getTime()) > 30000 : true;
 
 if ((currentPunchType === 1 || currentPunchType === 2) && newType === 0) {
-    if (forceRefresh || isDifferentDay || isPunching || isNewerData) {
-        console.log('✅ ALLOWED: Valid reset detected (Midnight/Admin/Newer Data)');
+    if (forceRefresh || isDifferentDay || isPunching || isNewerData || isTTLExpired) {
+        console.log('✅ ALLOWED: Valid reset detected (Force/Midnight/Newer/TTL)');
         applyState(newType, ...);
         return;
     }
     
-    console.log('⚠️ BLOCKED: API trying to downgrade to 0 with stale data.');
+    console.log('⚠️ BLOCKED: API trying to downgrade to 0 with stale data (within 30s grace).');
     return; // Exit early
 }
 
-// Safe to apply state
-applyState(newType, ...);
+// Safe to apply state (Updates, syncs from other devices)
+if (isNewerData || forceRefresh) {
+    applyState(newType, ...);
+}
 ```
 
 ## 🔄 **How It Works Now:**
@@ -143,10 +150,15 @@ The real issue is in your backend:
 3. **Not cache** punch status data (or invalidate cache on punch)
 
 ### **When Guard Will Release:**
-The guard only blocks **downgrades** (1→0 or 2→0). It will allow:
-- Background polling to update state when backend is ready
-- Manual pull-to-refresh to sync
-- App reopen to fetch fresh state
+The guard **permanently blocks** 1→0 (Check-in → Reset) and 2→0 (Check-out → Reset) transitions to prevent state loss. It will ONLY release and accept a reset if one of the following conditions is met:
+
+1. **Backend Confirmation**: The API returns a non-zero `PunchType` (1 or 2) that matches or updates the current state.
+2. **Explicit Force Refresh**: The API response includes a `forceRefresh: true` flag (e.g., admin action).
+3. **Newer Timestamp**: The API's `PunchDateTime` is strictly **newer** than the local action timestamp (validating a subsequent server-side reset).
+4. **Different Day**: The API response date is different from the local punch date (Midnight Reset).
+5. **Fresh Punch Action**: The user manually attempts a new punch (`isPunching: true`).
+
+Until one of these is true, the frontend will strictly maintain the locally applied state (1 or 2) even if the API keeps returning 0.
 
 ## 🧪 **Testing:**
 

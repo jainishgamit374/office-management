@@ -102,18 +102,37 @@ useEffect(() => {
 - Fetches latest state from backend
 - Updates UI with current `PunchType`
 
-### **5. Background Polling (Every 5 min)**
+### **5. Background Polling (Smart 15 min)**
 ```typescript
 useEffect(() => {
-  const interval = setInterval(() => {
-    fetchPunchStatus(false); // GET /dashboard-punch-status/
-  }, 5 * 60 * 1000);
-  return () => clearInterval(interval);
+  const POLLING_INTERVAL = 15 * 60 * 1000; // 15 minutes
+  let interval: NodeJS.Timeout;
+
+  const startPolling = () => {
+    clearInterval(interval);
+    fetchPunchStatus(false);
+    interval = setInterval(() => fetchPunchStatus(false), POLLING_INTERVAL);
+  };
+
+  const subscription = AppState.addEventListener('change', (nextAppState) => {
+    if (nextAppState === 'active') {
+      startPolling(); // Resume/Refresh on foreground
+    } else {
+      clearInterval(interval); // Stop in background to save battery
+    }
+  });
+
+  startPolling(); // Initial start
+
+  return () => {
+    clearInterval(interval);
+    subscription.remove();
+  };
 }, []);
 ```
-- Automatically syncs every 5 minutes
-- Keeps UI in sync with backend
-- Handles admin actions
+- **Battery Efficient**: Only runs when app is ACTIVE (pauses in background).
+- **Smart Interval**: Checks every 15 minutes instead of 5.
+- **Auto-Resume**: Immediately fetches fresh status when user opens app.
 
 ### **6. Screen Focus**
 ```typescript

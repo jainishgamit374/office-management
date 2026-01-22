@@ -171,7 +171,7 @@ applyState(type, inTime, outTime, workingMins);
 2. **Single Source of Truth**: API is now the only source of state
 3. **No State Conflicts**: Eliminated storage vs API conflicts
 4. **Easier Debugging**: No need to check both storage and API
-5. **Simplified Loading**: No storage I/O operations (though network calls may take longer)
+5. **Eliminated Storage I/O**: Removed storage read/write operations
 6. **No Stale Data**: Always shows current API state
 ## Trade-offs
 
@@ -262,14 +262,8 @@ For an attendance tracking app where users need to quickly check their status mu
 
 Due to the complexity of the file, the changes should be applied manually by:
 
-1. Opening `CheckInCard.tsx`
-2. Removing the AsyncStorage import (line 13)
-3. Removing STORAGE_KEY constants (lines 63-64)
-4. Removing StoredState interface (lines 86-92)
-5. Removing the three storage helper functions (lines 148-188)
-6. Modifying applyState function to remove saveToStore parameter and all saveToStorage calls
-7. Simplifying fetchPunchStatus to remove all storage logic
-8. Removing the midnight reset useEffect that uses clearStorage
-9. Updating all applyState calls to remove the 5th parameter
+1. Opening `CheckInCard.tsx`.
+2. Locating `CheckInCard` component and removing all local storage logic.
+3. Removing any legacy cache helpers (like `LAST_PUNCH_STATUS`, `getCachedPunchState`, `setCachedPunchState`, `clearCacheOnSuccess`) to ensure the component relies solely on the API.
 
 Or, the file can be completely rewritten with the new logic.

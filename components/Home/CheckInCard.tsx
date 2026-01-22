@@ -157,6 +157,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const pillarBg = isDark ? '#3A3A3C' : '#E5E7EB';
   const dividerColor = isDark ? '#3A3A3C' : '#F3F4F6';
 
+  // ============ DATE HELPER ============
+  const getLocalDateString = (date: Date = new Date()): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // ============ 🆕 STORAGE HELPERS ============
   const saveToStorage = useCallback(async (state: StoredState) => {
     try {
@@ -174,7 +182,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       if (!stored) return null;
       
       const state: StoredState = JSON.parse(stored);
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       
       // Only restore if same day
       if (state.date !== today) {
@@ -208,7 +216,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     workingMins: number,
     saveToStore: boolean = true
   ) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
 
     console.log('🔄 Applying state:', { type, inTime, outTime, workingMins });
 
@@ -402,7 +410,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       if (showLoading && !isRefresh) setIsLoading(true);
       setError(null);
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
 
       // 1️⃣ Check for new day
       const lastDate = await AsyncStorage.getItem(STORAGE_KEY_DATE);
@@ -440,10 +448,11 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         workingMins = responseData.punch.WorkingMinutes || 0;
         punchInTimeStr = responseData.punch.PunchInTime;
       } else {
-        newType = (responseData.PunchType ?? 0) as 0 | 1 | 2;
-        punchDateTime = responseData.PunchDateTimeISO || responseData.PunchDateTime;
-        workingMins = responseData.WorkingMinutes || 0;
-        punchInTimeStr = responseData.PunchInTime;
+        const flatData = responseData as any;
+        newType = (flatData.PunchType ?? 0) as 0 | 1 | 2;
+        punchDateTime = flatData.PunchDateTimeISO || flatData.PunchDateTime;
+        workingMins = flatData.WorkingMinutes || 0;
+        punchInTimeStr = flatData.PunchInTime;
       }
 
       console.log('📡 API Response:', { newType, punchDateTime });
@@ -464,7 +473,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       if (newType === 2) {
         const checkoutDate = parsePunchTime(punchDateTime);
         if (checkoutDate) {
-          const checkoutDay = checkoutDate.toISOString().split('T')[0];
+          const checkoutDay = getLocalDateString(checkoutDate);
           if (checkoutDay !== today) {
             console.log('🛡️ Checkout from previous day detected - resetting');
             newType = 0;
@@ -569,10 +578,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
   // Midnight reset
   useEffect(() => {
-    let lastDate = new Date().toISOString().split('T')[0];
+    let lastDate = getLocalDateString();
 
     const checkNewDay = async () => {
-      const currentDate = new Date().toISOString().split('T')[0];
+      const currentDate = getLocalDateString();
       if (currentDate !== lastDate) {
         lastDate = currentDate;
         console.log('🌅 Midnight reset');
@@ -686,7 +695,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     } catch (error) {
       console.error('Punch IN error:', error);
       Alert.alert('Check-In Failed', error instanceof Error ? error.message : 'Unable to check in.');
-      applyState(0, null, null, 0, true);
+      applyState(0, null, null, 0, false);
       return false;
     } finally {
       setIsPunching(false);

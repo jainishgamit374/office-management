@@ -9,6 +9,8 @@ interface LeaveDetail {
     name: string;
     leaveType: string;
     dates: string;
+    startDate: string;
+    endDate: string;
     duration: string;
     reason: string;
     status: 'Pending' | 'Approved' | 'Rejected';
@@ -123,8 +125,10 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
                         name: item.employee_name || 'Employee',
                         leaveType: item.leave_type || 'Leave',
                         dates: dates,
+                        startDate: startDate,
+                        endDate: endDate || startDate,
                         duration: duration,
-                        reason: item.leave_type || 'Leave application', // FIXED: Use leave_type as reason
+                        reason: item.leave_type || 'Leave application',
                         status,
                     };
                 })
@@ -152,9 +156,7 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
     if (isLoading) {
         return (
             <View style={styles.container}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>Upcoming Leaves</Text>
-                </View>
+                <Text style={styles.sectionTitle}>Upcoming Leaves</Text>
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="small" color="#4169E1" />
                     <Text style={styles.loadingText}>Loading...</Text>
@@ -167,9 +169,7 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
     if (error) {
         return (
             <View style={styles.container}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>Upcoming Leaves</Text>
-                </View>
+                <Text style={styles.sectionTitle}>Upcoming Leaves</Text>
                 <View style={styles.emptyContainer}>
                     <Feather name="alert-circle" size={32} color="#999" />
                     <Text style={styles.emptyText}>{error}</Text>
@@ -182,9 +182,7 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
     if (leaves.length === 0) {
         return (
             <View style={styles.container}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>Upcoming Leaves</Text>
-                </View>
+                <Text style={styles.sectionTitle}>Upcoming Leaves</Text>
                 <View style={styles.emptyContainer}>
                     <Feather name="calendar" size={32} color="#999" />
                     <Text style={styles.emptyText}>No upcoming leaves</Text>
@@ -195,75 +193,109 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.title}>Upcoming Leaves</Text>
-            </View>
+            <Text style={styles.sectionTitle}>Upcoming Leaves</Text>
 
-            <View style={styles.grid}>
-                {leaves.map((leave, index) => {
-                    const animKey = `leave${leave.id}` as 'leave1' | 'leave2' | 'leave3';
+            {leaves.map((leave, index) => {
+                const animKey = `leave${leave.id}` as 'leave1' | 'leave2' | 'leave3';
+                const isExpanded = expandedLeave === leave.id;
 
-                    return (
-                        <View key={leave.id} style={styles.expandableCard}>
-                            <Animated.View style={{ transform: [{ scale: scaleAnims[animKey] || scaleAnims.leave1 }] }}>
-                                <TouchableOpacity
-                                    style={styles.card}
-                                    activeOpacity={0.7}
-                                    onPress={() =>
-                                        onAnimatePress(animKey, () =>
-                                            onToggleExpand(expandedLeave === leave.id ? null : leave.id)
-                                        )
-                                    }
-                                >
-                                    <View style={styles.profileImage}>
-                                        <Feather name="user" size={24} color="#4169E1" />
-                                    </View>
-                                    <View style={styles.cardContent}>
-                                        <Text style={styles.cardTitle}>{leave.name}</Text>
-                                        <Text style={styles.cardSubtitle}>
-                                            {leave.leaveType} • {leave.dates}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.statusIcon}>
-                                        <Feather
-                                            name={expandedLeave === leave.id ? 'chevron-up' : 'chevron-down'}
-                                            size={24}
-                                            color="#666"
-                                        />
-                                    </View>
-                                </TouchableOpacity>
-                            </Animated.View>
-
-                            {expandedLeave === leave.id && (
-                                <View style={styles.expandedContent}>
-                                    <View style={styles.detailRow}>
-                                        <Feather name="calendar" size={16} color="#4289f4ff" />
-                                        <Text style={styles.detailText}>Duration: {leave.duration}</Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
-                                        <Feather name="file-text" size={16} color="#4289f4ff" />
-                                        <Text style={styles.detailText}>Reason: {leave.reason}</Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
-                                        <Feather
-                                            name={leave.status === 'Approved' ? 'check-circle' : leave.status === 'Rejected' ? 'x-circle' : 'clock'}
-                                            size={16}
-                                            color={leave.status === 'Approved' ? '#4CAF50' : leave.status === 'Rejected' ? '#FF5252' : '#ff9800'}
-                                        />
-                                        <Text style={[
-                                            styles.detailTextPending,
-                                            leave.status === 'Approved' && { color: '#4CAF50' },
-                                            leave.status === 'Rejected' && { color: '#FF5252' }
-                                        ]}>
-                                            Status: {leave.status}
+                return (
+                    <Animated.View 
+                        key={leave.id} 
+                        style={[
+                            styles.leaveCard,
+                            { transform: [{ scale: scaleAnims[animKey] || scaleAnims.leave1 }] }
+                        ]}
+                    >
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={() =>
+                                onAnimatePress(animKey, () =>
+                                    onToggleExpand(isExpanded ? null : leave.id)
+                                )
+                            }
+                        >
+                            {/* Main Card Content */}
+                            <View style={styles.cardHeader}>
+                                <View style={styles.leftSection}>
+                                    <View style={styles.statusIndicator} />
+                                    <View style={styles.textSection}>
+                                        <Text style={styles.employeeName}>{leave.name}</Text>
+                                        <Text style={styles.leaveType}>{leave.leaveType}</Text>
+                                        <Text style={styles.dateRange}>
+                                            {leave.startDate === leave.endDate 
+                                                ? leave.startDate 
+                                                : `${leave.startDate} → ${leave.endDate}`}
                                         </Text>
                                     </View>
                                 </View>
+                                <Feather
+                                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                                    size={20}
+                                    color="#94A3B8"
+                                />
+                            </View>
+
+                            {/* Expanded Details */}
+                            {isExpanded && (
+                                <View style={styles.expandedSection}>
+                                    {/* Timeline */}
+                                    <View style={styles.timelineContainer}>
+                                        <View style={styles.timelineItem}>
+                                            <View style={styles.timelineDot} />
+                                            <View style={styles.timelineContent}>
+                                                <Text style={styles.timelineLabel}>Start Date</Text>
+                                                <Text style={styles.timelineValue}>{leave.startDate}</Text>
+                                            </View>
+                                        </View>
+                                        
+                                        <View style={styles.timelineLine} />
+                                        
+                                        <View style={styles.timelineItem}>
+                                            <View style={styles.timelineDot} />
+                                            <View style={styles.timelineContent}>
+                                                <Text style={styles.timelineLabel}>End Date</Text>
+                                                <Text style={styles.timelineValue}>{leave.endDate}</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+
+                                    {/* Meta Info */}
+                                    <View style={styles.metaRow}>
+                                        <View style={styles.metaItem}>
+                                            <Feather name="clock" size={14} color="#64748B" />
+                                            <Text style={styles.metaText}>{leave.duration}</Text>
+                                        </View>
+                                        <View style={[
+                                            styles.statusChip,
+                                            leave.status === 'Approved' && styles.chipApproved,
+                                            leave.status === 'Rejected' && styles.chipRejected,
+                                            leave.status === 'Pending' && styles.chipPending,
+                                        ]}>
+                                            <Text style={[
+                                                styles.chipText,
+                                                leave.status === 'Approved' && styles.chipTextApproved,
+                                                leave.status === 'Rejected' && styles.chipTextRejected,
+                                                leave.status === 'Pending' && styles.chipTextPending,
+                                            ]}>
+                                                {leave.status}
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Reason */}
+                                    {leave.reason && (
+                                        <View style={styles.reasonContainer}>
+                                            <Text style={styles.reasonLabel}>Reason</Text>
+                                            <Text style={styles.reasonText}>{leave.reason}</Text>
+                                        </View>
+                                    )}
+                                </View>
                             )}
-                        </View>
-                    );
-                })}
-            </View>
+                        </TouchableOpacity>
+                    </Animated.View>
+                );
+            })}
         </View>
     );
 };
@@ -271,96 +303,160 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
 const styles = StyleSheet.create({
     container: {
         marginHorizontal: 20,
-        marginTop: 10,
-        borderRadius: 15,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        borderWidth: 1,
-        backgroundColor: '#FFF',
-        borderColor: '#fbfbfbff',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 4,
+        marginTop: 20,
+        marginBottom: 10,
     },
-    header: {
-        marginBottom: 20,
-    },
-    title: {
-        fontSize: 20,
+    sectionTitle: {
+        fontSize: 18,
         fontWeight: '700',
-        color: '#1565c0',
-        textAlign: 'center',
+        color: '#0F172A',
+        marginBottom: 16,
+        letterSpacing: -0.3,
     },
-    grid: {
-        flexDirection: 'column',
-        gap: 1,
+    leaveCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+        elevation: 1,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
     },
-    expandableCard: {
-        width: '100%',
-    },
-    card: {
+    cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        padding: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: '#cececeff',
+        justifyContent: 'space-between',
+        padding: 16,
     },
-    profileImage: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
-        backgroundColor: '#E0E8FF',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    cardContent: {
+    leftSection: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
         flex: 1,
-        gap: 5,
+        gap: 12,
     },
-    cardTitle: {
-        fontSize: 16,
+    statusIndicator: {
+        width: 3,
+        height: 48,
+        backgroundColor: '#6366F1',
+        borderRadius: 2,
+        marginTop: 2,
+    },
+    textSection: {
+        flex: 1,
+        gap: 3,
+    },
+    employeeName: {
+        fontSize: 15,
         fontWeight: '600',
-        color: '#000',
+        color: '#0F172A',
+        marginBottom: 1,
     },
-    cardSubtitle: {
+    leaveType: {
+        fontSize: 13,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    dateRange: {
+        fontSize: 12,
+        color: '#94A3B8',
+        marginTop: 2,
+    },
+    expandedSection: {
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#F1F5F9',
+        paddingTop: 16,
+    },
+    timelineContainer: {
+        marginBottom: 16,
+    },
+    timelineItem: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 12,
+    },
+    timelineDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#6366F1',
+        marginTop: 6,
+    },
+    timelineLine: {
+        width: 2,
+        height: 20,
+        backgroundColor: '#E2E8F0',
+        marginLeft: 3,
+        marginVertical: 4,
+    },
+    timelineContent: {
+        flex: 1,
+    },
+    timelineLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#94A3B8',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 2,
+    },
+    timelineValue: {
         fontSize: 14,
-        color: '#a0a0a0ff',
+        fontWeight: '500',
+        color: '#1E293B',
     },
-    statusIcon: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    expandedContent: {
-        backgroundColor: '#f9f9f9',
-        padding: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#cececeff',
-        gap: 10,
-    },
-    detailRow: {
+    metaRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
+        justifyContent: 'space-between',
+        marginBottom: 12,
     },
-    detailText: {
-        fontSize: 14,
-        color: '#333',
-        flex: 1,
+    metaItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
     },
-    detailTextPending: {
-        fontSize: 14,
-        color: '#ff9800',
+    metaText: {
+        fontSize: 13,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    statusChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        borderRadius: 16,
+    },
+    chipApproved: { backgroundColor: '#DCFCE7' },
+    chipRejected: { backgroundColor: '#FEE2E2' },
+    chipPending: { backgroundColor: '#FEF3C7' },
+    chipText: { 
+        fontSize: 11, 
         fontWeight: '600',
-        flex: 1,
+        letterSpacing: 0.3,
     },
+    chipTextApproved: { color: '#15803D' },
+    chipTextRejected: { color: '#B91C1C' },
+    chipTextPending: { color: '#A16207' },
+    reasonContainer: {
+        gap: 6,
+    },
+    reasonLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#94A3B8',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    reasonText: {
+        fontSize: 13,
+        color: '#475569',
+        lineHeight: 19,
+    },
+    
     // Loading & Empty States
     loadingContainer: {
         padding: 40,
@@ -368,8 +464,9 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     loadingText: {
-        fontSize: 14,
-        color: '#999',
+        fontSize: 13,
+        color: '#64748B',
+        fontWeight: '500',
     },
     emptyContainer: {
         padding: 40,
@@ -377,8 +474,8 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     emptyText: {
-        fontSize: 14,
-        color: '#999',
+        fontSize: 13,
+        color: '#94A3B8',
         textAlign: 'center',
     },
 });

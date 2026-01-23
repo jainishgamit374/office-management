@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 
-const API_BASE_URL = 'https://karmyog.pythonanywhere.com';
+export const API_BASE_URL = 'https://karmyog.pythonanywhere.com';
 
 // ============ TYPES ============
 export interface PunchStatusResponse {
@@ -286,6 +286,7 @@ export const recordPunch = async (
             }
         }
 
+        // PunchType: 1 = IN, 2 = OUT (as per backend API spec)
         const punchType = type === 'IN' ? 1 : 2;
 
         const requestBody = {
@@ -295,14 +296,22 @@ export const recordPunch = async (
             IsAway: isAway,
         };
 
-        console.log('📝 Recording punch:', requestBody);
+        console.log('📝 Recording punch - Request body:', JSON.stringify(requestBody, null, 2));
+        console.log(`📤 Sending ${type} punch with PunchType: ${punchType} to /emp-punch/`);
 
         const response = await apiCall<PunchResponse>('/emp-punch/', {
             method: 'POST',
             body: JSON.stringify(requestBody),
         });
 
-        console.log('✅ Punch recorded:', response);
+        console.log('✅ Punch recorded - Full response:', JSON.stringify(response, null, 2));
+        console.log(`📥 Backend returned PunchType: ${response?.data?.PunchType}, PunchTypeName: ${response?.data?.PunchTypeName}`);
+
+        // Validate response matches what we sent
+        if (response?.data?.PunchType && response.data.PunchType !== punchType) {
+            console.warn(`⚠️ WARNING: Sent PunchType ${punchType} (${type}) but backend returned PunchType ${response.data.PunchType}`);
+        }
+
         return response;
     } catch (error) {
         console.error('❌ Failed to record punch:', error);

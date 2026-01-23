@@ -180,9 +180,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         gap: 8,
     },
     badge: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: colors.shadow,
@@ -192,15 +192,13 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         elevation: 3,
     },
     badgeText: {
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: '700',
         color: '#fff',
         textAlign: 'center',
-        width: 50,
     },
     count: {
-        fontSize: 24,
-        width: 50,
+        fontSize: 22,
         fontWeight: '700',
         color: colors.text,
         textAlign: 'center',
@@ -209,6 +207,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         fontSize: 10,
         color: colors.textSecondary,
         textAlign: 'center',
+        fontWeight: '500',
     },
 });
 

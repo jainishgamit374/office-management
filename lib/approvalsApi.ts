@@ -54,6 +54,7 @@ export type LeaveApprovalsResponse = {
     total_pending_approvals?: number;
     pending_approvals?: Array<{
         Leave_ID: number;
+        LeaveApplicationMasterID?: number; // The actual TranID for approval
         employee_name: string;
         leave_type: string;
         start_date: string;

@@ -5,19 +5,25 @@
  * Uses the /getemployeeleavedataview/ API endpoint
  */
 
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { getEmployeeLeaveDataView, LeaveDataViewResponse } from '@/lib/leaves';
+import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export default function LeaveDataView() {
+    const { colors, theme } = useTheme();
+    const isDark = theme === 'dark';
+    const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
+
     const [leaveData, setLeaveData] = useState<LeaveDataViewResponse['data'] | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Fetch leave data
-    const fetchLeaveData = async () => {
+    const fetchLeaveData = useCallback(async () => {
         try {
             setError(null);
             const response = await getEmployeeLeaveDataView();
@@ -34,31 +40,45 @@ export default function LeaveDataView() {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, []);
 
     // Initial load
     useEffect(() => {
         fetchLeaveData();
-    }, []);
+    }, [fetchLeaveData]);
 
     // Refresh when screen comes into focus
     useFocusEffect(
-        React.useCallback(() => {
+        useCallback(() => {
             fetchLeaveData();
-        }, [])
+        }, [fetchLeaveData])
     );
 
     // Pull to refresh
-    const onRefresh = () => {
+    const onRefresh = useCallback(() => {
         setRefreshing(true);
         fetchLeaveData();
-    };
+    }, [fetchLeaveData]);
+
+    // Calculate approval rate
+    const approvalRate = useMemo(() => {
+        if (!leaveData || leaveData.applied_count === 0) return 0;
+        return Math.round((leaveData.approved_count / leaveData.applied_count) * 100);
+    }, [leaveData]);
+
+    // Calculate pending count
+    const pendingCount = useMemo(() => {
+        if (!leaveData) return 0;
+        return (leaveData.applied_count || 0) - (leaveData.approved_count || 0);
+    }, [leaveData]);
 
     if (loading) {
         return (
             <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#6366F1" />
-                <Text style={styles.loadingText}>Loading leave data...</Text>
+                <View style={styles.loadingCard}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={styles.loadingText}>Loading leave data...</Text>
+                </View>
             </View>
         );
     }
@@ -66,7 +86,10 @@ export default function LeaveDataView() {
     if (error) {
         return (
             <View style={styles.centerContainer}>
-                <Text style={styles.errorText}>❌ {error}</Text>
+                <View style={styles.errorCard}>
+                    <Feather name="alert-circle" size={32} color="#EF4444" />
+                    <Text style={styles.errorText}>{error}</Text>
+                </View>
             </View>
         );
     }
@@ -74,130 +97,350 @@ export default function LeaveDataView() {
     return (
         <ScrollView
             style={styles.container}
+            contentContainerStyle={styles.contentContainer}
             refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                <RefreshControl 
+                    refreshing={refreshing} 
+                    onRefresh={onRefresh}
+                    colors={[colors.primary]}
+                    tintColor={colors.primary}
+                />
             }
+            showsVerticalScrollIndicator={false}
         >
-            <View style={styles.content}>
+            {/* Header */}
+            <View style={styles.header}>
                 <Text style={styles.title}>Leave Statistics</Text>
+                <Text style={styles.subtitle}>Your leave application overview</Text>
+            </View>
 
-                <View style={styles.statsContainer}>
-                    {/* Applied Count */}
-                    <View style={[styles.statCard, styles.appliedCard]}>
-                        <View style={styles.iconContainer}>
-                            <Text style={styles.icon}>📝</Text>
-                        </View>
-                        <Text style={styles.statLabel}>Applied Leaves</Text>
-                        <Text style={styles.statValue}>{leaveData?.applied_count || 0}</Text>
-                        <Text style={styles.statDescription}>Total leave applications</Text>
+            {/* Stats Cards */}
+            <View style={styles.statsContainer}>
+                {/* Applied Card */}
+                <View style={styles.statCard}>
+                    <View style={[styles.iconContainer, { backgroundColor: '#3B82F6' + '20' }]}>
+                        <Feather name="file-text" size={22} color="#3B82F6" />
                     </View>
-
-                    {/* Approved Count */}
-                    <View style={[styles.statCard, styles.approvedCard]}>
-                        <View style={styles.iconContainer}>
-                            <Text style={styles.icon}>✅</Text>
-                        </View>
-                        <Text style={styles.statLabel}>Approved Leaves</Text>
-                        <Text style={styles.statValue}>{leaveData?.approved_count || 0}</Text>
-                        <Text style={styles.statDescription}>Approved applications</Text>
-                    </View>
+                    <Text style={styles.statValue}>{leaveData?.applied_count || 0}</Text>
+                    <Text style={styles.statLabel}>Applied</Text>
                 </View>
 
-                {/* Summary */}
-                <View style={styles.summaryCard}>
-                    <Text style={styles.summaryTitle}>Summary</Text>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Total Applied:</Text>
-                        <Text style={styles.summaryValue}>{leaveData?.applied_count || 0}</Text>
+                {/* Approved Card */}
+                <View style={styles.statCard}>
+                    <View style={[styles.iconContainer, { backgroundColor: '#10B981' + '20' }]}>
+                        <Feather name="check-circle" size={22} color="#10B981" />
                     </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Approved:</Text>
-                        <Text style={[styles.summaryValue, styles.approvedText]}>
-                            {leaveData?.approved_count || 0}
-                        </Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Pending/Rejected:</Text>
-                        <Text style={[styles.summaryValue, styles.pendingText]}>
-                            {(leaveData?.applied_count || 0) - (leaveData?.approved_count || 0)}
-                        </Text>
-                    </View>
+                    <Text style={styles.statValue}>{leaveData?.approved_count || 0}</Text>
+                    <Text style={styles.statLabel}>Approved</Text>
                 </View>
 
-                {/* Approval Rate */}
-                {leaveData && leaveData.applied_count > 0 && (
-                    <View style={styles.rateCard}>
-                        <Text style={styles.rateLabel}>Approval Rate</Text>
-                        <Text style={styles.rateValue}>
-                            {Math.round((leaveData.approved_count / leaveData.applied_count) * 100)}%
-                        </Text>
+                {/* Pending Card */}
+                <View style={styles.statCard}>
+                    <View style={[styles.iconContainer, { backgroundColor: '#F59E0B' + '20' }]}>
+                        <Feather name="clock" size={22} color="#F59E0B" />
+                    </View>
+                    <Text style={styles.statValue}>{pendingCount}</Text>
+                    <Text style={styles.statLabel}>Pending</Text>
+                </View>
+            </View>
+
+            {/* Approval Rate Card */}
+            {leaveData && leaveData.applied_count > 0 && (
+                <View style={styles.rateCard}>
+                    <View style={styles.rateHeader}>
+                        <View style={styles.rateIconContainer}>
+                            <Feather name="trending-up" size={20} color={colors.primary} />
+                        </View>
+                        <View style={styles.rateTitleContainer}>
+                            <Text style={styles.rateTitle}>Approval Rate</Text>
+                            <Text style={styles.rateSubtitle}>Based on total applications</Text>
+                        </View>
+                        <Text style={styles.rateValue}>{approvalRate}%</Text>
+                    </View>
+                    <View style={styles.progressBarContainer}>
                         <View style={styles.progressBar}>
                             <View
                                 style={[
                                     styles.progressFill,
-                                    {
-                                        width: `${(leaveData.approved_count / leaveData.applied_count) * 100}%`,
-                                    },
+                                    { width: `${approvalRate}%` },
                                 ]}
                             />
                         </View>
+                        <View style={styles.progressLabels}>
+                            <Text style={styles.progressLabel}>0%</Text>
+                            <Text style={styles.progressLabel}>100%</Text>
+                        </View>
                     </View>
-                )}
+                </View>
+            )}
+
+            {/* Summary Card */}
+            <View style={styles.summaryCard}>
+                <View style={styles.summaryHeader}>
+                    <Feather name="bar-chart-2" size={18} color={colors.primary} />
+                    <Text style={styles.summaryTitle}>Summary</Text>
+                </View>
+                
+                <View style={styles.summaryRow}>
+                    <View style={styles.summaryLabelContainer}>
+                        <View style={[styles.summaryDot, { backgroundColor: '#3B82F6' }]} />
+                        <Text style={styles.summaryLabel}>Total Applied</Text>
+                    </View>
+                    <Text style={styles.summaryValue}>{leaveData?.applied_count || 0}</Text>
+                </View>
+                
+                <View style={styles.summaryDivider} />
+                
+                <View style={styles.summaryRow}>
+                    <View style={styles.summaryLabelContainer}>
+                        <View style={[styles.summaryDot, { backgroundColor: '#10B981' }]} />
+                        <Text style={styles.summaryLabel}>Approved</Text>
+                    </View>
+                    <Text style={[styles.summaryValue, { color: '#10B981' }]}>
+                        {leaveData?.approved_count || 0}
+                    </Text>
+                </View>
+                
+                <View style={styles.summaryDivider} />
+                
+                <View style={styles.summaryRow}>
+                    <View style={styles.summaryLabelContainer}>
+                        <View style={[styles.summaryDot, { backgroundColor: '#F59E0B' }]} />
+                        <Text style={styles.summaryLabel}>Pending / Rejected</Text>
+                    </View>
+                    <Text style={[styles.summaryValue, { color: '#F59E0B' }]}>
+                        {pendingCount}
+                    </Text>
+                </View>
             </View>
         </ScrollView>
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FE',
+        backgroundColor: colors.background,
     },
-    content: {
-        padding: 20,
+    contentContainer: {
+        padding: 16,
+        paddingBottom: 32,
     },
     centerContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
+        backgroundColor: colors.background,
+    },
+    loadingCard: {
+        backgroundColor: colors.card,
+        borderRadius: 16,
+        padding: 32,
+        alignItems: 'center',
+        gap: 16,
+        shadowColor: isDark ? '#000' : colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: isDark ? 0.3 : 0.1,
+        shadowRadius: 12,
+        elevation: 4,
     },
     loadingText: {
-        marginTop: 12,
         fontSize: 14,
-        color: '#6B7280',
+        fontWeight: '500',
+        color: colors.textSecondary,
+    },
+    errorCard: {
+        backgroundColor: colors.card,
+        borderRadius: 16,
+        padding: 32,
+        alignItems: 'center',
+        gap: 12,
+        borderWidth: 1,
+        borderColor: '#EF4444' + '30',
     },
     errorText: {
         fontSize: 14,
         color: '#EF4444',
         textAlign: 'center',
+        fontWeight: '500',
+    },
+    header: {
+        marginBottom: 20,
     },
     title: {
         fontSize: 24,
         fontWeight: '700',
-        color: '#1F2937',
-        marginBottom: 20,
+        color: colors.text,
+        marginBottom: 4,
+    },
+    subtitle: {
+        fontSize: 14,
+        color: colors.textSecondary,
+        fontWeight: '500',
     },
     statsContainer: {
         flexDirection: 'row',
         gap: 12,
-        marginBottom: 20,
+        marginBottom: 16,
     },
     statCard: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: colors.card,
         borderRadius: 16,
-        padding: 20,
+        padding: 16,
         alignItems: 'center',
-        shadowColor: '#000',
+        gap: 8,
+        shadowColor: isDark ? '#000' : colors.primary,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
+        shadowOpacity: isDark ? 0.2 : 0.08,
         shadowRadius: 8,
         elevation: 3,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
-    appliedCard: {
-        borderLeftWidth: 4,
-        borderLeftColor: '#3B82F6',
+    iconContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    statValue: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: colors.text,
+    },
+    statLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    rateCard: {
+        backgroundColor: colors.card,
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 16,
+        shadowColor: isDark ? '#000' : colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: isDark ? 0.2 : 0.08,
+        shadowRadius: 8,
+        elevation: 3,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    rateHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    rateIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 10,
+        backgroundColor: colors.primary + '15',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    rateTitleContainer: {
+        flex: 1,
+    },
+    rateTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: colors.text,
+    },
+    rateSubtitle: {
+        fontSize: 12,
+        color: colors.textSecondary,
+        marginTop: 2,
+    },
+    rateValue: {
+        fontSize: 32,
+        fontWeight: '800',
+        color: colors.primary,
+    },
+    progressBarContainer: {
+        gap: 6,
+    },
+    progressBar: {
+        height: 10,
+        backgroundColor: isDark ? colors.background : '#E5E7EB',
+        borderRadius: 5,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: colors.primary,
+        borderRadius: 5,
+    },
+    progressLabels: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    progressLabel: {
+        fontSize: 10,
+        color: colors.textSecondary,
+        fontWeight: '500',
+    },
+    summaryCard: {
+        backgroundColor: colors.card,
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: isDark ? '#000' : colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: isDark ? 0.2 : 0.08,
+        shadowRadius: 8,
+        elevation: 3,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    summaryHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 16,
+    },
+    summaryTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: colors.text,
+    },
+    summaryRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 12,
+    },
+    summaryLabelContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    summaryDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    summaryLabel: {
+        fontSize: 14,
+        color: colors.textSecondary,
+        fontWeight: '500',
+    },
+    summaryValue: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.text,
+    },
+    summaryDivider: {
+        height: 1,
+        backgroundColor: colors.border,
+    },
+});
+
     },
     approvedCard: {
         borderLeftWidth: 4,

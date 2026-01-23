@@ -1,172 +1,162 @@
-# Auto-Checkout Fix
+# Auto-Checkout Fix - State Lock Protection
 
 ## Problem
-The checkout was happening automatically even during the same day. Users would check in, and then the state would reset to "Not In" without any user action.
+After implementing state validation (0→1→2), the app was still experiencing automatic checkout issues where:
+1. User swipes to check-in (state 0 → 1) ✅
+2. Background API polling happens
+3. API returns conflicting state (e.g., state 0 or 2)
+4. App automatically checks out the user ❌
 
 ## Root Cause
-The `checkAndResetAtMidnight` function was running every minute and checking if `lastResetDate !== currentDate`. The issue occurred in these scenarios:
+Even with 2-minute cooldown protection, background processes like:
+- `fetchPunchStatus()` auto-refresh every 5 minutes
+- Screen focus refresh
+- Pull-to-refresh
+- Midnight reset checks
 
-1. **First-time users:** `lastResetDate` was `null`, so the condition was always true
-2. **After data reset:** `lastResetDate` was cleared but not re-initialized
-3. **Hot reload:** The check would run before `lastResetDate` was properly set
+...were still processing API responses that conflicted with the user's just-completed punch action.
 
-This caused the reset logic to trigger immediately, even during the same day.
+## Solution: Triple-Layer Protection
 
-## Solution
-
-### 1. Added Initialization Check
+### Layer 1: State Lock 🔒
 ```typescript
-// If lastResetDate is not set, set it to today (first time initialization)
-if (!lastResetDate) {
-  console.log('📅 Initializing lastResetDate to today:', currentDate);
-  await AsyncStorage.setItem(getUserKey('lastResetDate'), currentDate);
-  return; // Don't reset on first initialization
+const isStateLocked = useRef(false); // NEW!
+
+// After punch action:
+isStateLocked.current = true;
+console.log('🔒 STATE LOCKED + Cooldown protection for 5 minutes');
+
+// Unlock after 5 minutes
+setTimeout(() => {
+  isStateLocked.current = false;
+  console.log('🔓 State unlocked');
+}, COOLDOWN_MS);
+```
+
+**When locked**: ALL API responses are completely ignored, regardless of their content.
+
+### Layer 2: Extended Cooldown ⏱️
+```typescript
+const COOLDOWN_MS = 300000; // Increased from 2 to 5 minutes
+```
+
+**Why 5 minutes?**
+- Gives backend time to properly process and persist the punch
+- Covers the 5-minute auto-refresh interval
+- Ensures user action takes absolute priority
+
+### Layer 3: Action-Based Validation ✅
+```typescript
+if (lastPunchAction.current === 'IN' && (newType === 2 || newType === 0)) {
+  console.log('🛡️ PROTECTION: Just checked IN, ignoring conflicting response');
+  return;
 }
 ```
 
-### 2. Added User ID Guard
-```typescript
-if (!userId) return; // Don't run if user not loaded yet
+**Still active**: Secondary layer in case state lock is somehow bypassed.
+
+## How It Works
+
+### Check-In Flow (0 → 1)
+```
+User swipes slider →
+  ↓
+handlePunch() executes (state 0)
+  ↓
+API call successful (PunchType: 1)
+  ↓
+🔒 STATE LOCKED for 5 minutes
+  ↓
+applyState(1, ...) - Set to checked-in
+  ↓
+[5 MINUTES OF COMPLETE PROTECTION]
+  ↓
+Background API calls are IGNORED:
+  - fetchPunchStatus() → ❌ Blocked
+  - Screen focus → ❌ Blocked
+  - Pull refresh → ❌ Blocked
+  ↓
+After 5 minutes: 🔓 STATE UNLOCKED
+  ↓
+API responses accepted again
 ```
 
-This prevents the reset logic from running before the user ID is loaded, which could cause issues with the storage keys.
+## Console Output Example
 
-### 3. Improved Logging
-```typescript
-console.log('🌅 New day detected! Resetting check-in/out state...');
-console.log('  Previous date:', lastResetDate);
-console.log('  Current date:', currentDate);
+### Successful Check-In with Lock
+```
+🔄 Current state: 0 (Not Punched) → Attempting transition to 1 (Check-In)
+📤 Sending CHECK-IN request with Axios
+✅ Check-in successful
+🔒 STATE LOCKED + Cooldown protection for 5 minutes
 ```
 
-Now you can see exactly when and why a reset happens.
-
-### 4. Clear Saved State on Reset
-```typescript
-await AsyncStorage.removeItem(getUserKey('checkInCardState')); // Clear saved state
+### Blocked API Response During Lock
+```
+📡 API Response: {newType: 0, ...}
+🔒 STATE LOCKED: Ignoring ALL API responses during lock period
+   Current local state: 1, API wants: 0
 ```
 
-This ensures that the saved state is also cleared when a new day is detected.
-
-## How It Works Now
-
-### Scenario 1: First Time User
-1. User logs in for the first time
-2. `lastResetDate` is `null`
-3. System sets `lastResetDate` to today
-4. **No reset happens** ✅
-5. User can check in normally
-
-### Scenario 2: Same Day Check-In
-1. User checks in at 9:00 AM
-2. `lastResetDate` = "2026-01-12"
-3. Current date = "2026-01-12"
-4. Dates match → **No reset happens** ✅
-5. User stays checked in
-
-### Scenario 3: Next Day
-1. User checked in yesterday
-2. `lastResetDate` = "2026-01-11"
-3. Current date = "2026-01-12"
-4. Dates don't match → **Reset happens** ✅
-5. User starts fresh for the new day
-
-### Scenario 4: After Data Reset
-1. User clicks "Reset Attendance Data"
-2. `lastResetDate` is cleared
-3. User reloads app
-4. System initializes `lastResetDate` to today
-5. **No unwanted reset** ✅
-
-## Testing
-
-### Test 1: First Time Check-In
-1. Clear all data
-2. Login
-3. Check console - should see: `📅 Initializing lastResetDate to today: 2026-01-12`
-4. Check in
-5. Verify state persists (no auto-reset)
-
-### Test 2: Hot Reload
-1. Check in
-2. Shake device → Reload
-3. Verify you're still checked in
-4. Console should NOT show "New day detected"
-
-### Test 3: Midnight Reset
-1. Check in during the day
-2. Wait until midnight (or manually change device time)
-3. Console should show: `🌅 New day detected!`
-4. State should reset to "Not In"
-
-### Test 4: Sunday/Holiday Skip
-1. Set device date to a Sunday
-2. Check in
-3. Wait for reset check (runs every minute)
-4. Console should show: `⏸️ Skipping reset - Today is Sunday`
-5. State should NOT reset
-
-## Console Logs to Watch For
-
-### ✅ Good Logs (Normal Behavior)
+### State Unlocked After 5 Minutes
 ```
-📅 Initializing lastResetDate to today: 2026-01-12
-```
-This means it's the first time running today - no reset needed.
-
-### ✅ Expected Reset
-```
-🌅 New day detected! Resetting check-in/out state...
-  Previous date: 2026-01-11
-  Current date: 2026-01-12
-✅ State reset complete for new day: 2026-01-12
-```
-This is correct - it's a new day, so the reset should happen.
-
-### ❌ Bad Log (Should Not Happen)
-```
-🌅 New day detected! Resetting check-in/out state...
-  Previous date: 2026-01-12
-  Current date: 2026-01-12
-```
-If you see this, the dates are the same but it's still resetting - this should NOT happen with the fix.
-
-## Additional Safeguards
-
-1. **User ID Check:** Won't run until `userId` is loaded
-2. **Initialization Guard:** Sets `lastResetDate` on first run instead of resetting
-3. **Explicit Logging:** Shows exactly what dates are being compared
-4. **State Cleanup:** Removes saved state when resetting for new day
-
-## Rollback (If Needed)
-
-If this fix causes issues, you can temporarily disable auto-reset:
-
-```typescript
-// Comment out the entire useEffect
-/*
-useEffect(() => {
-  // ... auto-reset logic
-}, [pan, colorAnim, userId, getUserKey]);
-*/
+🔓 State unlocked - API responses will be accepted again
 ```
 
-Or add a feature flag:
+## Protection Hierarchy
 
-```typescript
-const ENABLE_AUTO_RESET = false; // Set to false to disable
+1. **State Lock** (Strongest) - Blocks ALL API responses
+2. **Cooldown + Action Check** (Strong) - Blocks conflicting responses
+3. **Date Validation** (Moderate) - Blocks old data
+4. **Local State Check** (Weak) - Last resort validation
 
-useEffect(() => {
-  if (!ENABLE_AUTO_RESET) return;
-  // ... rest of the logic
-}, [pan, colorAnim, userId, getUserKey]);
-```
+## Testing Checklist
 
-## Summary
+- [x] Check-in works correctly
+- [x] State stays at 1 for 5 minutes after check-in
+- [x] Background API calls don't affect state during lock
+- [x] Pull-to-refresh doesn't cause auto-checkout
+- [x] Screen focus doesn't cause auto-checkout
+- [x] After 5 minutes, API responses are processed normally
+- [x] Check-out works correctly after unlock
+- [x] State lock also applies to check-out action
 
-✅ **Fixed:** Auto-checkout no longer happens during the same day  
-✅ **Improved:** Better initialization logic  
-✅ **Enhanced:** More detailed logging for debugging  
-✅ **Maintained:** Midnight reset still works correctly  
-✅ **Protected:** Sunday/Holiday skip logic preserved  
+## Key Differences from Previous Implementation
 
-The checkout will now only happen when you manually swipe left, or when it's actually a new day at midnight!
+| Feature | Before | After |
+|---------|--------|-------|
+| Cooldown Period | 2 minutes | **5 minutes** |
+| Protection Type | Soft (checks action) | **Hard (state lock)** |
+| API Response Handling | Selective filtering | **Complete blocking** |
+| Unlock Mechanism | Time-based check | **Automatic timeout** |
+| Console Logging | Basic | **Detailed with lock status** |
+
+## Edge Cases Handled
+
+✅ **Rapid API Polling**: State lock prevents any processing
+✅ **Concurrent Requests**: First lock wins, others ignored
+✅ **Manual Refresh**: User can still manually pull, but response is blocked
+✅ **Screen Navigation**: Focus events don't trigger state changes
+✅ **Midnight Reset**: Handles properly after unlock period
+
+## Performance Impact
+
+- **Memory**: Minimal (1 additional ref)
+- **CPU**: One setTimeout per punch (negligible)
+- **Network**: No change (same API calls, just ignored)
+- **User Experience**: More stable, no unwanted state changes
+
+## Debugging Tips
+
+If issues persist, check console for:
+1. `🔒 STATE LOCKED` - Confirms lock is active
+2. `🔓 State unlocked` - Confirms lock expired
+3. `Ignoring ALL API responses` - Shows protection working
+4. State change logs - Track actual transitions
+
+## Future Improvements
+
+1. **Adjustable Cooldown**: Make it configurable per environment
+2. **State Lock UI**: Show lock indicator to user
+3. **Manual Unlock**: Allow admin override if needed
+4. **Lock Persistence**: Survive app restarts (use AsyncStorage)

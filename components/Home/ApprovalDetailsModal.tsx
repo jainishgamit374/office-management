@@ -1,7 +1,7 @@
 import { ThemeColors } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import React from 'react';
-import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export type ApprovalDetails = {
   title: string;
@@ -66,121 +66,112 @@ export default function ApprovalDetailsModal({
       <View style={styles.overlay}>
         <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
           {/* Header */}
-          <View style={styles.header}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Leave Details</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Feather name="x" size={22} color={colors.textSecondary} />
+          <View style={[styles.header, { borderBottomColor: '#F1F5F9' }]}>
+            <View style={styles.headerLeft}>
+              <View style={styles.statusIndicator} />
+              <Text style={[styles.headerTitle, { color: '#0F172A' }]}>Leave Request</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.7}>
+              <Feather name="x" size={20} color="#94A3B8" />
             </TouchableOpacity>
           </View>
 
-          {/* Content */}
-          <View style={styles.content}>
-            {/* Employee Card */}
-            <View style={[styles.employeeCard, { backgroundColor: colors.background }]}>
-              {details.profileImage ? (
-                <Image source={{ uri: details.profileImage }} style={styles.profileImage} />
-              ) : (
-                <View style={[styles.avatarPlaceholder, { backgroundColor: `${colors.primary}15` }]}>
-                  <Text style={[styles.avatarText, { color: colors.primary }]}>
-                    {getInitials(details.employeeName)}
-                  </Text>
+          {/* Scrollable Content */}
+          <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.content}>
+              {/* Employee Section */}
+              <View style={styles.employeeSection}>
+                {details.profileImage ? (
+                  <Image source={{ uri: details.profileImage }} style={styles.profileImage} />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarText}>{getInitials(details.employeeName)}</Text>
+                  </View>
+                )}
+                <View style={styles.employeeInfo}>
+                  <Text style={styles.employeeName}>{details.employeeName || 'Unknown'}</Text>
+                  <Text style={styles.leaveType}>{details.leaveType || details.title}</Text>
                 </View>
-              )}
-              <View style={styles.employeeInfo}>
-                <Text style={[styles.employeeName, { color: colors.text }]}>
-                  {details.employeeName || 'Unknown'}
-                </Text>
-                <Text style={[styles.leaveType, { color: colors.textSecondary }]}>
-                  {details.leaveType || details.title}
-                </Text>
               </View>
-            </View>
 
-            {/* Leave Duration */}
-            {(details.startDate || details.endDate) && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
-                  LEAVE DURATION
-                </Text>
-                <View style={[styles.durationCard, { backgroundColor: colors.background }]}>
-                  <View style={styles.dateRow}>
-                    <View style={styles.dateItem}>
-                      <Text style={[styles.dateLabel, { color: colors.textTertiary }]}>From</Text>
-                      <Text style={[styles.dateValue, { color: colors.text }]}>
-                        {details.startDate}
-                      </Text>
-                    </View>
-                    <Feather name="arrow-right" size={16} color={colors.textTertiary} />
-                    <View style={styles.dateItem}>
-                      <Text style={[styles.dateLabel, { color: colors.textTertiary }]}>To</Text>
-                      <Text style={[styles.dateValue, { color: colors.text }]}>
-                        {details.endDate}
-                      </Text>
+              {/* Timeline Section */}
+              {(details.startDate || details.endDate) && (
+                <View style={styles.timelineSection}>
+                  <View style={styles.timelineItem}>
+                    <View style={styles.timelineDot} />
+                    <View style={styles.timelineContent}>
+                      <Text style={styles.timelineLabel}>Start Date</Text>
+                      <Text style={styles.timelineValue}>{details.startDate}</Text>
                     </View>
                   </View>
-                  {days && (
-                    <View style={[styles.daysBadge, { backgroundColor: `${colors.primary}15` }]}>
-                      <Text style={[styles.daysText, { color: colors.primary }]}>
-                        {days} {days === 1 ? 'Day' : 'Days'}
-                      </Text>
+
+                  <View style={styles.timelineLine} />
+
+                  <View style={styles.timelineItem}>
+                    <View style={styles.timelineDot} />
+                    <View style={styles.timelineContent}>
+                      <Text style={styles.timelineLabel}>End Date</Text>
+                      <Text style={styles.timelineValue}>{details.endDate}</Text>
                     </View>
-                  )}
+                  </View>
                 </View>
-              </View>
-            )}
+              )}
 
-            {/* Half Day Info */}
-            {details.isHalfDay && (
-              <View style={[styles.halfDayBadge, { backgroundColor: '#FFF3E0' }]}>
-                <Feather name="clock" size={14} color="#F59E0B" />
-                <Text style={styles.halfDayText}>
-                  Half Day - {details.isFirstHalf ? 'First Half' : 'Second Half'}
-                </Text>
+              {/* Meta Info Row */}
+              <View style={styles.metaRow}>
+                {days && (
+                  <View style={styles.metaItem}>
+                    <Feather name="calendar" size={14} color="#64748B" />
+                    <Text style={styles.metaText}>
+                      {days} {days === 1 ? 'Day' : 'Days'}
+                    </Text>
+                  </View>
+                )}
+                {details.isHalfDay && (
+                  <View style={styles.halfDayChip}>
+                    <Feather name="clock" size={12} color="#F59E0B" />
+                    <Text style={styles.halfDayText}>
+                      {details.isFirstHalf ? 'First Half' : 'Second Half'}
+                    </Text>
+                  </View>
+                )}
               </View>
-            )}
 
-            {/* Reason */}
-            {details.reason && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
-                  REASON
-                </Text>
-                <View style={[styles.reasonCard, { backgroundColor: colors.background }]}>
-                  <Text style={[styles.reasonText, { color: colors.text }]}>
-                    {details.reason}
-                  </Text>
+              {/* Reason Section */}
+              {details.reason && (
+                <View style={styles.reasonSection}>
+                  <Text style={styles.reasonLabel}>Reason</Text>
+                  <Text style={styles.reasonText}>{details.reason}</Text>
                 </View>
-              </View>
-            )}
+              )}
 
-            {/* Applied On */}
-            {details.appliedOn && (
-              <View style={styles.appliedRow}>
-                <Feather name="calendar" size={12} color={colors.textTertiary} />
-                <Text style={[styles.appliedText, { color: colors.textTertiary }]}>
-                  Applied on {details.appliedOn}
-                </Text>
-              </View>
-            )}
-          </View>
+              {/* Applied Date */}
+              {details.appliedOn && (
+                <View style={styles.appliedRow}>
+                  <Feather name="info" size={12} color="#94A3B8" />
+                  <Text style={styles.appliedText}>Applied on {details.appliedOn}</Text>
+                </View>
+              )}
+            </View>
+          </ScrollView>
 
           {/* Action Buttons */}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { borderTopColor: '#F1F5F9' }]}>
             <TouchableOpacity
               style={[styles.actionButton, styles.rejectButton]}
               onPress={onDisapprove}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <Feather name="x" size={18} color="#fff" />
+              <Feather name="x-circle" size={18} color="#fff" />
               <Text style={styles.buttonText}>Reject</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.actionButton, styles.approveButton]}
               onPress={onApprove}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <Feather name="check" size={18} color="#fff" />
+              <Feather name="check-circle" size={18} color="#fff" />
               <Text style={styles.buttonText}>Approve</Text>
             </TouchableOpacity>
           </View>
@@ -193,175 +184,228 @@ export default function ApprovalDetailsModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
+    shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 12,
+    elevation: 10,
   },
 
+  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statusIndicator: {
+    width: 3,
+    height: 24,
+    backgroundColor: '#6366F1',
+    borderRadius: 2,
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   closeButton: {
     padding: 4,
   },
 
+  // Content
+  scrollContent: {
+    maxHeight: '70%',
+  },
   content: {
-    padding: 16,
-    gap: 14,
+    padding: 20,
+    gap: 20,
   },
 
-  employeeCard: {
+  // Employee Section
+  employeeSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 12,
-    borderRadius: 12,
+    gap: 14,
   },
   profileImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#E5E7EB',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F1F5F9',
   },
   avatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
+    color: '#6366F1',
   },
   employeeInfo: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   employeeName: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#0F172A',
     letterSpacing: -0.2,
   },
   leaveType: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+
+  // Timeline
+  timelineSection: {
+    paddingVertical: 4,
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#6366F1',
+    marginTop: 5,
+  },
+  timelineLine: {
+    width: 2,
+    height: 24,
+    backgroundColor: '#E2E8F0',
+    marginLeft: 4,
+    marginVertical: 6,
+  },
+  timelineContent: {
+    flex: 1,
+    gap: 3,
+  },
+  timelineLabel: {
+    fontSize: 11,
     fontWeight: '600',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  timelineValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
   },
 
-  section: {
-    gap: 8,
-  },
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-
-  durationCard: {
-    padding: 12,
-    borderRadius: 12,
-    gap: 10,
-  },
-  dateRow: {
+  // Meta Row
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
   },
-  dateItem: {
-    flex: 1,
-    gap: 4,
-  },
-  dateLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  dateValue: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  daysBadge: {
-    alignSelf: 'center',
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    backgroundColor: '#F8FAFC',
     borderRadius: 8,
   },
-  daysText: {
-    fontSize: 12,
-    fontWeight: '700',
+  metaText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
   },
-
-  halfDayBadge: {
+  halfDayChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    padding: 10,
-    borderRadius: 10,
-    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
   },
   halfDayText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#F59E0B',
+    fontWeight: '600',
+    color: '#92400E',
   },
 
-  reasonCard: {
-    padding: 12,
-    borderRadius: 10,
+  // Reason
+  reasonSection: {
+    gap: 8,
+  },
+  reasonLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   reasonText: {
-    fontSize: 13,
-    fontWeight: '500',
-    lineHeight: 18,
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#475569',
+    lineHeight: 21,
   },
 
+  // Applied
   appliedRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    justifyContent: 'center',
+    paddingTop: 8,
   },
   appliedText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#94A3B8',
   },
 
+  // Footer
   footer: {
     flexDirection: 'row',
-    gap: 10,
-    padding: 16,
-    paddingTop: 12,
+    gap: 12,
+    padding: 20,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 14,
-    borderRadius: 12,
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   rejectButton: {
     backgroundColor: '#EF4444',
@@ -370,9 +414,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   buttonText: {
-    color: '#fff',
-    fontSize: 14,
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
 });

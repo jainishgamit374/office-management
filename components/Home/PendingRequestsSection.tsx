@@ -5,13 +5,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Easing, LayoutAnimation, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 
 import {
-  approveAny,
-  BASE,
-  disapproveAny,
-  getEarlyCheckoutDetails,
-  getLeaveApprovals,
-  getMissPunchApprovalHistory,
-  getWfhApprovals
+    approveAny,
+    BASE,
+    disapproveAny,
+    getEarlyCheckoutDetails,
+    getLeaveApprovals,
+    getMissPunchApprovalHistory,
+    getWfhApprovals
 } from '@/lib/approvalsApi';
 import { getExpectedLateArrivals } from '@/lib/earlyLatePunch';
 import ApprovalDetailsModal, { ApprovalDetails } from './ApprovalDetailsModal';
@@ -179,15 +179,15 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({ refresh
   const handleConfirmAction = async () => {
     if (!actionItem) return;
 
-    // validation
-    if (!actionReason.trim()) {
+    // validation - only for disapprove
+    if (actionType === 'disapprove' && !actionReason.trim()) {
         Alert.alert('Reason Required', `Please enter a reason to ${actionType}.`);
         return;
     }
 
     try {
         if (actionType === 'approve') {
-            await approveAny({ ProgramID: actionItem.programId, TranID: actionItem.tranId, Reason: actionReason });
+            await approveAny({ ProgramID: actionItem.programId, TranID: actionItem.tranId, Reason: actionReason || 'Approved' });
             Alert.alert('Approved', 'Request approved successfully.');
         } else {
             await disapproveAny({ ProgramID: actionItem.programId, TranID: actionItem.tranId, Reason: actionReason });
@@ -201,7 +201,33 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({ refresh
     }
   };
 
-  const approve = (programId: number, tranId: number) => initiateAction(programId, tranId, 'approve');
+  const approve = async (programId: number, tranId: number) => {
+    try {
+      console.log('🔄 Starting approval...', { ProgramID: programId, TranID: tranId });
+      
+      const response = await approveAny({ ProgramID: programId, TranID: tranId, Reason: 'Approved' });
+      
+      console.log('✅ Approval response:', response);
+      Alert.alert('Approved', 'Request approved successfully.');
+      fetchData();
+      setDetailsOpen(false);
+    } catch (e: any) {
+      console.error('❌ Approval error:', e);
+      console.error('❌ Error message:', e?.message);
+      
+      // Parse specific backend errors
+      let errorMessage = e?.message || 'Approval failed. Please try again.';
+      
+      // Handle duplicate record error from Django
+      if (errorMessage.includes('returned more than one')) {
+        errorMessage = 'Server error: Duplicate records found in database. Please contact your administrator to fix this issue.';
+        console.error('⚠️ BACKEND FIX NEEDED: EmpLeaveEmpAppDtl table has duplicate records. Django needs to use .filter().first() instead of .get()');
+      }
+      
+      Alert.alert('Server Error', errorMessage);
+    }
+  };
+  
   const disapprove = (programId: number, tranId: number) => initiateAction(programId, tranId, 'disapprove');
 
   const fetchData = useCallback(async () => {
@@ -222,7 +248,8 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({ refresh
         console.log('✅ Leave Approvals Data:', JSON.stringify(data, null, 2));
         setLeaves(
           data.map((i) => ({
-            id: i.Leave_ID,
+            // Use LeaveApplicationMasterID as TranID if available, otherwise fall back to Leave_ID
+            id: i.LeaveApplicationMasterID || i.Leave_ID,
             programId: 2,
             employeeName: i.employee_name,
             title: `Leave: ${i.leave_type}`,

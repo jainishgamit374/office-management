@@ -48,12 +48,15 @@ const BREAK_END_HOUR = 14;
 const TOTAL_WORKING_HOURS = 8;
 
 // Persist punch state so check-in/out details survive app restarts
-const CHECKIN_STORAGE_KEY = '@checkin_card_state_v2';
+// v3: Uses timestamps (numbers) instead of strings for reliable rehydration
+const CHECKIN_STORAGE_KEY = '@checkin_card_state_v3';
 
 type PersistedPunchState = {
   punchType: 1 | 2 | 3;
-  punchInTime: string | null;
-  punchOutTime: string | null;
+  punchInTs: number | null;    // Unix timestamp (ms) - lossless
+  punchOutTs: number | null;   // Unix timestamp (ms) - lossless
+  punchInTime: string | null;  // Keep for display fallback
+  punchOutTime: string | null; // Keep for display fallback
   workingMinutes: number;
   date: string; // YYYY-MM-DD for quick staleness checks
 };
@@ -138,6 +141,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const isInitializedRef = useRef(false); // NEW: Stable ref to prevent stale closure
   const punchTypeRef = useRef<1 | 2 | 3>(3); // NEW: Ref to track punchType for stale closures
   const previousPunchType = useRef<1 | 2 | 3>(3);
+  const punchInDateRef = useRef<Date | null>(null); // Ref to track punchInDate for stale closure prevention
+  const punchOutDateRef = useRef<Date | null>(null); // Ref to track punchOutDate for stale closure prevention
   const lastPunchTime = useRef<number>(0); // Timestamp of last punch action
   const lastPunchAction = useRef<'IN' | 'OUT' | null>(null); // Last punch action type
   const COOLDOWN_MS = 300000; // 5 minute cooldown to ignore conflicting API responses
@@ -155,6 +160,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
   useEffect(() => { isInitializedRef.current = isInitialized; }, [isInitialized]);
   useEffect(() => { punchTypeRef.current = punchType; }, [punchType]);
+  useEffect(() => { punchInDateRef.current = punchInDate; }, [punchInDate]);
+  useEffect(() => { punchOutDateRef.current = punchOutDate; }, [punchOutDate]);
 
   useEffect(() => {
     if (isInitialized) {
@@ -269,11 +276,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         }
       }
 
-      // Handle DD-MM-YYYY HH:mm:ss AM/PM (Most common from API)
-      // Flexible regex: separators can be - or /, optional AM/PM, optional seconds
-      const matchCustom = timeString.match(/^(\d{2})[-/](\d{2})[-/](\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
-      if (matchCustom) {
-        const [, day, month, year, hours, minutes, seconds, period] = matchCustom;
+      // Handle YYYY-MM-DD HH:mm:ss AM/PM (API format: "2025-12-24 11:49:46 AM")
+      const matchYYYYMMDD = timeString.match(/^(\d{4})[-/](\d{2})[-/](\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+      if (matchYYYYMMDD) {
+        const [, year, month, day, hours, minutes, seconds, period] = matchYYYYMMDD;
         let hour = parseInt(hours, 10);
         const min = parseInt(minutes, 10);
         const sec = seconds ? parseInt(seconds, 10) : 0;
@@ -282,7 +288,24 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
         
         const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, min, sec);
-        console.log('✅ Parsed Custom Format:', date);
+        console.log('✅ Parsed YYYY-MM-DD Format:', date);
+        return date;
+      }
+
+      // Handle DD-MM-YYYY HH:mm:ss AM/PM (alternate format)
+      // Flexible regex: separators can be - or /, optional AM/PM, optional seconds
+      const matchDDMMYYYY = timeString.match(/^(\d{2})[-/](\d{2})[-/](\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+      if (matchDDMMYYYY) {
+        const [, day, month, year, hours, minutes, seconds, period] = matchDDMMYYYY;
+        let hour = parseInt(hours, 10);
+        const min = parseInt(minutes, 10);
+        const sec = seconds ? parseInt(seconds, 10) : 0;
+        
+        if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
+        if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
+        
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, min, sec);
+        console.log('✅ Parsed DD-MM-YYYY Format:', date);
         return date;
       }
       
@@ -339,6 +362,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   }, []);
 
   // Persist latest punch state so check-in/out info survives app restarts
+  // Uses timestamps (numbers) for reliable rehydration - no parsing required
   const persistPunchState = useCallback(async (
     type: 1 | 2 | 3,
     inTime: string | null,
@@ -352,16 +376,49 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         return;
       }
 
-      const parsedBase = parsePunchTime(inTime || outTime || new Date().toISOString());
-      const dateStr = getLocalDateString(parsedBase || new Date());
+      // Parse dates and convert to timestamps (lossless)
+      let inDate = inTime ? parsePunchTime(inTime) : null;
+      let outDate = outTime ? parsePunchTime(outTime) : null;
+
+      // Use refs to get current values (avoids stale closure)
+      const currentPunchInDate = punchInDateRef.current;
+      const currentPunchOutDate = punchOutDateRef.current;
+      const existingCached = persistedStateRef.current;
+
+      // Fallback chain for inDate: parsed string → ref → existing cache
+      if (!inDate && currentPunchInDate && !isNaN(currentPunchInDate.getTime())) {
+        inDate = currentPunchInDate;
+      }
+      if (!inDate && existingCached?.punchInTs) {
+        inDate = new Date(existingCached.punchInTs);
+      }
+      
+      // Fallback chain for outDate: parsed string → ref → existing cache  
+      if (!outDate && currentPunchOutDate && !isNaN(currentPunchOutDate.getTime())) {
+        outDate = currentPunchOutDate;
+      }
+      if (!outDate && existingCached?.punchOutTs) {
+        outDate = new Date(existingCached.punchOutTs);
+      }
+      
+      const dateStr = getLocalDateString(inDate || outDate || new Date());
 
       const payload: PersistedPunchState = {
         punchType: type,
-        punchInTime: inTime,
-        punchOutTime: outTime,
+        punchInTs: inDate ? inDate.getTime() : null,
+        punchOutTs: outDate ? outDate.getTime() : null,
+        punchInTime: inTime || (inDate ? inDate.toISOString() : null),   // Keep strings for display fallback
+        punchOutTime: outTime || (outDate ? outDate.toISOString() : null), // Keep strings for display fallback
         workingMinutes: workingMins || 0,
         date: dateStr,
       };
+
+      console.log('💾 Persisting state with timestamps:', {
+        type,
+        inTs: payload.punchInTs,
+        outTs: payload.punchOutTs,
+        date: dateStr,
+      });
 
       persistedStateRef.current = payload;
       await AsyncStorage.setItem(CHECKIN_STORAGE_KEY, JSON.stringify(payload));
@@ -390,6 +447,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setPunchOutTime(null);
         setPunchInDate(null);
         setPunchOutDate(null);
+        // Also clear refs immediately
+        punchInDateRef.current = null;
+        punchOutDateRef.current = null;
         setWorkingMinutes(0);
         setCompletedWorkingHours(0);
         setPunchType(3);
@@ -398,23 +458,36 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       }
       case 1: {
         const parsedIn = parsePunchTime(inTime);
-        console.log('Applying Check-In State:', { inTime, parsedIn });
+        // CRITICAL: If parsing fails, use current time as fallback - we MUST have a valid check-in date
+        const checkInDate = parsedIn && !isNaN(parsedIn.getTime()) ? parsedIn : new Date();
+        
+        console.log('✅ Applying Check-In State:', { 
+          inTime, 
+          parsedIn: parsedIn?.toISOString(),
+          parsedInValid: parsedIn && !isNaN(parsedIn.getTime()),
+          finalCheckInDate: checkInDate.toISOString(),
+        });
         
         pan.setValue(MAX_SWIPE_DISTANCE);
         colorAnim.setValue(1);
         
         setIsCheckedIn(true);
         setHasCheckedOut(false);
-        setPunchInTime(inTime);
-        setPunchInDate(parsedIn);
+        setPunchInTime(inTime || checkInDate.toISOString());
+        setPunchInDate(checkInDate);
+        // CRITICAL: Update ref immediately for checkout to use later - MUST be valid Date
+        punchInDateRef.current = checkInDate;
+        console.log('🔐 punchInDateRef SET to:', punchInDateRef.current?.toISOString());
+        
         setPunchOutTime(null);
         setPunchOutDate(null);
+        punchOutDateRef.current = null;
         setWorkingMinutes(workingMins);
         setPunchType(1);
         previousPunchType.current = 1;
 
-        if (parsedIn) {
-          const progress = calculateWorkingHours(parsedIn) / TOTAL_WORKING_HOURS;
+        if (checkInDate) {
+          const progress = calculateWorkingHours(checkInDate) / TOTAL_WORKING_HOURS;
           progressAnim.setValue(progress);
         } else {
           progressAnim.setValue(0);
@@ -424,6 +497,40 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       case 2: {
         const parsedOut = parsePunchTime(outTime);
         const parsedIn2 = parsePunchTime(inTime);
+        const cachedState = persistedStateRef.current;
+        // Use refs for current punchInDate/punchOutDate to avoid stale closure issues
+        const currentPunchInDate = punchInDateRef.current;
+        const currentPunchOutDate = punchOutDateRef.current;
+        
+        // Build fallback chain - MUST have a check-in time for checkout to make sense
+        let fallbackIn = parsedIn2
+          || currentPunchInDate
+          || (cachedState?.punchInTs ? new Date(cachedState.punchInTs) : null);
+        
+        // If still no check-in time, this is a problem - but show something rather than blank
+        // This shouldn't happen in normal flow, but prevents "--:--" display
+        if (!fallbackIn) {
+          console.warn('⚠️ CRITICAL: No check-in time found during checkout! Creating placeholder.');
+          // Create a placeholder time (8 hours before checkout)
+          const checkoutTime = parsedOut || new Date();
+          fallbackIn = new Date(checkoutTime.getTime() - (8 * 60 * 60 * 1000));
+        }
+        
+        const fallbackOut = parsedOut
+          || currentPunchOutDate
+          || (cachedState?.punchOutTs ? new Date(cachedState.punchOutTs) : null)
+          || new Date(); // Default to now for checkout time
+        
+        console.log('📋 Checkout state debug:', {
+          inTime,
+          outTime,
+          parsedIn2: parsedIn2?.toISOString(),
+          parsedOut: parsedOut?.toISOString(),
+          currentPunchInDate: currentPunchInDate?.toISOString(),
+          cachedPunchInTs: cachedState?.punchInTs,
+          fallbackIn: fallbackIn?.toISOString(),
+          fallbackOut: fallbackOut?.toISOString(),
+        });
 
         pan.setValue(0);
         colorAnim.setValue(2);
@@ -431,13 +538,15 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
         setIsCheckedIn(false);
         setHasCheckedOut(true);
-        setPunchOutTime(outTime);
-        setPunchOutDate(parsedOut || new Date());
+        setPunchOutTime(outTime || fallbackOut.toISOString());
+        setPunchOutDate(fallbackOut);
+        // Update ref immediately
+        punchOutDateRef.current = fallbackOut;
         
-        if (inTime) {
-          setPunchInTime(inTime);
-          setPunchInDate(parsedIn2);
-        }
+        setPunchInTime(inTime || fallbackIn.toISOString());
+        setPunchInDate(fallbackIn);
+        // Update ref immediately
+        punchInDateRef.current = fallbackIn;
         
         setWorkingMinutes(workingMins);
         setCompletedWorkingHours(0);
@@ -459,6 +568,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   ]);
 
   // Hydrate from persisted state on mount (same-day only)
+  // Uses timestamps directly - NO string parsing required (lossless)
   useEffect(() => {
     const hydrateFromStorage = async () => {
       if (hasHydratedRef.current) return; // Only hydrate once
@@ -480,9 +590,34 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           return;
         }
 
+        // Reconstruct Date objects from timestamps (lossless - no parsing!)
+        const inDate = cached.punchInTs ? new Date(cached.punchInTs) : null;
+        const outDate = cached.punchOutTs ? new Date(cached.punchOutTs) : null;
+
+        console.log('💾 Hydrating from timestamps:', {
+          punchType: cached.punchType,
+          inTs: cached.punchInTs,
+          outTs: cached.punchOutTs,
+          inDate: inDate?.toISOString(),
+          outDate: outDate?.toISOString(),
+        });
+
+        // Set Date objects directly (bypassing string parsing)
+        // IMPORTANT: Set refs FIRST before state to avoid stale closure issues
+        punchInDateRef.current = inDate;
+        punchOutDateRef.current = outDate;
+        setPunchInDate(inDate);
+        setPunchOutDate(outDate);
+
         persistedStateRef.current = cached;
-        console.log('💾 Applying cached state:', cached.punchType, cached.punchInTime, cached.punchOutTime);
-        applyState(cached.punchType, cached.punchInTime, cached.punchOutTime, cached.workingMinutes || 0);
+        
+        // Apply state with ISO strings for display (Date objects already set above)
+        const inTimeStr = inDate?.toISOString() ?? cached.punchInTime;
+        const outTimeStr = outDate?.toISOString() ?? cached.punchOutTime;
+        
+        console.log('💾 Applying cached state:', cached.punchType, inTimeStr, outTimeStr);
+        applyState(cached.punchType, inTimeStr, outTimeStr, cached.workingMinutes || 0);
+        
         setIsInitialized(true);
         isInitializedRef.current = true;
         setIsLoading(false);
@@ -589,8 +724,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         if (!punchInTimeStr && cached.punchInTime) {
           punchInTimeStr = cached.punchInTime;
         }
+        if (!punchInTimeStr && cached.punchInTs) {
+          punchInTimeStr = new Date(cached.punchInTs).toISOString();
+        }
         if (!punchOutTimeStr && cached.punchOutTime) {
           punchOutTimeStr = cached.punchOutTime;
+        }
+        if (!punchOutTimeStr && cached.punchOutTs) {
+          punchOutTimeStr = new Date(cached.punchOutTs).toISOString();
         }
         if (!workingMins && cached.workingMinutes) {
           workingMins = cached.workingMinutes;
@@ -990,8 +1131,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         const responseData = response.data;
         console.log('✅ Check-in successful:', responseData);
 
-        const punchTime = responseData.data?.PunchTimeISO || responseData.data?.PunchTime || now.toISOString();
-        const workingMins = responseData.data?.WorkingMinutes || 0;
+        // API returns flat structure: { status, message, PunchTime }
+        // Try both flat and nested structures for compatibility
+        const punchTime = responseData.PunchTimeISO || responseData.PunchTime 
+          || responseData.data?.PunchTimeISO || responseData.data?.PunchTime 
+          || now.toISOString();
+        const workingMins = responseData.WorkingMinutes || responseData.data?.WorkingMinutes || 0;
+        
+        console.log('📥 Parsed check-in time:', punchTime);
 
         // Set STRICT cooldown protection with state lock
         lastPunchTime.current = Date.now();
@@ -1012,11 +1159,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           stateLockTimeout.current = null;
         }, COOLDOWN_MS);
 
-        if (responseData.data?.IsLate) {
+        const wasLateCheckIn = responseData.IsLate || responseData.data?.IsLate;
+        const lateByMins = responseData.LateByMinutes || responseData.data?.LateByMinutes || 'a few';
+        
+        if (wasLateCheckIn) {
           showNotification(
             'warning',
             'Late Check-In',
-            `You're ${responseData.data.LateByMinutes || 'a few'} min late • ${remainingLateCheckins - 1} remaining`
+            `You're ${lateByMins} min late • ${remainingLateCheckins - 1} remaining`
           );
         } else {
           showNotification(
@@ -1077,8 +1227,14 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         const responseData = response.data;
         console.log('✅ Check-out successful:', responseData);
 
-        const punchTime = responseData.data?.PunchTimeISO || responseData.data?.PunchTime || new Date().toISOString();
-        const workingMins = responseData.data?.WorkingMinutes || workingMinutes;
+        // API returns flat structure: { status, message, PunchTime }
+        // Try both flat and nested structures for compatibility
+        const punchTime = responseData.PunchTimeISO || responseData.PunchTime 
+          || responseData.data?.PunchTimeISO || responseData.data?.PunchTime 
+          || new Date().toISOString();
+        const workingMins = responseData.WorkingMinutes || responseData.data?.WorkingMinutes || workingMinutes;
+        
+        console.log('📥 Parsed check-out time:', punchTime);
 
         // Set STRICT cooldown protection with state lock
         lastPunchTime.current = Date.now();
@@ -1086,8 +1242,26 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         isStateLocked.current = true; // LOCK THE STATE
         console.log(`🔒 STATE LOCKED + Cooldown protection for ${COOLDOWN_DISPLAY}`);
 
-        // Apply state
-        applyState(2, punchInTime, punchTime, workingMins);
+        // IMPORTANT: Get check-in time with multiple fallbacks to ensure we don't lose it
+        // Priority: 1) Ref (most current), 2) State, 3) Cached timestamp
+        const cachedData = persistedStateRef.current;
+        const currentPunchInDateForCheckout = punchInDateRef.current 
+          || punchInDate 
+          || (cachedData?.punchInTs ? new Date(cachedData.punchInTs) : null);
+        
+        const punchInTimeForCheckout = currentPunchInDateForCheckout 
+          ? currentPunchInDateForCheckout.toISOString() 
+          : null;
+        
+        console.log('📋 Checkout - check-in time sources:', {
+          fromRef: punchInDateRef.current?.toISOString(),
+          fromState: punchInDate?.toISOString(),
+          fromCache: cachedData?.punchInTs ? new Date(cachedData.punchInTs).toISOString() : null,
+          final: punchInTimeForCheckout,
+        });
+
+        // Apply state with the check-in time
+        applyState(2, punchInTimeForCheckout, punchTime, workingMins);
 
         // Unlock state after cooldown period with cleanup
         if (stateLockTimeout.current) {
@@ -1099,18 +1273,22 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           stateLockTimeout.current = null;
         }, COOLDOWN_MS);
 
-        const workingHrs = responseData.data?.WorkingHours || getDisplayWorkingHours();
-        if (responseData.data?.IsEarly) {
+        const workingHrs = responseData.WorkingHours || responseData.data?.WorkingHours || getDisplayWorkingHours();
+        const isEarly = responseData.IsEarly || responseData.data?.IsEarly;
+        const earlyByMins = responseData.EarlyByMinutes || responseData.data?.EarlyByMinutes || 'a few';
+        const overtimeHrs = responseData.OvertimeHours || responseData.data?.OvertimeHours;
+        
+        if (isEarly) {
           showNotification(
             'warning',
             'Early Check-Out',
-            `Left ${responseData.data.EarlyByMinutes || 'a few'} min early • Worked ${workingHrs}`
+            `Left ${earlyByMins} min early • Worked ${workingHrs}`
           );
         } else {
           showNotification(
             'success',
             'Checked Out Successfully',
-            `Great work today! Total: ${workingHrs}${responseData.data?.OvertimeHours ? ` (+${responseData.data.OvertimeHours} OT)` : ''} ✨`
+            `Great work today! Total: ${workingHrs}${overtimeHrs ? ` (+${overtimeHrs} OT)` : ''} ✨`
           );
         }
 
@@ -1281,28 +1459,40 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   };
 
   const getDisplayWorkingHours = (): string => {
+    // Priority 1: Use workingMinutes if available from API
     if (workingMinutes > 0) return formatMinutesToHours(workingMinutes);
-    if (punchInDate) {
-      const end = punchOutDate || new Date();
-      let mins = Math.floor((end.getTime() - punchInDate.getTime()) / (1000 * 60));
-
-      const startHour = punchInDate.getHours() + punchInDate.getMinutes() / 60;
-      const endHour = end.getHours() + end.getMinutes() / 60;
-
-      if (startHour < BREAK_END_HOUR && endHour > BREAK_START_HOUR) {
-        const breakMins = Math.min(
-          (Math.min(endHour, BREAK_END_HOUR) - Math.max(startHour, BREAK_START_HOUR)) * 60,
-          60
-        );
-        mins -= Math.max(0, breakMins);
-      }
-
-      if (mins >= 0) {
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        return `${h}h ${m}m`;
-      }
+    
+    // Priority 2: Calculate from punchInDate (must exist and be valid)
+    if (!punchInDate || !(punchInDate instanceof Date) || isNaN(punchInDate.getTime())) {
+      return '--:--';
     }
+
+    const end = punchOutDate || new Date();
+    const diffMs = end.getTime() - punchInDate.getTime();
+    
+    // Guard against negative or invalid durations
+    if (diffMs <= 0) return '--:--';
+    
+    let mins = Math.floor(diffMs / (1000 * 60));
+
+    // Subtract break time if applicable (1PM-2PM)
+    const startHour = punchInDate.getHours() + punchInDate.getMinutes() / 60;
+    const endHour = end.getHours() + end.getMinutes() / 60;
+
+    if (startHour < BREAK_END_HOUR && endHour > BREAK_START_HOUR) {
+      const breakMins = Math.min(
+        (Math.min(endHour, BREAK_END_HOUR) - Math.max(startHour, BREAK_START_HOUR)) * 60,
+        60
+      );
+      mins -= Math.max(0, breakMins);
+    }
+
+    if (mins >= 0) {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${h}h ${m}m`;
+    }
+    
     return '--:--';
   };
 

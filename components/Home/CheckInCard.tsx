@@ -237,35 +237,45 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     if (!timeString) return null;
 
     try {
+      console.log('🔍 Parsing time string:', timeString);
+
+      // Handle ISO format
       if (timeString.includes('T')) {
         const date = new Date(timeString);
-        if (!isNaN(date.getTime())) return date;
+        if (!isNaN(date.getTime())) {
+          console.log('✅ Parsed ISO:', date);
+          return date;
+        }
       }
 
-      const match1 = timeString.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
-      if (match1) {
-        const [, year, month, day, hours, minutes, seconds, period] = match1;
+      // Handle DD-MM-YYYY HH:mm:ss AM/PM (Most common from API)
+      // Flexible regex: separators can be - or /, optional AM/PM, optional seconds
+      const matchCustom = timeString.match(/^(\d{2})[-/](\d{2})[-/](\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+      if (matchCustom) {
+        const [, day, month, year, hours, minutes, seconds, period] = matchCustom;
         let hour = parseInt(hours, 10);
+        const min = parseInt(minutes, 10);
+        const sec = seconds ? parseInt(seconds, 10) : 0;
+        
         if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
         if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
-        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds));
+        
+        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, min, sec);
+        console.log('✅ Parsed Custom Format:', date);
+        return date;
+      }
+      
+      // Fallback: try standard Date constructor
+      const fallbackDate = new Date(timeString);
+      if (!isNaN(fallbackDate.getTime())) {
+        console.log('✅ Parsed via Constructor:', fallbackDate);
+        return fallbackDate;
       }
 
-      const match2 = timeString.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
-      if (match2) {
-        const [, day, month, year, hours, minutes, seconds, period] = match2;
-        let hour = parseInt(hours, 10);
-        if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12;
-        if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0;
-        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, parseInt(minutes), parseInt(seconds));
-      }
-
-      const nativeDate = new Date(timeString);
-      if (!isNaN(nativeDate.getTime())) return nativeDate;
-
+      console.warn('❌ Failed to parse date:', timeString);
       return null;
-    } catch (error) {
-      console.error('Error parsing time:', timeString, error);
+    } catch (e) {
+      console.error('❌ Error parsing date:', e);
       return null;
     }
   }, []);
@@ -335,6 +345,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
       case 1: // Checked In
         const parsedIn = parsePunchTime(inTime);
+        console.log('Applying Check-In State:', { inTime, parsedIn });
         
         pan.setValue(MAX_SWIPE_DISTANCE);
         colorAnim.setValue(1);
@@ -342,7 +353,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setIsCheckedIn(true);
         setHasCheckedOut(false);
         setPunchInTime(inTime);
-        setPunchInDate(parsedIn || new Date());
+        setPunchInDate(parsedIn); // Removed fallback to new Date() to avoid showing wrong time
         setPunchOutTime(null);
         setPunchOutDate(null);
         setWorkingMinutes(workingMins);
@@ -352,6 +363,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         if (parsedIn) {
           const progress = calculateWorkingHours(parsedIn) / TOTAL_WORKING_HOURS;
           progressAnim.setValue(progress);
+        } else {
+            // If parsing failed, maybe just show progress 0?
+            progressAnim.setValue(0);
         }
         break;
 

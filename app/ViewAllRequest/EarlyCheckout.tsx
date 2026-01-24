@@ -1,5 +1,5 @@
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
-import { getEarlyLatePunchList, type EarlyLatePunchDetails } from '@/lib/earlyLatePunch';
+import { getEarlyCheckoutDetails, type EarlyLatePunchDetails } from '@/lib/earlyLatePunch';
 import { disapproveAll } from '@/lib/workflow';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
@@ -43,16 +43,13 @@ const EarlyCheckout = () => {
                 setIsLoading(true);
             }
 
-            console.log('🔍 Fetching early/late requests with filters:', {
-                checkoutType: selectedFilter,
+            console.log('🔍 Fetching early checkout details with filters:', {
                 status: statusFilter,
             });
 
-            const response = await getEarlyLatePunchList({
-                checkoutType: selectedFilter,
+            // Use getEarlyCheckoutDetails which returns workflow_list
+            const response = await getEarlyCheckoutDetails({
                 status: statusFilter,
-                sortBy: 'CreatedDate',
-                sortOrder: 'desc',
             });
 
             console.log('📦 API Response:', {
@@ -61,7 +58,15 @@ const EarlyCheckout = () => {
                 data: response.data,
             });
 
-            setRequests(response.data || []);
+            // Filter by CheckoutType if needed (Early/Late)
+            let filteredData = response.data || [];
+            if (selectedFilter !== 'All') {
+                filteredData = filteredData.filter((item: EarlyLatePunchDetails) => 
+                    item.CheckoutType === selectedFilter
+                );
+            }
+
+            setRequests(filteredData);
         } catch (err: any) {
             console.error('❌ Failed to fetch requests:', err);
             Alert.alert('Error', err.message || 'Failed to load requests');
@@ -79,8 +84,15 @@ const EarlyCheckout = () => {
     );
 
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
+        if (!dateString) return 'N/A';
+        // Handle format: "2026-01-26 12:00:00 PM" - extract date part
+        const datePart = dateString.split(' ')[0];
+        const date = new Date(datePart);
+        
+        if (isNaN(date.getTime())) return dateString;
+        
         return date.toLocaleDateString('en-US', {
+            weekday: 'long',
             day: '2-digit',
             month: 'short',
             year: 'numeric',
@@ -89,8 +101,16 @@ const EarlyCheckout = () => {
 
     const formatTime = (dateTimeString: string | null | undefined) => {
         if (!dateTimeString) return 'N/A';
-        const timePart = dateTimeString.split(' ').slice(1).join(' ');
-        return timePart || dateTimeString;
+        // Handle format: "2026-01-26 12:00:00 PM" - extract time part
+        const parts = dateTimeString.split(' ');
+        if (parts.length >= 3) {
+            // Return "12:00:00 PM" format or simplify to "12:00 PM"
+            const timePart = parts[1];
+            const ampm = parts[2];
+            const timeComponents = timePart.split(':');
+            return `${timeComponents[0]}:${timeComponents[1]} ${ampm}`;
+        }
+        return dateTimeString;
     };
 
     const getStatusStyle = (status: string) => {
@@ -170,18 +190,21 @@ const EarlyCheckout = () => {
         );
     };
 
-    const renderRequestItem = ({ item }: { item: EarlyLatePunchDetails }) => {
-        // Safe fallbacks for missing fields
-        const approvalStatus = item.ApprovalStatus || 'Pending';
+    const renderRequestItem = ({ item }: { item: any }) => {
+        // Safe fallbacks for missing fields - handle both API response formats
+        // API returns: approval_status, datetime, EarlyCheckoutReqMasterID
+        const approvalStatus = item.approval_status || item.ApprovalStatus || 'Pending';
         const statusStyle = getStatusStyle(approvalStatus);
-        const requestColor = item.CheckoutType === 'Early' ? '#FF9800' : '#4A90FF';
-        const isPending = approvalStatus?.toLowerCase().includes('pending');
-        const isApproved = approvalStatus?.toLowerCase().includes('approve');
-        const isRejected = approvalStatus?.toLowerCase().includes('reject');
+        const checkoutType = item.CheckoutType || 'Early'; // Default to Early for /earlycheckoutdetails/
+        const requestColor = checkoutType === 'Early' ? '#FF9800' : '#4A90FF';
+        const isPending = approvalStatus?.toLowerCase().includes('pending') || approvalStatus?.toLowerCase().includes('await');
+        const isApproved = approvalStatus?.toLowerCase().includes('approve') && !isPending;
+        const isRejected = approvalStatus?.toLowerCase().includes('reject') || approvalStatus?.toLowerCase().includes('disapprove');
 
         const approverName = item.workflow_list?.[0]?.Approve_name || 'Not Assigned';
-        const employeeName = item.EmployeeName || `Employee #${item.EmployeeID}`;
-        const dateTimeISO = item.DateTimeISO || item.DateTime || item.CreatedDate;
+        const employeeName = item.EmployeeName || item.EmployeeEmail || 'My Request';
+        // Handle datetime format: "2026-01-26 12:00:00 PM"
+        const dateTimeValue = item.datetime || item.DateTime || item.DateTimeISO || item.CreatedDate;
 
         const getApproverLabel = (): string => {
             if (isPending) return 'Pending with';
@@ -197,7 +220,7 @@ const EarlyCheckout = () => {
                     <View style={styles.headerLeft}>
                         <View style={[styles.avatarContainer, { backgroundColor: `${requestColor}15` }]}>
                             <Feather 
-                                name={item.CheckoutType === 'Early' ? 'log-out' : 'log-in'} 
+                                name={checkoutType === 'Early' ? 'log-out' : 'log-in'} 
                                 size={20} 
                                 color={requestColor} 
                             />
@@ -205,7 +228,7 @@ const EarlyCheckout = () => {
                         <View style={styles.headerTextContainer}>
                             <Text style={styles.employeeName}>{employeeName}</Text>
                             <Text style={styles.employeeId}>
-                                {item.CheckoutType === 'Early' ? 'Early Check-Out' : 'Late Check-In'}
+                                {checkoutType === 'Early' ? 'Early Check-Out' : 'Late Check-In'}
                             </Text>
                         </View>
                     </View>
@@ -225,12 +248,12 @@ const EarlyCheckout = () => {
                         <View style={styles.dateItem}>
                             <Feather name="calendar" size={14} color={colors.textSecondary} />
                             <Text style={styles.dateLabel}>Date:</Text>
-                            <Text style={styles.dateValue}>{formatDate(dateTimeISO)}</Text>
+                            <Text style={styles.dateValue}>{formatDate(dateTimeValue)}</Text>
                         </View>
                         <View style={styles.dateItem}>
                             <Feather name="clock" size={14} color={colors.textSecondary} />
                             <Text style={styles.dateLabel}>Time:</Text>
-                            <Text style={styles.dateValue}>{formatTime(item.DateTime)}</Text>
+                            <Text style={styles.dateValue}>{formatTime(dateTimeValue)}</Text>
                         </View>
                     </View>
 
@@ -321,7 +344,7 @@ const EarlyCheckout = () => {
                 <FlatList
                     data={requests}
                     renderItem={renderRequestItem}
-                    keyExtractor={(item) => item.EarlyLatePunchMasterID.toString()}
+                    keyExtractor={(item, index) => (item.EarlyCheckoutReqMasterID || item.EarlyLatePunchMasterID || index).toString()}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
                     refreshing={isRefreshing}
@@ -335,9 +358,9 @@ const EarlyCheckout = () => {
                 <ApprovalHistoryModal
                     visible={historyModalVisible}
                     onClose={() => setHistoryModalVisible(false)}
-                    tranId={selectedRequest.EarlyLatePunchMasterID}
-                    progId={6}
-                    employeeName={selectedRequest.EmployeeName || 'Unknown'}
+                    tranId={(selectedRequest as any).EarlyCheckoutReqMasterID || selectedRequest.EarlyLatePunchMasterID}
+                    progId={3}
+                    employeeName={selectedRequest.EmployeeName || 'My Request'}
                 />
             )}
         </SafeAreaView>

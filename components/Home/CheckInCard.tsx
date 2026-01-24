@@ -18,6 +18,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  AppState,
   Dimensions,
   PanResponder,
   Platform,
@@ -46,6 +47,17 @@ const BREAK_START_HOUR = 13;
 const BREAK_END_HOUR = 14;
 const TOTAL_WORKING_HOURS = 8;
 
+// Persist punch state so check-in/out details survive app restarts
+const CHECKIN_STORAGE_KEY = '@checkin_card_state_v2';
+
+type PersistedPunchState = {
+  punchType: 1 | 2 | 3;
+  punchInTime: string | null;
+  punchOutTime: string | null;
+  workingMinutes: number;
+  date: string; // YYYY-MM-DD for quick staleness checks
+};
+
 
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -58,6 +70,7 @@ interface CheckInCardProps {
   onLateEarlyCountChange?: (lateCount: number, earlyCount: number) => void;
   onStatusLoaded?: (status: PunchStatusResponse) => void;
   refreshKey?: number;
+  onRefreshRequest?: () => void; // Optional callback to trigger parent refresh
 }
 
 // ============ COMPONENT ============
@@ -66,6 +79,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   onLateEarlyCountChange,
   onStatusLoaded,
   refreshKey,
+  onRefreshRequest,
 }) => {
   const { colors, theme } = useTheme();
   const isDark = theme === 'dark';
@@ -112,6 +126,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const notificationOpacity = useRef(new Animated.Value(0)).current;
   const notificationScale = useRef(new Animated.Value(0.9)).current;
   const notificationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshRotation = useRef(new Animated.Value(0)).current; // For refresh button animation
+  const [isRefreshing, setIsRefreshing] = useState(false); // For manual refresh state
+  const persistedStateRef = useRef<PersistedPunchState | null>(null);
 
   // ============ STATE REFS ============
   const isCheckedInRef = useRef(false);
@@ -127,6 +144,10 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   const COOLDOWN_DISPLAY = `${Math.round(COOLDOWN_MS / 60000)} minute${COOLDOWN_MS >= 120000 ? 's' : ''}`; // Human-readable cooldown
   const isStateLocked = useRef(false); // Lock state changes during critical operations
   const stateLockTimeout = useRef<ReturnType<typeof setTimeout> | null>(null); // Cleanup ref for state lock timeout
+  const isFetchingRef = useRef(false); // Prevent overlapping fetches
+  const lastFetchTime = useRef<number>(0); // Throttle API calls
+  const FETCH_THROTTLE_MS = 5000; // Minimum 5 seconds between API calls
+  const hasHydratedRef = useRef(false); // Track if we've hydrated from storage
 
   useEffect(() => { isCheckedInRef.current = isCheckedIn; }, [isCheckedIn]);
   useEffect(() => { hasCheckedOutRef.current = hasCheckedOut; }, [hasCheckedOut]);
@@ -317,6 +338,38 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
            date.getDate() === today.getDate();
   }, []);
 
+  // Persist latest punch state so check-in/out info survives app restarts
+  const persistPunchState = useCallback(async (
+    type: 1 | 2 | 3,
+    inTime: string | null,
+    outTime: string | null,
+    workingMins: number
+  ) => {
+    try {
+      if (type === 3) {
+        persistedStateRef.current = null;
+        await AsyncStorage.removeItem(CHECKIN_STORAGE_KEY);
+        return;
+      }
+
+      const parsedBase = parsePunchTime(inTime || outTime || new Date().toISOString());
+      const dateStr = getLocalDateString(parsedBase || new Date());
+
+      const payload: PersistedPunchState = {
+        punchType: type,
+        punchInTime: inTime,
+        punchOutTime: outTime,
+        workingMinutes: workingMins || 0,
+        date: dateStr,
+      };
+
+      persistedStateRef.current = payload;
+      await AsyncStorage.setItem(CHECKIN_STORAGE_KEY, JSON.stringify(payload));
+    } catch (err) {
+      console.warn('⚠️ Failed to persist punch state', err);
+    }
+  }, [getLocalDateString, parsePunchTime]);
+
   // ============ HELPER: Apply state (unified) ============
   const applyState = useCallback((
     type: 1 | 2 | 3,
@@ -327,7 +380,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     console.log('🔄 Applying state:', { type, inTime, outTime, workingMins });
 
     switch (type) {
-      case 3: // Null/Nothing - not punched
+      case 3: {
         pan.setValue(0);
         colorAnim.setValue(0);
         progressAnim.setValue(0);
@@ -342,8 +395,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setPunchType(3);
         previousPunchType.current = 3;
         break;
-
-      case 1: // Checked In
+      }
+      case 1: {
         const parsedIn = parsePunchTime(inTime);
         console.log('Applying Check-In State:', { inTime, parsedIn });
         
@@ -353,7 +406,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setIsCheckedIn(true);
         setHasCheckedOut(false);
         setPunchInTime(inTime);
-        setPunchInDate(parsedIn); // Removed fallback to new Date() to avoid showing wrong time
+        setPunchInDate(parsedIn);
         setPunchOutTime(null);
         setPunchOutDate(null);
         setWorkingMinutes(workingMins);
@@ -364,12 +417,11 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           const progress = calculateWorkingHours(parsedIn) / TOTAL_WORKING_HOURS;
           progressAnim.setValue(progress);
         } else {
-            // If parsing failed, maybe just show progress 0?
-            progressAnim.setValue(0);
+          progressAnim.setValue(0);
         }
         break;
-
-      case 2: // Checked Out
+      }
+      case 2: {
         const parsedOut = parsePunchTime(outTime);
         const parsedIn2 = parsePunchTime(inTime);
 
@@ -392,8 +444,56 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         setPunchType(2);
         previousPunchType.current = 2;
         break;
+      }
     }
-  }, [pan, colorAnim, progressAnim, parsePunchTime, calculateWorkingHours]);
+
+    // Persist latest state so we can restore it on next app launch
+    void persistPunchState(type, inTime, outTime, workingMins);
+  }, [
+    pan,
+    colorAnim,
+    progressAnim,
+    parsePunchTime,
+    calculateWorkingHours,
+    persistPunchState,
+  ]);
+
+  // Hydrate from persisted state on mount (same-day only)
+  useEffect(() => {
+    const hydrateFromStorage = async () => {
+      if (hasHydratedRef.current) return; // Only hydrate once
+      hasHydratedRef.current = true;
+
+      try {
+        const raw = await AsyncStorage.getItem(CHECKIN_STORAGE_KEY);
+        if (!raw) {
+          console.log('💾 No cached state found');
+          return;
+        }
+
+        const cached: PersistedPunchState = JSON.parse(raw);
+        console.log('💾 Found cached state:', cached);
+        
+        if (cached.date !== getLocalDateString()) {
+          console.log('💾 Cached state is stale (different day), removing');
+          await AsyncStorage.removeItem(CHECKIN_STORAGE_KEY);
+          return;
+        }
+
+        persistedStateRef.current = cached;
+        console.log('💾 Applying cached state:', cached.punchType, cached.punchInTime, cached.punchOutTime);
+        applyState(cached.punchType, cached.punchInTime, cached.punchOutTime, cached.workingMinutes || 0);
+        setIsInitialized(true);
+        isInitializedRef.current = true;
+        setIsLoading(false);
+        setLastUpdated(new Date());
+      } catch (err) {
+        console.warn('⚠️ Failed to hydrate punch state', err);
+      }
+    };
+
+    hydrateFromStorage();
+  }, [applyState, getLocalDateString]);
 
   const formatTime = (date: Date | null): string => {
     if (!date) return '--:--';
@@ -416,10 +516,35 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   }, [parsePunchTime, isToday]);
 
   // ============ FETCH PUNCH STATUS (API-ONLY) ============
-  const fetchPunchStatus = useCallback(async (showLoading = true, isRefresh = false): Promise<void> => {
+  const fetchPunchStatus = useCallback(async (showLoading = true, isRefresh = false, forceRefresh = false): Promise<void> => {
     try {
-      if (showLoading && !isRefresh) setIsLoading(true);
+      // Prevent overlapping fetches
+      if (isFetchingRef.current && !forceRefresh) {
+        console.log('⏳ Skipping fetch - already in flight');
+        return;
+      }
+
+      // Throttle API calls (except for force refresh)
+      const now = Date.now();
+      if (!forceRefresh && (now - lastFetchTime.current) < FETCH_THROTTLE_MS) {
+        console.log('⏳ Skipping fetch - throttled (last fetch was', Math.round((now - lastFetchTime.current) / 1000), 's ago)');
+        return;
+      }
+
+      isFetchingRef.current = true;
+      lastFetchTime.current = now;
+
+      const hasCachedState = persistedStateRef.current?.date === getLocalDateString();
+      if (showLoading && !isRefresh && !hasCachedState) setIsLoading(true);
       setError(null);
+
+      // If force refresh, clear state locks and cooldown
+      if (forceRefresh) {
+        console.log('🔄 FORCE REFRESH: Bypassing cooldown and state lock protections');
+        isStateLocked.current = false;
+        lastPunchTime.current = 0; // Reset cooldown
+        lastPunchAction.current = null;
+      }
 
       // Fetch from API
       const response: PunchStatusResponse = await getPunchStatus();
@@ -433,21 +558,46 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       let punchDateTime: string | null = null;
       let workingMins = 0;
       let punchInTimeStr: string | null = null;
+      let punchOutTimeStr: string | null = null; // NEW: Track punch out time separately
+
+      const cached = persistedStateRef.current;
 
       if (responseData.punch) {
         newType = (responseData.punch.PunchType ?? 3) as 1 | 2 | 3; // Default to 3 (null/nothing)
         punchDateTime = responseData.punch.PunchDateTimeISO || responseData.punch.PunchDateTime || null;
         workingMins = responseData.punch.WorkingMinutes || 0;
-        punchInTimeStr = responseData.punch.PunchInTime || null;
+        // FIXED: Properly extract PunchInTime - this is crucial for showing check-in time after checkout
+        punchInTimeStr = responseData.punch.PunchInTime || responseData.punch.PunchInTimeISO || null;
+        punchOutTimeStr = responseData.punch.PunchOutTime || responseData.punch.PunchOutTimeISO || null;
+        
+        // If PunchType is 2 (checked out) and PunchInTime is missing, try to derive from PunchDateTime if it's not the checkout time
+        if (newType === 2 && !punchInTimeStr && punchDateTime) {
+          // For checkout state, PunchDateTime is usually the checkout time, so we need PunchInTime from the API
+          console.log('⚠️ Checkout state but PunchInTime missing - check API response structure');
+        }
       } else {
         const flatData = responseData as any;
         newType = (flatData.PunchType ?? 3) as 1 | 2 | 3; // Default to 3 (null/nothing)
         punchDateTime = flatData.PunchDateTimeISO || flatData.PunchDateTime || null;
         workingMins = flatData.WorkingMinutes || 0;
-        punchInTimeStr = flatData.PunchInTime || null;
+        punchInTimeStr = flatData.PunchInTime || flatData.PunchInTimeISO || null;
+        punchOutTimeStr = flatData.PunchOutTime || flatData.PunchOutTimeISO || null;
       }
 
-      console.log('📡 API Response:', { newType, punchDateTime, punchInTimeStr, workingMins });
+      // If API checkout payload is missing check-in info, fallback to cached same-day data
+      if (newType === 2 && cached && cached.date === getLocalDateString()) {
+        if (!punchInTimeStr && cached.punchInTime) {
+          punchInTimeStr = cached.punchInTime;
+        }
+        if (!punchOutTimeStr && cached.punchOutTime) {
+          punchOutTimeStr = cached.punchOutTime;
+        }
+        if (!workingMins && cached.workingMinutes) {
+          workingMins = cached.workingMinutes;
+        }
+      }
+
+      console.log('📡 API Response:', { newType, punchDateTime, punchInTimeStr, punchOutTimeStr, workingMins });
       console.log('🔍 DEBUG - Full API responseData:', JSON.stringify(responseData, null, 2));
       console.log('🔍 DEBUG - Previous PunchType:', previousPunchType.current, '| New PunchType:', newType);
 
@@ -466,7 +616,8 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
       // If API returns checked-in (type 1) but data is not from today, treat as fresh day
       // BUT: Only reset if we're NOT currently checked in locally (to prevent auto-reset after user checks in)
-      if (newType === 1 && !apiDataIsFromToday) {
+      // SKIP this protection for force refresh - trust the API response
+      if (newType === 1 && !apiDataIsFromToday && !forceRefresh) {
         if (!isCheckedInRef.current) {
           // Safe to reset - user is not checked in locally
           console.log('🛡️ PROTECTION: API returned check-in from previous day - treating as fresh day');
@@ -479,22 +630,24 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           console.log('🛡️ PROTECTION: API returned old check-in data but user is CURRENTLY CHECKED IN - ignoring API response');
           setLastUpdated(new Date());
           setIsLoading(false);
+          isFetchingRef.current = false;
           return;
         }
       }
 
-      // ⚠️ STATE LOCK PROTECTION: Absolutely prevent state changes during lock period
-      if (isStateLocked.current) {
+      // ⚠️ STATE LOCK PROTECTION: Absolutely prevent state changes during lock period (unless force refresh)
+      if (isStateLocked.current && !forceRefresh) {
         console.log('🔒 STATE LOCKED: Ignoring ALL API responses during lock period');
         console.log(`   Current local state: ${previousPunchType.current}, API wants: ${newType}`);
         setLastUpdated(new Date());
         setIsLoading(false);
+        isFetchingRef.current = false;
         return;
       }
 
-      // ⚠️ COOLDOWN PROTECTION: Ignore API responses that conflict with recent punch action
+      // ⚠️ COOLDOWN PROTECTION: Ignore API responses that conflict with recent punch action (unless force refresh)
       const timeSinceLastPunch = Date.now() - lastPunchTime.current;
-      const isInCooldown = timeSinceLastPunch < COOLDOWN_MS;
+      const isInCooldown = timeSinceLastPunch < COOLDOWN_MS && !forceRefresh;
       
       if (isInCooldown && lastPunchAction.current === 'IN' && (newType === 2 || newType === 3)) {
         console.log('🛡️ PROTECTION: Ignoring conflicting API response (within cooldown period)');
@@ -502,6 +655,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         console.log(`   API returned PunchType: ${newType} but we just checked IN - ignoring`);
         setLastUpdated(new Date());
         setIsLoading(false);
+        isFetchingRef.current = false;
         return; // Don't apply this state change
       }
       
@@ -511,11 +665,12 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         console.log(`   API returned PunchType: ${newType} but we just checked OUT - ignoring`);
         setLastUpdated(new Date());
         setIsLoading(false);
+        isFetchingRef.current = false;
         return; // Don't apply this state change
       }
 
-      // ⚠️ LOCAL STATE PROTECTION: If we're currently checked in, don't auto-checkout OR auto-reset from API
-      if (isCheckedInRef.current && !hasCheckedOutRef.current && (newType === 2 || newType === 3)) {
+      // ⚠️ LOCAL STATE PROTECTION: If we're currently checked in, don't auto-checkout OR auto-reset from API (unless force refresh)
+      if (!forceRefresh && isCheckedInRef.current && !hasCheckedOutRef.current && (newType === 2 || newType === 3)) {
         // CRITICAL: Block BOTH checkout (type 2) AND reset (type 0) when checked in
         
         if (newType === 3) {
@@ -525,6 +680,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
           console.log(`   API wants to reset to: Not Punched (type ${newType})`);
           setLastUpdated(new Date());
           setIsLoading(false);
+          isFetchingRef.current = false;
           return;
         }
         
@@ -539,6 +695,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
               console.log('🛡️ PROTECTION: Ignoring stale/old checkout from API (checkout was more than 5 min ago or not from today)');
               setLastUpdated(new Date());
               setIsLoading(false);
+              isFetchingRef.current = false;
               return;
             }
           }
@@ -564,10 +721,15 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         applyState(3, null, null, 0); // Type 3 = not punched
       } else if (newType === 1) {
         // For check-in, punchDateTime is the check-in time
-        applyState(1, punchDateTime, null, workingMins);
+        // Also try punchInTimeStr in case API returns it differently
+        const checkInTime = punchInTimeStr || punchDateTime;
+        applyState(1, checkInTime, null, workingMins);
       } else if (newType === 2) {
-        // For check-out, punchInTimeStr is the check-in time, punchDateTime is the check-out time
-        applyState(2, punchInTimeStr, punchDateTime, workingMins);
+        // For check-out, punchInTimeStr is the check-in time, punchOutTimeStr or punchDateTime is the check-out time
+        const checkOutTime = punchOutTimeStr || punchDateTime;
+        // FIXED: Pass punchInTimeStr correctly to preserve check-in time after app restart
+        console.log('📥 Applying checkout state with PunchInTime:', punchInTimeStr, 'PunchOutTime:', checkOutTime);
+        applyState(2, punchInTimeStr, checkOutTime, workingMins);
       }
 
       if (!isInitializedRef.current) {
@@ -586,6 +748,7 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       }
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
   }, [
     onStatusLoaded,
@@ -593,12 +756,24 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     applyState,
     isApiResponseFromToday,
     parsePunchTime,
+    getLocalDateString,
   ]);
 
-  // Initial mount
+  // Initial mount - delay slightly to let hydration happen first
   useEffect(() => {
-    fetchPunchStatus(true);
-  }, [fetchPunchStatus]);
+    const timer = setTimeout(() => {
+      // Only fetch if we don't have valid cached state already applied
+      if (!persistedStateRef.current || persistedStateRef.current.date !== getLocalDateString()) {
+        console.log('🚀 Initial mount fetch (no valid cache)');
+        fetchPunchStatus(true);
+      } else {
+        console.log('🚀 Initial mount - using cached state, background refresh in 3s');
+        // Still do a background refresh after a delay
+        setTimeout(() => fetchPunchStatus(false, true), 3000);
+      }
+    }, 100); // Small delay to let hydration complete first
+    return () => clearTimeout(timer);
+  }, [fetchPunchStatus, getLocalDateString]);
 
   // Screen focus
   const isFirstFocus = useRef(true); // Track first focus to prevent double call on mount
@@ -622,6 +797,27 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       }
     }, [fetchPunchStatus, isInitialized])
   );
+
+  // Refresh when the app returns to the foreground so users don't need to force-close
+  useEffect(() => {
+    let lastActiveTime = Date.now();
+    
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active' && !isPunchingRef.current) {
+        const now = Date.now();
+        // Only refresh if app was in background for at least 10 seconds
+        if (now - lastActiveTime > 10000) {
+          console.log('📱 App returned to foreground after', Math.round((now - lastActiveTime) / 1000), 's');
+          fetchPunchStatus(false, true, false); // Not force refresh, let throttle work
+        }
+        lastActiveTime = now;
+      } else if (state === 'background') {
+        lastActiveTime = Date.now();
+      }
+    });
+
+    return () => sub.remove();
+  }, [fetchPunchStatus]);
 
   // Pull-to-refresh
   useEffect(() => {
@@ -1044,16 +1240,29 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   };
 
   const getSwipeText = (): string => {
-    if (hasCheckedOut) return 'Checked Out for Today ✓';
-    if (isCheckedIn) {
-      const remaining = TOTAL_WORKING_HOURS - completedWorkingHours;
-      if (remaining <= 0) return '🎉 Full Day! ← Swipe Left';
-      if (completedWorkingHours >= 4) {
-        const minsToFull = Math.ceil(remaining * 60);
-        return `Half-Day ✓ • ${minsToFull}m to Full`;
+    if (hasCheckedOut) {
+      // Show check-out time and date
+      if (punchOutDate) {
+        const date = punchOutDate.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+        });
+        const time = formatTime(punchOutDate);
+        return `Checked Out • ${date} at ${time} ✓`;
       }
-      const minsToHalf = Math.ceil((4 - completedWorkingHours) * 60);
-      return `${minsToHalf}m to Half-Day`;
+      return 'Checked Out for Today ✓';
+    }
+    if (isCheckedIn) {
+      // Show check-in time and date with swipe instruction
+      if (punchInDate) {
+        const date = punchInDate.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+        });
+        const time = formatTime(punchInDate);
+        return `In: ${date} at ${time} ← Swipe to Out`;
+      }
+      return '← Swipe Left to Check-Out';
     }
     return 'Swipe Right to Check-In →';
   };
@@ -1107,6 +1316,37 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
     if (diffHours < 24) return `${diffHours}h ago`;
     return lastUpdated.toLocaleDateString();
   };
+
+  // ============ MANUAL REFRESH HANDLER ============
+  const handleManualRefresh = useCallback(async () => {
+    if (isRefreshing || isPunchingRef.current) return;
+    
+    setIsRefreshing(true);
+    
+    // Animate the refresh icon
+    Animated.loop(
+      Animated.timing(refreshRotation, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      { iterations: 2 }
+    ).start();
+
+    try {
+      // Use forceRefresh=true to bypass cooldown and state lock protections
+      await fetchPunchStatus(false, true, true);
+      showNotification('success', 'Refreshed', 'Data updated successfully');
+    } catch (error) {
+      showNotification('error', 'Refresh Failed', 'Please try again');
+    } finally {
+      setIsRefreshing(false);
+      refreshRotation.setValue(0);
+    }
+    
+    // Also trigger parent refresh if callback provided
+    onRefreshRequest?.();
+  }, [isRefreshing, fetchPunchStatus, refreshRotation, showNotification, onRefreshRequest]);
 
   // ============ LOADING STATE ============
   if (isLoading && !isInitialized) {
@@ -1308,14 +1548,6 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
       )}
 
       <View style={styles.container}>
-      {lastUpdated && (
-        <View style={styles.lastUpdatedWrapper}>
-          <Feather name="clock" size={10} color={colors.textSecondary} />
-          <Text style={[styles.lastUpdated, { color: colors.textSecondary }]}>
-            {formatLastUpdated()}
-          </Text>
-        </View>
-      )}
 
       <View style={[
         styles.card,
@@ -1475,7 +1707,9 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 16, paddingVertical: 8 },
-  lastUpdatedWrapper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginBottom: 8, paddingRight: 4 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 4 },
+  refreshButton: { padding: 8, borderRadius: 8 },
+  lastUpdatedWrapper: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   lastUpdated: { fontSize: 11, fontWeight: '500' },
   card: { borderRadius: 24, overflow: 'hidden' },
   loadingCard: { minHeight: 160, justifyContent: 'center', alignItems: 'center', gap: 16 },

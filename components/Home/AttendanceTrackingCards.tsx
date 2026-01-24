@@ -1,10 +1,11 @@
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { getLateEarlyCount } from '@/lib/api';
-import { createEarlyLatePunch, getLateCheckinCount } from '@/lib/earlyLatePunch';
+import { getLateCheckinCount, submitEarlyCheckoutRequest, submitLateCheckinRequest } from '@/lib/earlyLatePunch';
 import Feather from '@expo/vector-icons/Feather';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface AttendanceTrackingCardsProps {
     onCountsChange?: (lateCount: number, earlyCount: number) => void;
@@ -18,6 +19,12 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
     const [selectedType, setSelectedType] = useState<'Early' | 'Late'>('Early');
     const [reason, setReason] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // Date and Time picker states
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [selectedTime, setSelectedTime] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false);
     
     // Manage counts internally
     const [lateCheckIns, setLateCheckIns] = useState(0);
@@ -101,6 +108,44 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
         setIsRefreshing(false);
     };
 
+    // Format date for display
+    const formatDate = (date: Date): string => {
+        return date.toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        });
+    };
+
+    // Format time for display
+    const formatTime = (time: Date): string => {
+        return time.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+        });
+    };
+
+    // Handle date change
+    const onDateChange = (event: DateTimePickerEvent, date?: Date) => {
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
+        if (date) {
+            setSelectedDate(date);
+        }
+    };
+
+    // Handle time change
+    const onTimeChange = (event: DateTimePickerEvent, time?: Date) => {
+        if (Platform.OS === 'android') {
+            setShowTimePicker(false);
+        }
+        if (time) {
+            setSelectedTime(time);
+        }
+    };
+
     const handleSubmit = async () => {
         if (!reason.trim()) {
             Alert.alert('Error', 'Please enter a reason');
@@ -110,11 +155,23 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
         try {
             setIsSubmitting(true);
 
-            // Get current date/time in ISO format
-            const now = new Date();
-            const dateTime = now.toISOString().slice(0, 19); // Remove milliseconds and Z
+            // Combine selected date and time
+            const combinedDateTime = new Date(
+                selectedDate.getFullYear(),
+                selectedDate.getMonth(),
+                selectedDate.getDate(),
+                selectedTime.getHours(),
+                selectedTime.getMinutes(),
+                selectedTime.getSeconds()
+            );
+            const dateTime = combinedDateTime.toISOString().slice(0, 19); // Remove milliseconds and Z
 
-            await createEarlyLatePunch(dateTime, selectedType, reason.trim());
+            // Use separate endpoints for Early Checkout and Late Arrival
+            if (selectedType === 'Early') {
+                await submitEarlyCheckoutRequest(dateTime, reason.trim());
+            } else {
+                await submitLateCheckinRequest(dateTime, reason.trim());
+            }
 
             Alert.alert(
                 'Success',
@@ -123,6 +180,8 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
                     text: 'OK', onPress: () => {
                         setShowModal(false);
                         setReason('');
+                        setSelectedDate(new Date());
+                        setSelectedTime(new Date());
                         // Refresh counts after recording
                         setTimeout(() => fetchCounts(), 1500);
                     }
@@ -142,66 +201,39 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.container}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={isRefreshing}
-                            onRefresh={handleRefresh}
-                            tintColor={colors.primary}
-                        />
-                    }
                 >
                     <TouchableOpacity
                         style={styles.card}
                         onPress={() => setShowModal(true)}
                         activeOpacity={0.7}
                     >
-                        <Text style={styles.label}>Early / Late Punch</Text>
-                        <Feather name="clock" size={32} color={colors.warning} />
-                        <Text style={styles.actionText}>Tap to Record</Text>
+                        <Text style={styles.label}>Early/Late</Text>
+                        <Text style={[styles.actionText, { color: colors.warning }]}>Record →</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.card}
-                        onPress={handleRefresh}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={styles.label}>Late Check In</Text>
-                        <Feather
-                            name="log-in"
-                            size={32}
-                            color={lateCheckIns >= 5 ? '#FF5252' : lateCheckIns >= 3 ? '#FFA726' : '#4CAF50'}
-                        />
+                    <View style={styles.card}>
+                        <Text style={styles.label}>Late In</Text>
                         <Text style={[
                             styles.count,
                             { color: lateCheckIns >= 5 ? '#FF5252' : lateCheckIns >= 3 ? '#FFA726' : '#4CAF50' }
                         ]}>
                             {lateCheckIns}/5
                         </Text>
-                    </TouchableOpacity>
+                    </View>
 
-                    <TouchableOpacity
-                        style={styles.card}
-                        onPress={handleRefresh}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={styles.label}>Early Check Out</Text>
-                        <Feather
-                            name="log-out"
-                            size={32}
-                            color={earlyCheckOuts >= 5 ? '#FF5252' : earlyCheckOuts >= 3 ? '#FFA726' : '#4CAF50'}
-                        />
+                    <View style={styles.card}>
+                        <Text style={styles.label}>Early Out</Text>
                         <Text style={[
                             styles.count,
                             { color: earlyCheckOuts >= 5 ? '#FF5252' : earlyCheckOuts >= 3 ? '#FFA726' : '#4CAF50' }
                         ]}>
                             {earlyCheckOuts}/5
                         </Text>
-                    </TouchableOpacity>
+                    </View>
 
                     <View style={styles.card}>
                         <Text style={styles.label}>Half Day</Text>
-                        <Feather name="calendar" size={32} color={colors.primary} />
-                        <Text style={styles.count}>0</Text>
+                        <Text style={[styles.count, { color: colors.primary }]}>0</Text>
                     </View>
                 </ScrollView>
             </View>
@@ -210,37 +242,39 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
             <Modal
                 visible={showModal}
                 transparent
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowModal(false)}
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Record Early/Late Punch</Text>
-                            <TouchableOpacity onPress={() => setShowModal(false)}>
-                                <Feather name="x" size={24} color={colors.text} />
+                            <Text style={styles.modalTitle}>Record Punch</Text>
+                            <TouchableOpacity 
+                                style={styles.closeButton}
+                                onPress={() => setShowModal(false)}
+                            >
+                                <Feather name="x" size={20} color={colors.textSecondary} />
                             </TouchableOpacity>
                         </View>
 
                         <ScrollView showsVerticalScrollIndicator={false}>
-                            {/* Type Selection */}
-                            <Text style={styles.sectionLabel}>Type</Text>
+                            {/* Type Selection - Compact Pills */}
                             <View style={styles.typeContainer}>
                                 <Pressable
                                     style={[
-                                        styles.typeButton,
-                                        selectedType === 'Early' && styles.typeButtonActive,
+                                        styles.typePill,
+                                        selectedType === 'Early' && styles.typePillActive,
                                     ]}
                                     onPress={() => setSelectedType('Early')}
                                 >
                                     <Feather
                                         name="log-out"
-                                        size={20}
-                                        color={selectedType === 'Early' ? '#fff' : colors.text}
+                                        size={16}
+                                        color={selectedType === 'Early' ? '#fff' : colors.textSecondary}
                                     />
                                     <Text style={[
-                                        styles.typeButtonText,
-                                        selectedType === 'Early' && styles.typeButtonTextActive,
+                                        styles.typePillText,
+                                        selectedType === 'Early' && styles.typePillTextActive,
                                     ]}>
                                         Early Checkout
                                     </Text>
@@ -248,35 +282,59 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
 
                                 <Pressable
                                     style={[
-                                        styles.typeButton,
-                                        selectedType === 'Late' && styles.typeButtonActive,
+                                        styles.typePill,
+                                        selectedType === 'Late' && styles.typePillActive,
                                     ]}
                                     onPress={() => setSelectedType('Late')}
                                 >
                                     <Feather
                                         name="log-in"
-                                        size={20}
-                                        color={selectedType === 'Late' ? '#fff' : colors.text}
+                                        size={16}
+                                        color={selectedType === 'Late' ? '#fff' : colors.textSecondary}
                                     />
                                     <Text style={[
-                                        styles.typeButtonText,
-                                        selectedType === 'Late' && styles.typeButtonTextActive,
+                                        styles.typePillText,
+                                        selectedType === 'Late' && styles.typePillTextActive,
                                     ]}>
                                         Late Arrival
                                     </Text>
                                 </Pressable>
                             </View>
 
-                            {/* Reason Input */}
-                            <Text style={styles.sectionLabel}>Reason *</Text>
+                            {/* Date & Time Row */}
+                            <View style={styles.dateTimeRow}>
+                                <TouchableOpacity
+                                    style={styles.dateTimeBox}
+                                    onPress={() => setShowDatePicker(true)}
+                                >
+                                    <Feather name="calendar" size={18} color={colors.primary} />
+                                    <View style={styles.dateTimeInfo}>
+                                        <Text style={styles.dateTimeLabel}>Date</Text>
+                                        <Text style={styles.dateTimeValue}>{formatDate(selectedDate)}</Text>
+                                    </View>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.dateTimeBox}
+                                    onPress={() => setShowTimePicker(true)}
+                                >
+                                    <Feather name="clock" size={18} color={colors.primary} />
+                                    <View style={styles.dateTimeInfo}>
+                                        <Text style={styles.dateTimeLabel}>Time</Text>
+                                        <Text style={styles.dateTimeValue}>{formatTime(selectedTime)}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Reason Input - Compact */}
                             <TextInput
                                 style={styles.textInput}
-                                placeholder="Enter reason (e.g., Personal work, Medical appointment)"
+                                placeholder="Enter reason..."
                                 placeholderTextColor={colors.textTertiary}
                                 value={reason}
                                 onChangeText={setReason}
                                 multiline
-                                numberOfLines={4}
+                                numberOfLines={3}
                                 textAlignVertical="top"
                             />
 
@@ -290,10 +348,10 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
                                 disabled={isSubmitting}
                             >
                                 {isSubmitting ? (
-                                    <ActivityIndicator color="#fff" />
+                                    <ActivityIndicator color="#fff" size="small" />
                                 ) : (
                                     <>
-                                        <Feather name="check" size={20} color="#fff" />
+                                        <Feather name="check" size={18} color="#fff" />
                                         <Text style={styles.submitButtonText}>Submit</Text>
                                     </>
                                 )}
@@ -301,143 +359,240 @@ const AttendanceTrackingCards: React.FC<AttendanceTrackingCardsProps> = ({ onCou
                         </ScrollView>
                     </View>
                 </View>
+
+                {/* Date Picker Modal - iOS only */}
+                {Platform.OS === 'ios' && showDatePicker && (
+                    <Modal transparent animationType="fade" visible={showDatePicker}>
+                        <Pressable 
+                            style={styles.pickerOverlay} 
+                            onPress={() => setShowDatePicker(false)}
+                        >
+                            <Pressable style={styles.pickerModal}>
+                                <View style={styles.pickerHeader}>
+                                    <Text style={styles.pickerTitle}>Select Date</Text>
+                                    <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                        <Text style={styles.pickerDoneText}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker
+                                    value={selectedDate}
+                                    mode="date"
+                                    display="inline"
+                                    onChange={onDateChange}
+                                    maximumDate={new Date()}
+                                    style={styles.picker}
+                                />
+                            </Pressable>
+                        </Pressable>
+                    </Modal>
+                )}
+
+                {/* Time Picker Modal - iOS only */}
+                {Platform.OS === 'ios' && showTimePicker && (
+                    <Modal transparent animationType="fade" visible={showTimePicker}>
+                        <Pressable 
+                            style={styles.pickerOverlay} 
+                            onPress={() => setShowTimePicker(false)}
+                        >
+                            <Pressable style={styles.pickerModal}>
+                                <View style={styles.pickerHeader}>
+                                    <Text style={styles.pickerTitle}>Select Time</Text>
+                                    <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                                        <Text style={styles.pickerDoneText}>Done</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <DateTimePicker
+                                    value={selectedTime}
+                                    mode="time"
+                                    display="spinner"
+                                    onChange={onTimeChange}
+                                    style={styles.picker}
+                                />
+                            </Pressable>
+                        </Pressable>
+                    </Modal>
+                )}
             </Modal>
+
+            {/* Android Date Picker - Must be outside Modal */}
+            {Platform.OS === 'android' && showDatePicker && (
+                <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display="default"
+                    onChange={(event, date) => {
+                        setShowDatePicker(false);
+                        if (event.type === 'set' && date) {
+                            setSelectedDate(date);
+                        }
+                    }}
+                    maximumDate={new Date()}
+                />
+            )}
+
+            {/* Android Time Picker - Must be outside Modal */}
+            {Platform.OS === 'android' && showTimePicker && (
+                <DateTimePicker
+                    value={selectedTime}
+                    mode="time"
+                    display="default"
+                    onChange={(event, time) => {
+                        setShowTimePicker(false);
+                        if (event.type === 'set' && time) {
+                            setSelectedTime(time);
+                        }
+                    }}
+                />
+            )}
         </>
     );
 };
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
     wrapper: {
-        marginTop: 10,
+        marginTop: 8,
     },
     container: {
         paddingHorizontal: 16,
-        paddingVertical: 5,
-        gap: 10,
+        paddingVertical: 4,
+        gap: 8,
     },
     card: {
-        width: 120,
+        width: 80,
         alignItems: 'center',
-        justifyContent: 'space-between',
-        height: 130,
+        justifyContent: 'center',
+        height: 60,
         borderRadius: 12,
-        padding: 12,
-        marginBottom: 10,
-        borderWidth: 1,
+        padding: 8,
         backgroundColor: colors.card,
+        borderWidth: 1,
         borderColor: colors.border,
         shadowColor: colors.shadow,
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 4,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 2,
+        gap: 4,
     },
     label: {
-        fontSize: 13,
+        fontSize: 11,
         fontWeight: '600',
-        color: colors.text,
+        color: colors.textSecondary,
         textAlign: 'center',
-        marginBottom: 8,
-        width: '100%',
-        paddingHorizontal: 9,
     },
     count: {
-        fontSize: 20,
+        fontSize: 14,
         fontWeight: '700',
-        color: colors.text,
-        marginTop: 8,
-        width: '100%',
-        paddingHorizontal: 9,
         textAlign: 'center',
     },
     actionText: {
-        fontSize: 11,
-        fontWeight: '500',
-        color: colors.warning,
-        marginTop: 8,
-        width: '100%',
-        paddingHorizontal: 9,
+        fontSize: 10,
+        fontWeight: '600',
+        textAlign: 'center',
     },
-    // Modal Styles
+    // Modal Styles - Modern & Compact
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+        justifyContent: 'flex-end',
     },
     modalContent: {
         backgroundColor: colors.card,
-        borderRadius: 20,
-        padding: 24,
-        width: '100%',
-        maxWidth: 400,
-        maxHeight: '80%',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 16,
-        elevation: 8,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 20,
+        paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+        maxHeight: '60%',
     },
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 16,
     },
     modalTitle: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '700',
         color: colors.text,
     },
-    sectionLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: colors.text,
-        marginBottom: 12,
-        marginTop: 16,
+    closeButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: colors.background,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     typeContainer: {
         flexDirection: 'row',
-        gap: 12,
+        gap: 10,
+        marginBottom: 16,
     },
-    typeButton: {
+    typePill: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: colors.border,
+        gap: 6,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 10,
         backgroundColor: colors.background,
+        borderWidth: 1.5,
+        borderColor: colors.border,
     },
-    typeButtonActive: {
+    typePillActive: {
         backgroundColor: colors.primary,
         borderColor: colors.primary,
     },
-    typeButtonText: {
+    typePillText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.textSecondary,
+    },
+    typePillTextActive: {
+        color: '#fff',
+    },
+    dateTimeRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 12,
+    },
+    dateTimeBox: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: colors.background,
+        borderRadius: 10,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    dateTimeInfo: {
+        flex: 1,
+    },
+    dateTimeLabel: {
+        fontSize: 11,
+        fontWeight: '500',
+        color: colors.textTertiary,
+        marginBottom: 2,
+    },
+    dateTimeValue: {
         fontSize: 14,
         fontWeight: '600',
         color: colors.text,
     },
-    typeButtonTextActive: {
-        color: '#fff',
-    },
     textInput: {
         backgroundColor: colors.background,
-        borderRadius: 12,
+        borderRadius: 10,
         padding: 12,
         fontSize: 14,
         color: colors.text,
         borderWidth: 1,
         borderColor: colors.border,
-        minHeight: 100,
+        minHeight: 70,
+        marginBottom: 12,
     },
     submitButton: {
         flexDirection: 'row',
@@ -446,16 +601,48 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         gap: 8,
         backgroundColor: colors.primary,
         borderRadius: 12,
-        padding: 16,
-        marginTop: 24,
+        padding: 14,
     },
     submitButtonDisabled: {
         opacity: 0.6,
     },
     submitButtonText: {
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '600',
         color: '#fff',
+    },
+    // Picker Modal Styles
+    pickerOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    pickerModal: {
+        backgroundColor: colors.card,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    },
+    pickerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    pickerTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: colors.text,
+    },
+    pickerDoneText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: colors.primary,
+    },
+    picker: {
+        height: Platform.OS === 'ios' ? 340 : 200,
     },
 });
 

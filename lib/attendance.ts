@@ -32,7 +32,9 @@ export interface PunchStatusResponse {
             TotalBreakTime?: string;
             // Add these for tracking both times
             PunchInTime?: string;
+            PunchInTimeISO?: string;
             PunchOutTime?: string;
+            PunchOutTimeISO?: string;
         };
         today: {
             date: string;

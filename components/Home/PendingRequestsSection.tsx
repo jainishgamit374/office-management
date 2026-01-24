@@ -8,7 +8,7 @@ import {
     approveAny,
     BASE,
     disapproveAny,
-    getEarlyCheckoutDetails,
+    getEarlyCheckoutApprovalHistory,
     getLeaveApprovals,
     getMissPunchApprovalHistory,
     getWfhApprovals
@@ -237,7 +237,7 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({ refresh
       const [leaveRes, missRes, earlyRes, wfhRes, lateArrivalRes] = await Promise.allSettled([
         getLeaveApprovals(),
         getMissPunchApprovalHistory(),
-        getEarlyCheckoutDetails(),
+        getEarlyCheckoutApprovalHistory(),
         getWfhApprovals(),
         getExpectedLateArrivals(), // Use the new endpoint
       ]);
@@ -291,21 +291,21 @@ const PendingRequestsSection: React.FC<PendingRequestsSectionProps> = ({ refresh
         setMissPunches([]);
       }
 
-      // Early checkout approvals (ProgramID 3)
+      // Early checkout approvals (ProgramID 3) - Using /earlycheckoutapprovallist/
       if (earlyRes.status === 'fulfilled' && earlyRes.value.status === 'Success') {
-        const data = earlyRes.value.data || [];
-        console.log('✅ Early Checkout Data:', data.length);
+        const data = earlyRes.value.approval_requests || [];
+        console.log('✅ Early Checkout Approval List Data:', data.length);
         setEarlyCheckouts(
           data
-            .filter((i) => i.ApprovalStatusMasterID === 3 || i.approval_status === 'Pending') // Check both possible status fields
+            .filter((i) => i.ApprovalStatus === 3) // Only show pending requests (ApprovalStatus 3 = Pending)
             .map((i) => ({
-              id: i.EarlyCheckoutReqMasterID,
-              programId: 3,
-              employeeName: i.workflow_list?.[0]?.Approve_name || 'Unknown',
+              id: i.TranID,
+              programId: i.ProgramID,
+              employeeName: i.EmployeeName, // Show employee name who made the request
               title: 'Early Checkout',
-              subtitle: i.Reason,
-              status: i.approval_status,
-              date: i.datetime,
+              subtitle: i.Reason || 'No reason provided',
+              status: 'Awaiting Approve',
+              date: i.DateTime,
             }))
         );
       } else {

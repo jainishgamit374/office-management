@@ -63,18 +63,15 @@ const NotificationBanner: React.FC = () => {
         <View style={styles.container}>
             <Carousel
                 key={carouselKey} // Force re-render when notifications change
-                loop={visibleNotifications.length > 1} // Only loop if more than 1 notification
+                loop={false} // Disable infinite scrolling
                 width={SCREEN_WIDTH}
-                height={160}
-                autoPlay={visibleNotifications.length > 1}
-                autoPlayInterval={5000}
+                height={120}
+                autoPlay={false} // Disable auto-play
                 data={visibleNotifications}
-                scrollAnimationDuration={1000}
-                mode="parallax"
-                modeConfig={{
-                    parallaxScrollingScale: 0.9,
-                    parallaxScrollingOffset: 50,
-                }}
+                scrollAnimationDuration={500}
+                snapEnabled={true}
+                pagingEnabled={true}
+                overscrollEnabled={false}
                 renderItem={({ item }) => (
                     <View style={styles.cardWrapper}>
                         <NotificationCard
@@ -92,14 +89,15 @@ const NotificationBanner: React.FC = () => {
 
 const styles = StyleSheet.create({
     container: {
-        height: 120,
+        height: 100,
         justifyContent: 'center',
+        paddingVertical: 8,
     },
     cardWrapper: {
         flex: 1,
         justifyContent: 'center',
-        paddingHorizontal: 0,
-        marginHorizontal: 2,
+        paddingHorizontal: 12,
+        marginHorizontal: 4,
     },
 });
 

@@ -1,5 +1,6 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { KeyboardTypeOptions, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardTypeOptions, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface CustomInputProps {
     placeholder?: string;
@@ -28,28 +29,50 @@ const Custominputs = ({
 }: CustomInputProps) => {
 
     const [isFocused, setIsFocused] = useState(false);
+    const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+
+    const togglePasswordVisibility = () => {
+        setIsPasswordVisible(!isPasswordVisible);
+    };
 
     return (
         <View style={styles.container}>
             {label && <Text style={styles.label}>{label}</Text>}
-            <TextInput
-                autoCapitalize={autoCapitalize}
-                autoCorrect={false}
-                value={value}
-                onChangeText={onChangeText}
-                secureTextEntry={secureTextEntry}
-                keyboardType={keyboardType}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                placeholder={placeholder}
-                placeholderTextColor="#888"
-                maxLength={maxLength}
-                style={[
-                    styles.input,
-                    isFocused ? styles.inputFocused : styles.inputBlurred,
-                    error ? styles.inputError : null
-                ]}
-            />
+            <View style={styles.inputWrapper}>
+                <TextInput
+                    autoCapitalize={autoCapitalize}
+                    autoCorrect={false}
+                    value={value}
+                    onChangeText={onChangeText}
+                    secureTextEntry={secureTextEntry && !isPasswordVisible}
+                    keyboardType={keyboardType}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    placeholder={placeholder}
+                    placeholderTextColor="#888"
+                    maxLength={maxLength}
+                    style={[
+                        styles.input,
+                        secureTextEntry && styles.inputWithIcon,
+                        isFocused ? styles.inputFocused : styles.inputBlurred,
+                        error ? styles.inputError : null
+                    ]}
+                />
+                {secureTextEntry && (
+                    <TouchableOpacity
+                        style={styles.eyeIcon}
+                        onPress={togglePasswordVisibility}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Feather
+                            name={isPasswordVisible ? 'eye' : 'eye-off'}
+                            size={20}
+                            color="#6B7280"
+                        />
+                    </TouchableOpacity>
+                )}
+            </View>
             {error && <Text style={styles.errorText}>{error}</Text>}
         </View>
     )
@@ -65,6 +88,10 @@ const styles = StyleSheet.create({
         color: '#374151',
         marginBottom: 8,
     },
+    inputWrapper: {
+        position: 'relative',
+        width: '100%',
+    },
     input: {
         width: '100%',
         paddingHorizontal: 16,
@@ -74,6 +101,9 @@ const styles = StyleSheet.create({
         backgroundColor: '#F9FAFB',
         color: '#111827',
     },
+    inputWithIcon: {
+        paddingRight: 48,
+    },
     inputBlurred: {
         borderColor: '#D1D5DB',
     },
@@ -82,6 +112,12 @@ const styles = StyleSheet.create({
     },
     inputError: {
         borderColor: '#EF4444',
+    },
+    eyeIcon: {
+        position: 'absolute',
+        right: 14,
+        top: '50%',
+        transform: [{ translateY: -10 }],
     },
     errorText: {
         fontSize: 12,

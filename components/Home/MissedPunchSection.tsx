@@ -167,9 +167,19 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
   const openSubmitModalForRequest = (punch: MissedPunch) => {
     setFormType(punch.type);                       // check-in/check-out
     const dateObj = new Date(punch.date);
+    
+    // Set default time based on punch type
+    // Check-In default: 10:00 AM, Check-Out default: 6:30 PM
+    if (punch.type === 'check-in') {
+      dateObj.setHours(10, 0, 0, 0); // 10:00 AM
+    } else {
+      dateObj.setHours(18, 30, 0, 0); // 6:30 PM
+    }
+    
+    const iso = dateObj.toISOString();
     setSelectedDate(dateObj);
-    setFormDateTimeISO(punch.date);                // prefill
-    setFormDateTimeLabel(formatDateTime(punch.date));
+    setFormDateTimeISO(iso);
+    setFormDateTimeLabel(formatDateTime(iso));
     setReason('');                                  // user must write new reason
     setShowModal(true);
   };
@@ -244,50 +254,68 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
   return (
     <>
       <View style={styles.container}>
-        <View style={styles.mainTextContainer}>
-          <Text style={styles.mainText}>
-            Missed Punches {totalCount > 0 && `(${totalCount})`}
-          </Text>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={styles.iconBadge}>
+              <Feather name="alert-circle" size={14} color="#fff" />
+            </View>
+            <Text style={styles.headerText}>Missed Punches</Text>
+          </View>
+          {totalCount > 0 && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{totalCount}</Text>
+            </View>
+          )}
         </View>
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={colors.primary} />
           </View>
         ) : (
-          <View style={styles.textContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollViewContent}>
-              {/* Missing Punch-Outs */}
-              {missingPunchOuts.map((punchOut, index) => (
-                <TouchableOpacity
-                  key={`missing-${index}`}
-                  style={styles.warningContainer}
-                  onPress={() => openSubmitModalForMissingOut(punchOut)}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="alert-circle" size={16} color="#FF5252" style={styles.icon} />
-                  <Text style={styles.warningText}>{punchOut.dateFormatted}</Text>
-                  <Text style={styles.warningTypeText}>Missing Punch-Out</Text>
-                  <Text style={styles.tapHint}>Tap to submit</Text>
-                </TouchableOpacity>
-              ))}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            contentContainerStyle={styles.scrollContent}
+          >
+            {/* Missing Punch-Outs */}
+            {missingPunchOuts.map((punchOut, index) => (
+              <TouchableOpacity
+                key={`missing-${index}`}
+                style={styles.cardWarning}
+                onPress={() => openSubmitModalForMissingOut(punchOut)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.cardRow}>
+                  <Feather name="log-out" size={14} color="#EF4444" />
+                  <Text style={styles.cardDateWarning}>{punchOut.dateFormatted}</Text>
+                </View>
+                <Text style={styles.cardTypeWarning}>Missing Out</Text>
+              </TouchableOpacity>
+            ))}
 
-              {/* Missed Punch Requests */}
-              {missedPunches.map((punch, index) => (
-                <TouchableOpacity
-                  key={`request-${index}`}
-                  style={styles.textContainerRight}
-                  onPress={() => openSubmitModalForRequest(punch)}
-                  activeOpacity={0.7}
-                >
-                  <Feather name={punch.type === 'check-in' ? 'log-in' : 'log-out'} size={16} color={colors.primary} style={styles.icon} />
-                  <Text style={styles.text}>{punch.dateFormatted}</Text>
-                  <Text style={styles.typeText}>{punch.type === 'check-in' ? 'Check-In' : 'Check-Out'}</Text>
-                  <Text style={styles.tapHint}>Tap to submit</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
+            {/* Missed Punch Requests */}
+            {missedPunches.map((punch, index) => (
+              <TouchableOpacity
+                key={`request-${index}`}
+                style={styles.card}
+                onPress={() => openSubmitModalForRequest(punch)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.cardRow}>
+                  <Feather 
+                    name={punch.type === 'check-in' ? 'log-in' : 'log-out'} 
+                    size={14} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.cardDate}>{punch.dateFormatted}</Text>
+                </View>
+                <Text style={styles.cardType}>
+                  {punch.type === 'check-in' ? 'Check-In' : 'Check-Out'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         )}
       </View>
 
@@ -424,68 +452,103 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
 const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: {
-      flexDirection: 'column',
-      alignItems: 'flex-start',
-      padding: 16,
-      backgroundColor: colors.primary,
+      backgroundColor: colors.card,
       marginHorizontal: 16,
       marginTop: 12,
-      borderRadius: 16,
-      gap: 15,
-    },
-    mainTextContainer: { width: '100%', alignItems: 'flex-start' },
-    mainText: { fontSize: 16, fontWeight: '600', color: '#fff' },
-
-    loadingContainer: { paddingVertical: 20, alignItems: 'center' },
-
-    textContainer: { width: '100%' },
-    scrollViewContent: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 5 },
-
-    textContainerRight: {
-      backgroundColor: colors.card,
       borderRadius: 12,
-      padding: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-      minWidth: 150,
-      gap: 5,
-    },
-    warningContainer: {
-      backgroundColor: '#FFEBEE',
-      borderRadius: 12,
-      padding: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-      minWidth: 150,
-      gap: 5,
+      padding: 12,
       borderWidth: 1,
-      borderColor: '#FF5252',
+      borderColor: colors.border,
     },
-    icon: { marginBottom: 4 },
-
-    text: {
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    iconBadge: {
+      width: 24,
+      height: 24,
+      borderRadius: 6,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerText: {
       fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    countBadge: {
+      backgroundColor: colors.primary + '15',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+    },
+    countText: {
+      fontSize: 12,
       fontWeight: '700',
       color: colors.primary,
-      textAlign: 'center',
     },
-    typeText: {
+    loadingContainer: {
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    scrollContent: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    card: {
+      backgroundColor: colors.background,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      minWidth: 120,
+    },
+    cardWarning: {
+      backgroundColor: '#FEF2F2',
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderWidth: 1,
+      borderColor: '#FECACA',
+      minWidth: 120,
+    },
+    cardRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    cardDate: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    cardDateWarning: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#DC2626',
+    },
+    cardType: {
       fontSize: 11,
-      fontWeight: '600',
+      fontWeight: '500',
       color: colors.textSecondary,
-      textAlign: 'center',
-      textTransform: 'uppercase',
+      marginTop: 4,
+      marginLeft: 22,
     },
-
-    warningText: { fontSize: 14, fontWeight: '700', color: '#FF5252', textAlign: 'center' },
-    warningTypeText: { fontSize: 11, fontWeight: '700', color: '#D32F2F', textAlign: 'center', textTransform: 'uppercase' },
-
-    tapHint: {
-      marginTop: 6,
-      fontSize: 10,
-      fontWeight: '600',
-      color: colors.textSecondary,
-      opacity: 0.8,
+    cardTypeWarning: {
+      fontSize: 11,
+      fontWeight: '500',
+      color: '#EF4444',
+      marginTop: 4,
+      marginLeft: 22,
     },
 
     // Modal

@@ -30,6 +30,14 @@
     "plugins": [
       "expo-router",
       [
+        "expo-navigation-bar",
+        {
+          "position": "absolute",
+          "visibility": "hidden",
+          "behavior": "overlay-swipe"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/Logo.jpg",

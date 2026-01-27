@@ -149,12 +149,12 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
     tabBarContainer: {
         position: 'absolute',
-        bottom: 22,
+        bottom: Platform.OS === 'android' ? 12 : 22,
         left: 20,
         right: 20,
-        height: 80,
+        height: 70,
         backgroundColor: '#fff',
-        borderRadius: 50,
+        borderRadius: 35,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-around',

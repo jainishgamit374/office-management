@@ -45,10 +45,21 @@
 // app/_layout.tsx
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import * as NavigationBar from 'expo-navigation-bar';
 import { Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 
 export default function RootLayout() {
+  useEffect(() => {
+    // Hide Android navigation bar for immersive experience
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+      NavigationBar.setBehaviorAsync('overlay-swipe');
+    }
+  }, []);
+
   return (
     <ThemeProvider>
       <AuthProvider>

@@ -1,8 +1,13 @@
 import CustomModal from '@/components/CustomModal';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import Toast from 'react-native-toast-message';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const ForgotPassword = () => {
     const router = useRouter();
@@ -112,7 +117,13 @@ const ForgotPassword = () => {
     };
 
     return (
-        <View style={styles.outerContainer}>
+        <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+        >
             <View style={styles.container}>
                 <Text style={styles.title}>Forgot Password</Text>
 
@@ -177,22 +188,24 @@ const ForgotPassword = () => {
                 title={modalConfig.title}
                 message={modalConfig.message}
             />
-        </View>
+        </ScrollView>
     );
 };
 
 const styles = StyleSheet.create({
-    outerContainer: {
+    scrollView: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        // backgroundColor: '#e0e7eb',
-        padding: 20,
-        marginBottom: 100,
+        backgroundColor: '#f8f9fa',
+    },
+    scrollContent: {
+        flexGrow: 1,
+        paddingVertical: 40,
+        paddingHorizontal: 20,
     },
     container: {
         width: '100%',
         maxWidth: 400,
+        alignSelf: 'center',
         backgroundColor: '#ffffff',
         borderRadius: 12,
         padding: 25,

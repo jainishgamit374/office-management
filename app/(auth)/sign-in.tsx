@@ -6,14 +6,18 @@ import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
-    KeyboardAvoidingView,
     Platform,
-    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    UIManager,
+    View
 } from 'react-native';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const SignIn = () => {
     const { login } = useAuth();
@@ -158,16 +162,9 @@ const SignIn = () => {
     };
 
     return (
-        <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-            >
-                <View style={styles.container}>
+        <View style={styles.container}>
+            <View style={styles.contentContainer}>
+                <View style={styles.formWrapper}>
                     {/* Form */}
                     <View style={styles.formContainer}>
                         <Custominputs
@@ -242,30 +239,32 @@ const SignIn = () => {
                         </Link>
                     </View>
                 </View>
-
-                <CustomModal
-                    visible={modalConfig.visible}
-                    onClose={closeModal}
-                    type={modalConfig.type}
-                    title={modalConfig.title}
-                    message={modalConfig.message}
-                />
-            </ScrollView>
-        </KeyboardAvoidingView>
+            </View>
+            <CustomModal
+                visible={modalConfig.visible}
+                onClose={closeModal}
+                type={modalConfig.type}
+                title={modalConfig.title}
+                message={modalConfig.message}
+            />
+        </View>
     );
 };
 
 export default SignIn;
 
 const styles = StyleSheet.create({
-    scrollContent: {
-        flexGrow: 1,
-        justifyContent: 'center',
-        paddingVertical: 40,
+    container: {
+        flex: 1,
         backgroundColor: '#f8f9fa',
     },
-    container: {
-        width: '92%',
+    contentContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+    },
+    formWrapper: {
+        width: '100%',
         maxWidth: 420,
         alignSelf: 'center',
         backgroundColor: '#fff',

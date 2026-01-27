@@ -9,6 +9,7 @@ export default function AuthLayout() {
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.container}
+                keyboardVerticalOffset={0}
             >
                 {/* Logo Header */}
                 <View style={styles.headerContainer}>

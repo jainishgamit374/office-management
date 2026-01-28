@@ -132,7 +132,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         marginHorizontal: 16,
         marginTop: 12,
         borderRadius: 16,
-        padding: 16,
+        padding: 12,
         borderWidth: 1,
         backgroundColor: colors.card,
         borderColor: colors.border,

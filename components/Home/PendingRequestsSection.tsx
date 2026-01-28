@@ -5,13 +5,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Easing, LayoutAnimation, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 
 import {
-    approveAny,
-    BASE,
-    disapproveAny,
-    getEarlyCheckoutApprovalHistory,
-    getLeaveApprovals,
-    getMissPunchApprovalHistory,
-    getWfhApprovals
+  approveAny,
+  BASE,
+  disapproveAny,
+  getEarlyCheckoutApprovalHistory,
+  getLeaveApprovals,
+  getMissPunchApprovalHistory,
+  getWfhApprovals
 } from '@/lib/approvalsApi';
 import { getExpectedLateArrivals } from '@/lib/earlyLatePunch';
 import ApprovalDetailsModal, { ApprovalDetails } from './ApprovalDetailsModal';
@@ -85,7 +85,7 @@ function AccordionSection({
       <TouchableOpacity style={styles.accordionHeader} onPress={onToggle} activeOpacity={0.7}>
         <View style={styles.headerLeft}>
           <View style={[styles.iconBox, { backgroundColor: `${color}15` }]}>
-            <Feather name={icon} size={18} color={color} />
+            <Feather name={icon} size={16} color={color} />
           </View>
           <Text style={[styles.headerTitle, { color: colors.text }]}>{title}</Text>
         </View>
@@ -96,8 +96,8 @@ function AccordionSection({
               <Text style={styles.badgeText}>{count}</Text>
             </View>
           )}
-          <Animated.View style={{ transform: [{ rotate }], marginLeft: 8 }}>
-            <Feather name="chevron-down" size={18} color={colors.textSecondary} />
+          <Animated.View style={{ transform: [{ rotate }], marginLeft: 6 }}>
+            <Feather name="chevron-down" size={16} color={colors.textSecondary} />
           </Animated.View>
         </View>
       </TouchableOpacity>
@@ -110,7 +110,7 @@ function AccordionSection({
 function EmptyState({ label, styles, colors }: { label: string; styles: any; colors: ThemeColors }) {
   return (
     <View style={styles.emptyState}>
-      <Feather name="check-circle" size={20} color={colors.textTertiary} />
+      <Feather name="check-circle" size={16} color={colors.textTertiary} />
       <Text style={[styles.emptyText, { color: colors.textTertiary }]}>{label}</Text>
     </View>
   );
@@ -602,44 +602,44 @@ const createStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     container: {
       marginHorizontal: 16,
-      marginBottom: 20,
+      marginBottom: 12,
       backgroundColor: colors.card,
-      borderRadius: 24,
-      padding: 20,
-      marginTop: 20,
+      borderRadius: 16,
+      padding: 12,
+      marginTop: 12,
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.06,
-      shadowRadius: 12,
-      elevation: 4,
-      gap: 16,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.04,
+      shadowRadius: 8,
+      elevation: 2,
+      gap: 10,
     },
     mainHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 4,
+      paddingHorizontal: 2,
     },
     sectionHeading: {
-      fontSize: 18,
-      fontWeight: '800',
-      letterSpacing: 0.5,
+      fontSize: 16,
+      fontWeight: '700',
+      letterSpacing: 0.3,
       color: colors.text,
     },
     totalBadge: {
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 10,
     },
     totalBadgeText: {
-      fontSize: 12,
-      fontWeight: '800',
+      fontSize: 11,
+      fontWeight: '700',
     },
     listContainer: {
-      gap: 12,
+      gap: 8,
     },
     accordionItem: {
-      borderRadius: 16,
+      borderRadius: 12,
       borderWidth: 1,
       overflow: 'hidden',
     },
@@ -647,27 +647,27 @@ const createStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: 14,
+      padding: 10,
     },
     headerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: 8,
     },
     headerRight: {
       flexDirection: 'row',
       alignItems: 'center',
     },
     iconBox: {
-      width: 34,
-      height: 34,
-      borderRadius: 10,
+      width: 28,
+      height: 28,
+      borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
     },
     headerTitle: {
-      fontSize: 14,
-      fontWeight: '800',
+      fontSize: 13,
+      fontWeight: '700',
     },
     badge: {
       minWidth: 22,
@@ -684,19 +684,19 @@ const createStyles = (colors: ThemeColors) =>
     },
     accordionBody: {
       borderTopWidth: 1,
-      padding: 12,
-      gap: 10,
+      padding: 8,
+      gap: 8,
     },
     emptyState: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 12,
-      gap: 8,
+      paddingVertical: 8,
+      gap: 6,
       opacity: 0.7,
     },
     emptyText: {
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: '600',
     },
     // Action Modal Styles

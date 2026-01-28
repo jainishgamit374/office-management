@@ -91,31 +91,26 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
         }, [fetchWFHApplications, refreshKey])
     );
 
-    // Check if main section is expanded
-    // Use a special ID (-1) for the main WFH section to avoid conflicts with actual WFH IDs
-    const MAIN_WFH_ID = -1;
-    const isMainExpanded = expandedLeave === MAIN_WFH_ID || wfhs.some(wfh => expandedLeave === wfh.id);
+    const [isExpanded, setIsExpanded] = useState(false);
 
     return (
         <View style={styles.container}>
-            <View style={styles.headerContainer}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>Upcoming WFHs</Text>
-                </View>
-                <Animated.View style={{ transform: [{ scale: scaleAnims.wfhMain }] }}>
-                    <TouchableOpacity
-                        style={styles.toggleIcon}
-                        activeOpacity={0.7}
-                        onPress={() =>
-                            onAnimatePress('wfhMain', () => onToggleExpand(isMainExpanded ? null : MAIN_WFH_ID))
-                        }
-                    >
-                        <Feather name={isMainExpanded ? 'chevron-up' : 'chevron-down'} size={24} color="#4169E1" />
-                    </TouchableOpacity>
-                </Animated.View>
-            </View>
+            <TouchableOpacity 
+                style={styles.header}
+                onPress={() => setIsExpanded(!isExpanded)}
+                activeOpacity={0.7}
+            >
+                <Text style={styles.title}>
+                    Upcoming WFHs {wfhs.length > 0 && `(${wfhs.length})`}
+                </Text>
+                <Feather 
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'} 
+                    size={20} 
+                    color="#4169E1" 
+                />
+            </TouchableOpacity>
 
-            {isMainExpanded && (
+            {isExpanded && (
                 isLoading ? (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="small" color="#4169E1" />
@@ -128,58 +123,25 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
                     </View>
                 ) : (
                     <View style={styles.grid}>
-                    {wfhs.map((wfh, index) => {
-                        const animKey = `wfh${index + 1}` as 'wfh1' | 'wfh2' | 'wfh3';
-
-                        return (
-                            <View key={wfh.id} style={styles.expandableCard}>
-                                <Animated.View style={{ transform: [{ scale: scaleAnims[animKey] }] }}>
-                                    <TouchableOpacity
-                                        style={styles.card}
-                                        activeOpacity={0.7}
-                                        onPress={() =>
-                                            onAnimatePress(animKey, () =>
-                                                onToggleExpand(expandedLeave === wfh.id ? MAIN_WFH_ID : wfh.id)
-                                            )
-                                        }
-                                    >
-                                        <View style={styles.profileImage}>
-                                            <Feather name="user" size={24} color="#4169E1" />
-                                        </View>
-                                        <View style={styles.cardContent}>
-                                            <Text style={styles.cardTitle}>{wfh.name}</Text>
-                                            <Text style={styles.cardSubtitle}>WFH • {wfh.dates}</Text>
-                                        </View>
-                                        <View style={styles.statusIcon}>
-                                            <Feather
-                                                name={expandedLeave === wfh.id ? 'chevron-up' : 'chevron-down'}
-                                                size={24}
-                                                color="#666"
-                                            />
-                                        </View>
-                                    </TouchableOpacity>
-                                </Animated.View>
-
-                                {expandedLeave === wfh.id && (
-                                    <View style={styles.expandedContent}>
-                                        <View style={styles.detailRow}>
-                                            <Feather name="calendar" size={16} color="#4289f4ff" />
-                                            <Text style={styles.detailText}>Duration: {wfh.duration}</Text>
-                                        </View>
-                                        <View style={styles.detailRow}>
-                                            <Feather name="file-text" size={16} color="#4289f4ff" />
-                                            <Text style={styles.detailText}>Reason: {wfh.reason}</Text>
-                                        </View>
-                                        <View style={styles.detailRow}>
-                                            <Feather name="clock" size={16} color="#ff9800" />
-                                            <Text style={styles.detailTextPending}>Status: {wfh.status}</Text>
-                                        </View>
+                        {wfhs.map((wfh, index) => (
+                            <View key={wfh.id || index} style={styles.card}>
+                                <View style={styles.iconContainer}>
+                                    <Feather name="home" size={24} color="#4A90FF" />
+                                </View>
+                                <View style={styles.cardContent}>
+                                    <Text style={styles.cardTitle}>{wfh.name}</Text>
+                                    <View style={styles.detailsRow}>
+                                        <Feather name="calendar" size={14} color="#64748B" />
+                                        <Text style={styles.detailText}>{wfh.dates}</Text>
                                     </View>
-                                )}
+                                    <View style={styles.detailsRow}>
+                                        <Feather name="clock" size={14} color="#64748B" />
+                                        <Text style={styles.detailText}>{wfh.duration}</Text>
+                                    </View>
+                                </View>
                             </View>
-                        );
-                    })}
-                </View>
+                        ))}
+                    </View>
                 )
             )}
         </View>
@@ -188,50 +150,31 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
 
 const styles = StyleSheet.create({
     container: {
-        marginHorizontal: 20,
-        marginTop: 10,
-        borderRadius: 15,
+        marginHorizontal: 16,
+        marginTop: 12,
+        borderRadius: 16,
         paddingHorizontal: 12,
-        paddingVertical: 20,
+        paddingVertical: 12,
         borderWidth: 1,
-        backgroundColor: '#FFF',
-        borderColor: '#fbfbfbff',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 4,
-    },
-    headerContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 20,
+        backgroundColor: '#FFFFFF',
+        borderColor: '#E2E8F0',
     },
     header: {
-        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+        paddingVertical: 4,
     },
     title: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#1565c0',
-        textAlign: 'center',
-    },
-    toggleIcon: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#4169E1',
+        textAlign: 'left',
     },
     grid: {
         flexDirection: 'column',
         gap: 1,
-    },
-    expandableCard: {
-        width: '100%',
     },
     card: {
         flexDirection: 'row',
@@ -239,57 +182,33 @@ const styles = StyleSheet.create({
         gap: 10,
         padding: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#cececeff',
+        borderBottomColor: '#F1F5F9',
     },
-    profileImage: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
+    iconContainer: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         backgroundColor: '#E0E8FF',
         justifyContent: 'center',
         alignItems: 'center',
     },
     cardContent: {
         flex: 1,
-        gap: 5,
+        gap: 6,
     },
     cardTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#000',
+        color: '#1E293B',
     },
-    cardSubtitle: {
-        fontSize: 14,
-        color: '#a0a0a0ff',
-    },
-    statusIcon: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    expandedContent: {
-        backgroundColor: '#f9f9f9',
-        padding: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#cececeff',
-        gap: 10,
-    },
-    detailRow: {
+    detailsRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
+        gap: 6,
     },
     detailText: {
-        fontSize: 14,
-        color: '#333',
-        flex: 1,
-    },
-    detailTextPending: {
-        fontSize: 14,
-        color: '#ff9800',
-        fontWeight: '600',
-        flex: 1,
+        fontSize: 13,
+        color: '#64748B',
     },
     loadingContainer: {
         padding: 20,

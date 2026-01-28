@@ -70,20 +70,20 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
 
     return (
         <View style={styles.container}>
-            <View style={styles.headerContainer}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>Employees WFH Today</Text>
-                </View>
-                <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-                    <TouchableOpacity
-                        style={styles.toggleIcon}
-                        activeOpacity={0.7}
-                        onPress={() => onAnimatePress('wfhToday', onToggleExpand)}
-                    >
-                        <Feather name={isExpanded ? 'chevron-up' : 'chevron-down'} size={24} color="#4169E1" />
-                    </TouchableOpacity>
-                </Animated.View>
-            </View>
+            <TouchableOpacity 
+                style={styles.header}
+                onPress={() => onAnimatePress('wfhToday', onToggleExpand)}
+                activeOpacity={0.7}
+            >
+                <Text style={styles.title}>
+                    Employees WFH Today {employees.length > 0 && `(${employees.length})`}
+                </Text>
+                <Feather 
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'} 
+                    size={20} 
+                    color="#4169E1" 
+                />
+            </TouchableOpacity>
 
             {isExpanded && (
                 isLoading ? (
@@ -95,15 +95,15 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
                     <View style={styles.grid}>
                         {employees.map((employee) => (
                             <View key={employee.id} style={styles.card}>
-                                <View style={styles.profileImage}>
+                                <View style={styles.iconContainer}>
                                     <Feather name="user" size={24} color="#4169E1" />
                                 </View>
                                 <View style={styles.cardContent}>
                                     <Text style={styles.cardTitle}>{employee.name}</Text>
-                                    <Text style={styles.cardSubtitle}>{employee.task}</Text>
-                                </View>
-                                <View style={styles.statusIcon}>
-                                    <Feather name="home" size={24} color="#4169E1" />
+                                    <View style={styles.detailsRow}>
+                                        <Feather name="briefcase" size={14} color="#64748B" />
+                                        <Text style={styles.detailText}>{employee.task}</Text>
+                                    </View>
                                 </View>
                             </View>
                         ))}
@@ -119,45 +119,28 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
-    container: {
-        marginHorizontal: 20,
-        marginTop: 10,
-        borderRadius: 15,
+const styles = StyleSheet.create({  container: {
+        marginHorizontal: 16,
+        marginTop: 12,
+        borderRadius: 16,
         paddingHorizontal: 12,
-        paddingVertical: 20,
+        paddingVertical: 12,
         borderWidth: 1,
-        backgroundColor: '#FFF',
-        borderColor: '#fbfbfbff',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 8,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 4,
-    },
-    headerContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 20,
+        backgroundColor: '#FFFFFF',
+        borderColor: '#E2E8F0',
     },
     header: {
-        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+        paddingVertical: 4,
     },
     title: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#1565c0',
-        textAlign: 'center',
-    },
-    toggleIcon: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#4169E1',
+        textAlign: 'left',
     },
     grid: {
         flexDirection: 'column',
@@ -169,34 +152,33 @@ const styles = StyleSheet.create({
         gap: 10,
         padding: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#cececeff',
+        borderBottomColor: '#F1F5F9',
     },
-    profileImage: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
+    iconContainer: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         backgroundColor: '#E0E8FF',
         justifyContent: 'center',
         alignItems: 'center',
     },
     cardContent: {
         flex: 1,
-        gap: 5,
+        gap: 6,
     },
     cardTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#000',
+        color: '#1E293B',
     },
-    cardSubtitle: {
-        fontSize: 14,
-        color: '#a0a0a0ff',
-    },
-    statusIcon: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
+    detailsRow: {
+        flexDirection: 'row',
         alignItems: 'center',
+        gap: 6,
+    },
+    detailText: {
+        fontSize: 13,
+        color: '#64748B',
     },
     loadingContainer: {
         padding: 20,

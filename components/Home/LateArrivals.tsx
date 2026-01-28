@@ -9,8 +9,7 @@ interface LateArrivalData {
     id: number;
     dateTime: string;
     reason: string;
-    createdDate: string;
-    isActive: boolean;
+    employeeName?: string;
 }
 
 interface LateArrivalsProps {
@@ -28,9 +27,7 @@ const LateArrivals: React.FC<LateArrivalsProps> = ({ title, refreshKey }) => {
     const fetchLateArrivals = useCallback(async () => {
         try {
             setIsLoading(true);
-            console.log('🔄 [LateArrivals] Fetching from /early-late-punch/ with checkoutType=Late');
             
-            // Fetch only Late checkout type (which represents late arrivals)
             const response = await getEarlyLatePunchList({
                 checkoutType: 'Late',
                 limit: 10,
@@ -38,63 +35,35 @@ const LateArrivals: React.FC<LateArrivalsProps> = ({ title, refreshKey }) => {
                 sortOrder: 'desc'
             });
 
-            console.log('📡 [LateArrivals] Raw API response:', JSON.stringify(response, null, 2));
-
             if (response.status === 'Success' && response.data && response.data.length > 0) {
-                console.log(`📊 [LateArrivals] Total items received: ${response.data.length}`);
-                
-                // Log each item's CheckoutType for debugging
-                response.data.forEach((item: any, index: number) => {
-                    console.log(`🔍 [LateArrivals] Item ${index}: ID=${item.EarlyLatePunchMasterID}, CheckoutType="${item.CheckoutType}"`);
-                });
-
-                // Strict filtering for Late Arrivals only - case-insensitive comparison
                 const transformedData: LateArrivalData[] = response.data
                     .filter((item: any) => {
                         const checkoutType = item.CheckoutType?.toString().toLowerCase();
-                        const isLate = checkoutType === 'late';
-                        if (!isLate) {
-                            console.log(`⚠️ [LateArrivals] Filtering out item ${item.EarlyLatePunchMasterID} with CheckoutType="${item.CheckoutType}"`);
-                        }
-                        return isLate;
+                        return checkoutType === 'late';
                     })
                     .map((item: any) => ({
                         id: item.EarlyLatePunchMasterID,
                         dateTime: item.DateTime,
-                        reason: item.Reason,
-                        createdDate: item.CreatedDate,
-                        isActive: item.IsActive,
+                        reason: item.Reason || 'No reason provided',
+                        employeeName: item.EmployeeName || 'Employee',
                     }));
 
-                console.log(`✅ [LateArrivals] Filtered to ${transformedData.length} Late items`);
                 setArrivals(transformedData);
             } else {
                 setArrivals([]);
-                console.log('ℹ️ [LateArrivals] No data in response');
             }
         } catch (error) {
-            console.error('❌ [LateArrivals] Failed to fetch:', error);
             setArrivals([]);
         } finally {
             setIsLoading(false);
         }
     }, [refreshKey]);
 
-    // Fetch data on mount and when screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchLateArrivals();
         }, [fetchLateArrivals, refreshKey])
     );
-
-    const formatDateTime = (dateTimeStr: string): string => {
-        try {
-            // Handle format like "2025-01-10 04:00:00 PM"
-            return dateTimeStr;
-        } catch {
-            return dateTimeStr;
-        }
-    };
 
     return (
         <View style={styles.container}>
@@ -122,37 +91,21 @@ const LateArrivals: React.FC<LateArrivalsProps> = ({ title, refreshKey }) => {
                         </View>
                     ) : arrivals.length > 0 ? (
                         <View style={styles.grid}>
-                            {arrivals.map((arrival, index) => (
-                                <View key={arrival.id || index} style={styles.card}>
+                            {arrivals.map((arrival) => (
+                                <View key={arrival.id} style={styles.card}>
                                     <View style={styles.iconContainer}>
                                         <Feather name="clock" size={24} color="#FF9800" />
                                     </View>
-                                    <View style={styles.cardHeader}>
-                                        <Text style={styles.cardTitle}>Late Arrival #{arrival.id}</Text>
+                                    <View style={styles.cardContent}>
+                                        <Text style={styles.cardTitle}>{arrival.employeeName}</Text>
                                         <View style={styles.detailsRow}>
                                             <Feather name="clock" size={14} color={colors.textSecondary} />
-                                            <Text style={styles.detailText}>{formatDateTime(arrival.dateTime)}</Text>
+                                            <Text style={styles.detailText}>{arrival.dateTime}</Text>
                                         </View>
-                                        <View style={styles.reasonRow}>
+                                        <View style={styles.detailsRow}>
                                             <Feather name="info" size={14} color={colors.textSecondary} />
-                                            <Text style={styles.reasonText} numberOfLines={1}>
+                                            <Text style={styles.detailText} numberOfLines={1}>
                                                 {arrival.reason}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.statusContainer}>
-                                            <View
-                                                style={[
-                                                    styles.statusDot,
-                                                    { backgroundColor: arrival.isActive ? '#4CAF50' : '#9E9E9E' },
-                                                ]}
-                                            />
-                                            <Text
-                                                style={[
-                                                    styles.statusText,
-                                                    { color: arrival.isActive ? '#4CAF50' : '#9E9E9E' },
-                                                ]}
-                                            >
-                                                {arrival.isActive ? 'Active' : 'Inactive'}
                                             </Text>
                                         </View>
                                     </View>
@@ -176,8 +129,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
         marginHorizontal: 16,
         marginTop: 12,
         borderRadius: 16,
-        paddingHorizontal: 16,
-        paddingVertical: 16,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
         borderWidth: 1,
         backgroundColor: colors.card,
         borderColor: colors.border,
@@ -197,65 +150,46 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     },
     grid: {
         flexDirection: 'column',
-        gap: 1,
+        gap: 10,
+        paddingTop: 8,
     },
     card: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        padding: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.divider,
-    },
-    cardHeader: {
-        flex: 1,
-        gap: 6,
+        padding: 12,
+        backgroundColor: colors.background,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     iconContainer: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         backgroundColor: '#FFF3E0',
         justifyContent: 'center',
         alignItems: 'center',
+        marginRight: 12,
+    },
+    cardContent: {
+        flex: 1,
     },
     cardTitle: {
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '600',
         color: colors.text,
+        marginBottom: 6,
     },
     detailsRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        marginTop: 4,
     },
     detailText: {
         fontSize: 13,
         color: colors.textSecondary,
-    },
-    reasonRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    reasonText: {
-        fontSize: 12,
-        color: colors.textSecondary,
-        fontStyle: 'italic',
-    },
-    statusContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    statusDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '600',
+        marginLeft: 6,
+        flex: 1,
     },
     loadingContainer: {
         padding: 20,

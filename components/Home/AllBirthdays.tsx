@@ -125,11 +125,11 @@ const AllBirthdays: React.FC<AllBirthdaysProps> = ({
 const styles = StyleSheet.create({
     container: {
         backgroundColor: '#fef5e7',
-        marginHorizontal: 20,
-        marginTop: 10,
-        borderRadius: 15,
+        marginHorizontal: 16,
+        marginTop: 12,
+        borderRadius: 16,
         paddingHorizontal: 12,
-        paddingVertical: 20,
+        paddingVertical: 12,
         borderWidth: 1,
         borderColor: '#f9e79f',
         // Shadow for iOS

@@ -106,11 +106,11 @@ const EmployeesOnLeaveToday: React.FC<EmployeesOnLeaveTodayProps> = ({ refreshKe
 
 const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
-        marginHorizontal: 20,
-        marginTop: 10,
-        borderRadius: 15,
+        marginHorizontal: 16,
+        marginTop: 12,
+        borderRadius: 16,
         paddingHorizontal: 12,
-        paddingVertical: 20,
+        paddingVertical: 12,
         borderWidth: 1,
         backgroundColor: colors.card,
         borderColor: colors.border,

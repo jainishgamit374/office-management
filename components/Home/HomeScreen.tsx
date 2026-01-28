@@ -175,8 +175,7 @@ const HomeScreen: React.FC = () => {
         {/* Leave Early Today */}
         <EarlyCheckouts title="Leaving Early Today" refreshKey={refreshKey} />
 
-        {/* Employees on Leave Today */}
-        <EmployeesOnLeaveToday refreshKey={refreshKey} />
+     
 
         {/* Upcoming Leaves */}
         <UpcomingLeaves
@@ -213,6 +212,9 @@ const HomeScreen: React.FC = () => {
           scaleAnim={scaleAnims.wfhToday}
           refreshKey={refreshKey}
         />
+
+           {/* Employees on Leave Today */}
+        <EmployeesOnLeaveToday refreshKey={refreshKey} />
 
         {/* Employee of the Month */}
         <EmployeeOfTheMonthSection refreshKey={refreshKey} />

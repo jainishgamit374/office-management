@@ -119,12 +119,12 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
     );
 };
 
-const styles = StyleSheet.create({  container: {
+const styles = StyleSheet.create({
+    container: {
         marginHorizontal: 16,
         marginTop: 12,
         borderRadius: 16,
-        paddingHorizontal: 12,
-        paddingVertical: 12,
+        padding: 12,
         borderWidth: 1,
         backgroundColor: '#FFFFFF',
         borderColor: '#E2E8F0',

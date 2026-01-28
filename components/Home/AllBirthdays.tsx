@@ -128,32 +128,25 @@ const styles = StyleSheet.create({
         marginHorizontal: 16,
         marginTop: 12,
         borderRadius: 16,
-        paddingHorizontal: 12,
-        paddingVertical: 12,
+        padding: 12,
         borderWidth: 1,
         borderColor: '#f9e79f',
-        // Shadow for iOS
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        // Shadow for Android
-        elevation: 3,
     },
     headerContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 15,
+        marginBottom: 12,
+        paddingVertical: 4,
     },
     header: {
         flex: 1,
     },
     title: {
-        fontSize: 20,
-        fontWeight: '700',
+        fontSize: 16,
+        fontWeight: '600',
         color: '#d4145a',
-        textAlign: 'center',
+        textAlign: 'left',
     },
     toggleIcon: {
         width: 40,

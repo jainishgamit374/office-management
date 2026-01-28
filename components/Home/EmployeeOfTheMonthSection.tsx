@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         padding: 12,
         backgroundColor: '#FFF',
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: '#FFD700',
         shadowColor: '#FFD700',
         shadowOffset: {
@@ -110,12 +110,13 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
-        marginBottom: 16,
+        justifyContent: 'space-between',
+        marginBottom: 12,
+        paddingVertical: 4,
     },
     title: {
-        fontSize: 18,
-        fontWeight: '700',
+        fontSize: 16,
+        fontWeight: '600',
         color: '#333',
     },
     loadingContainer: {

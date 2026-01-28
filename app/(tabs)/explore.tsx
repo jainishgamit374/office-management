@@ -3,50 +3,148 @@ import { useTabBar } from '@/constants/TabBarContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const ExploreCard = ({
-  icon,
-  title,
-  description,
-  route,
-}: {
+interface CardItem {
   icon: React.ComponentProps<typeof Feather>['name'];
   title: string;
   description: string;
-  route?: string;
-}) => {
-  const { colors, theme } = useTheme();
+  route: string;
+  gradient: [string, string];
+  badge?: string;
+}
+
+interface CategoryData {
+  title: string;
+  icon: React.ComponentProps<typeof Feather>['name'];
+  count: number;
+  items: CardItem[];
+}
+
+const FeatureCard = ({ item }: { item: CardItem }) => {
+  const { colors } = useTheme();
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  
+  // Use first gradient color as accent
+  const accentColor = item.gradient[0];
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.95,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 3,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+  };
 
   const handlePress = () => {
-    if (route) router.push(route);
+    router.push(item.route as any);
   };
 
   return (
-    <Pressable onPress={handlePress} disabled={!route}>
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-          },
-        ]}
+    <Animated.View style={[styles.cardWrapper, { transform: [{ scale: scaleAnim }] }]}>
+      <Pressable
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
-        <View style={[styles.cardIcon, { backgroundColor: colors.primaryLight }]}>
-          <Feather name={icon} size={20} color={colors.primary} />
+        <View style={styles.cardHeader}>
+          <View style={[styles.iconContainer, { backgroundColor: `${accentColor}15` }]}>
+            <Feather name={item.icon} size={22} color={accentColor} />
+          </View>
+          {item.badge && (
+            <View style={[styles.badge, { backgroundColor: accentColor }]}>
+              <Text style={styles.badgeText}>{item.badge}</Text>
+            </View>
+          )}
         </View>
-        <View style={styles.cardContent}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>{title}</Text>
-          <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>
-            {description}
-          </Text>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{item.title}</Text>
+          <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>{item.description}</Text>
         </View>
-        {route && <Feather name="chevron-right" size={18} color={colors.textTertiary} />}
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
+  );
+};
+
+const CollapsibleSection = ({ category }: { category: CategoryData }) => {
+  const { colors } = useTheme();
+  const [expanded, setExpanded] = useState(false);
+  const animatedHeight = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+
+  const toggleExpand = () => {
+    const toValue = expanded ? 0 : 1;
+    
+    Animated.parallel([
+      Animated.spring(animatedHeight, {
+        toValue,
+        useNativeDriver: false,
+        friction: 8,
+        tension: 40,
+      }),
+      Animated.spring(rotateAnim, {
+        toValue,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 40,
+      }),
+    ]).start();
+
+    setExpanded(!expanded);
+  };
+
+  const rotation = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  const maxHeight = animatedHeight.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1000],
+  });
+
+  return (
+    <View style={[styles.section, { backgroundColor: colors.card }]}>
+      <Pressable onPress={toggleExpand}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionHeaderLeft}>
+            <View style={[styles.sectionIcon, { backgroundColor: colors.primaryLight }]}>
+              <Feather name={category.icon} size={20} color={colors.primary} />
+            </View>
+            <View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                {category.title}
+              </Text>
+              <Text style={[styles.sectionCount, { color: colors.textSecondary }]}>
+                {category.count} items
+              </Text>
+            </View>
+          </View>
+          <Animated.View style={{ transform: [{ rotate: rotation }] }}>
+            <Feather name="chevron-down" size={24} color={colors.textSecondary} />
+          </Animated.View>
+        </View>
+      </Pressable>
+
+      <Animated.View style={[styles.collapsibleContent, { maxHeight, opacity: animatedHeight }]}>
+        <View style={styles.cardGrid}>
+          {category.items.map((item, index) => (
+            <FeatureCard key={index} item={item} />
+          ))}
+        </View>
+      </Animated.View>
+    </View>
   );
 };
 
@@ -55,6 +153,201 @@ export default function ExploreScreen() {
 
   // Get tab bar context for scroll animation
   const { scrollY, lastScrollY, tabBarTranslateY } = useTabBar();
+
+  // Category data
+  const categories: CategoryData[] = [
+    {
+      title: 'Attendance & Time',
+      icon: 'clock',
+      count: 8,
+      items: [
+        {
+          icon: 'clock',
+          title: 'Attendance History',
+          description: 'View check-in records',
+          route: '/Attendance/AttendenceList',
+          gradient: ['#667eea', '#764ba2'],
+          badge: 'New',
+        },
+        {
+          icon: 'calendar',
+          title: 'Leave Calendar',
+          description: 'Leaves & holidays',
+          route: '/Attendance/LeaveCalender',
+          gradient: ['#f093fb', '#f5576c'],
+        },
+        {
+          icon: 'user-x',
+          title: 'Absence List',
+          description: 'Employee absences',
+          route: '/Attendance/AbsenceList',
+          gradient: ['#4facfe', '#00f2fe'],
+        },
+        {
+          icon: 'log-out',
+          title: 'Early Checkout',
+          description: 'Early checkout list',
+          route: '/Attendance/EarlyCheckoutList',
+          gradient: ['#43e97b', '#38f9d7'],
+        },
+        {
+          icon: 'alert-circle',
+          title: 'Missed Punch',
+          description: 'Missed punch list',
+          route: '/Attendance/MissPunchList',
+          gradient: ['#fa709a', '#fee140'],
+        },
+        {
+          icon: 'user-x',
+          title: 'Is Away List',
+          description: 'Away requests',
+          route: '/Attendance/IsAwayList',
+          gradient: ['#30cfd0', '#330867'],
+        },
+        {
+          icon: 'check-circle',
+          title: 'Leave Approval',
+          description: 'Approval requests',
+          route: '/Attendance/LeaveApprovalList',
+          gradient: ['#a8edea', '#fed6e3'],
+        },
+        {
+          icon: 'home',
+          title: 'Work From Home',
+          description: 'WFH requests',
+          route: '/Attendance/Wfhlist',
+          gradient: ['#ffecd2', '#fcb69f'],
+        },
+      ],
+    },
+    {
+      title: 'Leave Management',
+      icon: 'calendar',
+      count: 4,
+      items: [
+        {
+          icon: 'file-plus',
+          title: 'Apply Leave',
+          description: 'Submit leave request',
+          route: '/Requests/Leaveapplyreq',
+          gradient: ['#667eea', '#764ba2'],
+        },
+        {
+          icon: 'file-text',
+          title: 'Leave Requests',
+          description: 'All leave applications',
+          route: '/ViewAllRequest/LeaveApplication',
+          gradient: ['#f093fb', '#f5576c'],
+        },
+        {
+          icon: 'check-circle',
+          title: 'Leave Approval',
+          description: 'Pending approvals',
+          route: '/Attendance/LeaveApprovalList',
+          gradient: ['#4facfe', '#00f2fe'],
+          badge: '3',
+        },
+        {
+          icon: 'calendar',
+          title: 'Leave Calendar',
+          description: 'View calendar',
+          route: '/Attendance/LeaveCalender',
+          gradient: ['#43e97b', '#38f9d7'],
+        },
+      ],
+    },
+    {
+      title: 'Requests',
+      icon: 'send',
+      count: 7,
+      items: [
+        {
+          icon: 'alert-circle',
+          title: 'Miss Punch',
+          description: 'Report missed punch',
+          route: '/Requests/Misspunchreq',
+          gradient: ['#fa709a', '#fee140'],
+        },
+        {
+          icon: 'log-out',
+          title: 'Early Checkout',
+          description: 'Request early leave',
+          route: '/Requests/Earlycheckoutreq',
+          gradient: ['#30cfd0', '#330867'],
+        },
+        {
+          icon: 'home',
+          title: 'Apply WFH',
+          description: 'Work from home',
+          route: '/Requests/Wfhapplyreq',
+          gradient: ['#a8edea', '#fed6e3'],
+        },
+        {
+          icon: 'log-out',
+          title: 'Early/Late Requests',
+          description: 'View all requests',
+          route: '/ViewAllRequest/EarlyCheckout',
+          gradient: ['#ffecd2', '#fcb69f'],
+        },
+        {
+          icon: 'home',
+          title: 'WFH Requests',
+          description: 'All WFH requests',
+          route: '/ViewAllRequest/Wfhrequest',
+          gradient: ['#667eea', '#764ba2'],
+        },
+        {
+          icon: 'alert-circle',
+          title: 'Miss Punch Requests',
+          description: 'View all requests',
+          route: '/ViewAllRequest/ViewAllMisspunch',
+          gradient: ['#f093fb', '#f5576c'],
+        },
+        {
+          icon: 'file-plus',
+          title: 'Apply Leave',
+          description: 'Submit leave',
+          route: '/Requests/Leaveapplyreq',
+          gradient: ['#4facfe', '#00f2fe'],
+        },
+      ],
+    },
+    {
+      title: 'Resources & Support',
+      icon: 'info',
+      count: 4,
+      items: [
+        {
+          icon: 'file-text',
+          title: 'HR Policies',
+          description: 'Company guidelines',
+          route: '/Resources/HrPolicies',
+          gradient: ['#43e97b', '#38f9d7'],
+        },
+        {
+          icon: 'users',
+          title: 'Team Directory',
+          description: 'Find teammates',
+          route: '/Resources/TeamDirectory',
+          gradient: ['#fa709a', '#fee140'],
+        },
+        {
+          icon: 'help-circle',
+          title: 'Help & FAQ',
+          description: 'Get help',
+          route: '/Support/Helpandfaq',
+          gradient: ['#30cfd0', '#330867'],
+        },
+        {
+          icon: 'info',
+          title: 'About',
+          description: 'App info',
+          route: '/Support/About',
+          gradient: ['#a8edea', '#fed6e3'],
+        },
+      ],
+    },
+  ];
 
   // Handle scroll for tab bar animation
   const handleScroll = Animated.event(
@@ -98,7 +391,7 @@ export default function ExploreScreen() {
       >
         {/* Header */}
         <View style={styles.headerContainer}>
-          <Feather name="grid" size={60} color={colors.textTertiary} />
+          <Feather name="grid" size={60} color={colors.primary} />
         </View>
 
         {/* Title */}
@@ -106,175 +399,13 @@ export default function ExploreScreen() {
           MySpace
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Tools and resources to manage your work.
+          Manage your work efficiently with organized tools
         </Text>
 
-        {/* Attendance & Time */}
-        <View style={[styles.section, { backgroundColor: colors.background }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            Attendance & Time
-          </Text>
-
-          <ExploreCard
-            icon="clock"
-            title="Attendance History"
-            description="View your check-in and check-out records"
-            route="/Attendance/AttendenceList"
-
-          />
-          <ExploreCard
-            icon="calendar"
-            title="Leave Calendar"
-            description="See upcoming leaves and holidays"
-            route="/Attendance/LeaveCalender"
-          />
-
-          <ExploreCard
-            icon="user-x"
-            title="Absence List"
-            description="View employee absences"
-            route="/Attendance/AbsenceList"
-          />
-
-          <ExploreCard
-            icon="log-out"
-            title="Early Checkout List"
-            description="View early checkout requests"
-            route="/Attendance/EarlyCheckoutList"
-          />
-
-          <ExploreCard
-            icon="alert-circle"
-            title="Missed Punch List"
-            description="View missed punch requests"
-            route="/Attendance/MissPunchList"
-          />
-
-          <ExploreCard
-            icon="user-x"
-            title="Is Away List"
-            description="View is away requests"
-            route="/Attendance/IsAwayList"
-          />
-
-          <ExploreCard
-            icon="check-circle"
-            title="Leave Approval List"
-            description="View leave approval requests"
-            route="/Attendance/LeaveApprovalList"
-          />
-
-          <ExploreCard
-            icon="home"
-            title="Work From Home"
-            description="Manage your WFH requests"
-            route="/Attendance/Wfhlist"
-          />
-        </View>
-
-        {/* Requests */}
-        <View style={[styles.section, { backgroundColor: colors.background }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            Requests
-          </Text>
-
-          <ExploreCard
-            icon="file-plus"
-            title="Apply Leave Application"
-            description="Apply for leave"
-            route="/Requests/Leaveapplyreq"
-          />
-          <ExploreCard
-            icon="alert-circle"
-            title="Miss Punch Request"
-            description="Report a missed check-in or check-out"
-            route="/Requests/Misspunchreq"
-          />
-          <ExploreCard
-            icon="log-out"
-            title="Early Check-Out/ Late check In"
-            description="Request to leave early or late check in"
-            route="/Requests/Earlycheckoutreq"
-          />
-          <ExploreCard
-            icon="home"
-            title="Apply WFH"
-            description="Apply for work from home"
-            route="/Requests/Wfhapplyreq"
-          />
-        </View>
-
-        {/* View All Requests */}
-        <View style={[styles.section, { backgroundColor: colors.background }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            View All  Requests
-          </Text>
-
-          <ExploreCard
-            icon="file-plus"
-            title="Leave Requests"
-            description="View all leave applications"
-            route="/ViewAllRequest/LeaveApplication"
-          />
-          <ExploreCard
-            icon="log-out"
-            title="Early Checkout Requests/Late CheckIn Requests"
-            description="View all early checkout requests or late checkIn requests"
-            route="/ViewAllRequest/EarlyCheckout"
-          />
-          <ExploreCard
-            icon="home"
-            title="WFH Requests"
-            description="View all WFH requests"
-            route="/ViewAllRequest/Wfhrequest"
-          />
-          <ExploreCard
-            icon="alert-circle"
-            title="View Miss Punch Requests"
-            description="View all miss punch requests"
-            route="/ViewAllRequest/ViewAllMisspunch"
-          />
-        </View>
-
-        {/* Resources */}
-        <View style={[styles.section, { backgroundColor: colors.background }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            Resources
-          </Text>
-
-          <ExploreCard
-            icon="file-text"
-            title="HR Policies"
-            description="Company rules and guidelines"
-            route="/Resources/HrPolicies"
-          />
-          <ExploreCard
-            icon="users"
-            title="Team Directory"
-            description="Find teammates and contacts"
-            route="/Resources/TeamDirectory"
-          />
-        </View>
-
-        {/* Support */}
-        <View style={[styles.section, { backgroundColor: colors.background }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            Support
-          </Text>
-
-          <ExploreCard
-            icon="help-circle"
-            title="Help & FAQ"
-            description="Get answers to common questions"
-            route="/Support/Helpandfaq"
-          />
-          <ExploreCard
-            icon="info"
-            title="About"
-            description="App version and info"
-            route="/Support/About"
-          />
-        </View>
+        {/* Collapsible Sections */}
+        {categories.map((category, index) => (
+          <CollapsibleSection key={index} category={category} />
+        ))}
       </Animated.ScrollView>
     </SafeAreaView>
   );
@@ -285,8 +416,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 120, // Extra padding for tab bar
+    paddingHorizontal: 16,
+    paddingBottom: 120,
   },
   headerContainer: {
     paddingVertical: 40,
@@ -294,48 +425,96 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 32,
+    fontWeight: '800',
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 16,
     marginBottom: 24,
+    lineHeight: 22,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    ...Platform.select({ android: { elevation: 4 } }),
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
   },
-  card: {
+  sectionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    // soft shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    ...Platform.select({ android: { elevation: 3 } }),
+    gap: 12,
   },
-  cardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+  sectionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
-  cardContent: {
-    flex: 1,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  sectionCount: {
+    fontSize: 13,
+  },
+  collapsibleContent: {
+    overflow: 'hidden',
+  },
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 12,
+    paddingTop: 0,
+    gap: 12,
+  },
+  cardWrapper: {
+    width: '48%',
+  },
+  card: {
+    borderRadius: 16,
+    padding: 16,
+    height: 130,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  cardBody: {
+    gap: 4,
   },
   cardTitle: {
     fontSize: 15,
@@ -343,6 +522,8 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   cardDescription: {
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 16,
   },
 });
+

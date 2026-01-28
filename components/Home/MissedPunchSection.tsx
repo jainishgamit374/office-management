@@ -7,16 +7,16 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 interface MissedPunch {
@@ -455,7 +455,7 @@ const createStyles = (colors: ThemeColors) =>
       backgroundColor: colors.card,
       marginHorizontal: 16,
       marginTop: 12,
-      borderRadius: 12,
+      borderRadius: 16,
       padding: 12,
       borderWidth: 1,
       borderColor: colors.border,

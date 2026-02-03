@@ -1,3 +1,4 @@
+import { useTheme } from '@/contexts/ThemeContext';
 import { approveRequest, disapproveRequest, PROGRAM_IDS } from '@/lib/approvals';
 import { getLeaveApprovals, LeaveApprovalRequest } from '@/lib/leaveApprovalList';
 import Feather from '@expo/vector-icons/Feather';
@@ -19,6 +20,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const LeaveApprovalList = () => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+    
     const [requests, setRequests] = useState<LeaveApprovalRequest[]>([]);
     const [totalPending, setTotalPending] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
@@ -373,10 +377,11 @@ const LeaveApprovalList = () => {
     );
 };
 
-const styles = StyleSheet.create({
+
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F7FA',
+        backgroundColor: colors.background,
     },
     header: {
         flexDirection: 'row',
@@ -384,26 +389,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 20,
         paddingVertical: 16,
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
+        borderBottomColor: colors.divider,
     },
     headerTitle: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
         marginBottom: 4,
     },
     headerSubtitle: {
         fontSize: 13,
-        color: '#666',
+        color: colors.textSecondary,
         fontWeight: '500',
     },
     refreshButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: '#E8F5E9',
+        backgroundColor: colors.primaryLight,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -412,7 +417,7 @@ const styles = StyleSheet.create({
         paddingBottom: 32,
     },
     requestCard: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 16,
         padding: 16,
         shadowColor: '#000',
@@ -421,7 +426,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 3,
         borderWidth: 1,
-        borderColor: '#F0F0F0',
+        borderColor: colors.border,
     },
     cardHeader: {
         flexDirection: 'row',
@@ -430,10 +435,10 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         paddingBottom: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#F5F5F5',
+        borderBottomColor: colors.divider,
     },
     idBadge: {
-        backgroundColor: '#F5F5F5',
+        backgroundColor: colors.primaryLight,
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 8,
@@ -441,7 +446,7 @@ const styles = StyleSheet.create({
     idText: {
         fontSize: 12,
         fontWeight: '700',
-        color: '#666',
+        color: colors.textSecondary,
         letterSpacing: 0.5,
     },
     statusBadge: {
@@ -473,7 +478,7 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: '#E8F5E9',
+        backgroundColor: colors.primaryLight,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -482,7 +487,7 @@ const styles = StyleSheet.create({
     },
     employeeLabel: {
         fontSize: 11,
-        color: '#999',
+        color: colors.textTertiary,
         marginBottom: 2,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
@@ -490,7 +495,7 @@ const styles = StyleSheet.create({
     employeeName: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
     },
     infoRow: {
         flexDirection: 'row',
@@ -502,7 +507,7 @@ const styles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: 8,
-        backgroundColor: '#F5F5F5',
+        backgroundColor: colors.primaryLight,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -511,7 +516,7 @@ const styles = StyleSheet.create({
     },
     infoLabel: {
         fontSize: 11,
-        color: '#999',
+        color: colors.textTertiary,
         marginBottom: 4,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
@@ -519,7 +524,7 @@ const styles = StyleSheet.create({
     infoValue: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
     },
     leaveTypeBadge: {
         flexDirection: 'row',
@@ -544,7 +549,7 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
         marginTop: 12,
     },
     errorContainer: {
@@ -584,20 +589,20 @@ const styles = StyleSheet.create({
     emptyTitle: {
         fontSize: 20,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
         marginTop: 16,
         marginBottom: 8,
     },
     emptyText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
         textAlign: 'center',
     },
     reasonSection: {
         marginTop: 16,
         paddingTop: 16,
         borderTopWidth: 1,
-        borderTopColor: '#F5F5F5',
+        borderTopColor: colors.divider,
     },
     reasonHeader: {
         flexDirection: 'row',
@@ -607,14 +612,14 @@ const styles = StyleSheet.create({
     },
     reasonLabel: {
         fontSize: 11,
-        color: '#999',
+        color: colors.textTertiary,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
         fontWeight: '600',
     },
     reasonText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
         lineHeight: 20,
     },
     actionButtonsContainer: {
@@ -623,7 +628,7 @@ const styles = StyleSheet.create({
         marginTop: 16,
         paddingTop: 16,
         borderTopWidth: 1,
-        borderTopColor: '#F5F5F5',
+        borderTopColor: colors.divider,
     },
     actionButton: {
         flex: 1,
@@ -635,7 +640,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     rejectButton: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderWidth: 1,
         borderColor: '#FFEBEE',
     },
@@ -658,7 +663,7 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     modalContent: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 20,
         padding: 24,
         elevation: 5,
@@ -670,23 +675,23 @@ const styles = StyleSheet.create({
     modalTitle: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
         marginBottom: 8,
     },
     modalSubtitle: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
         marginBottom: 16,
     },
     modalInput: {
-        backgroundColor: '#F5F7FA',
+        backgroundColor: colors.background,
         borderRadius: 12,
         padding: 12,
         minHeight: 100,
         textAlignVertical: 'top',
         marginBottom: 20,
         fontSize: 15,
-        color: '#333',
+        color: colors.text,
     },
     modalActions: {
         flexDirection: 'row',
@@ -700,7 +705,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     modalCancelButton: {
-        backgroundColor: '#F5F5F5',
+        backgroundColor: colors.primaryLight,
     },
     modalApproveButton: {
         backgroundColor: '#4CAF50',
@@ -708,7 +713,7 @@ const styles = StyleSheet.create({
     modalCancelText: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#666',
+        color: colors.textSecondary,
     },
     modalApproveText: {
         fontSize: 15,

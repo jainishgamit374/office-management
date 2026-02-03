@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { getEmployeeOfTheMonth } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,6 +15,9 @@ interface EmployeeOfTheMonthSectionProps {
 }
 
 const EmployeeOfTheMonthSection: React.FC<EmployeeOfTheMonthSectionProps> = ({ refreshKey }) => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+    
     const [employee, setEmployee] = useState<EmployeeOfMonthData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -91,13 +95,13 @@ const EmployeeOfTheMonthSection: React.FC<EmployeeOfTheMonthSectionProps> = ({ r
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         marginHorizontal: 16,
         marginTop: 12,
         borderRadius: 16,
         padding: 12,
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderWidth: 1,
         borderColor: '#FFD700',
         shadowColor: '#FFD700',
@@ -124,7 +128,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
     },
     loadingContainer: {
         paddingVertical: 20,
@@ -157,11 +161,11 @@ const styles = StyleSheet.create({
     employeeName: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
     },
     monthText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
         fontWeight: '600',
     },
     badgeContainer: {
@@ -173,7 +177,7 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: 14,
-        color: '#999',
+        color: colors.textSecondary,
         fontStyle: 'italic',
     },
 });

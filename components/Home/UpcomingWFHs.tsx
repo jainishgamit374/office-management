@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { getUpcomingWFH } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
@@ -33,6 +34,9 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
     scaleAnims,
     refreshKey,
 }) => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+    
     const [wfhs, setWfhs] = useState<WFHDetail[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -106,19 +110,19 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
                 <Feather 
                     name={isExpanded ? 'chevron-up' : 'chevron-down'} 
                     size={20} 
-                    color="#4169E1" 
+                    color={colors.primary} 
                 />
             </TouchableOpacity>
 
             {isExpanded && (
                 isLoading ? (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="small" color="#4169E1" />
+                        <ActivityIndicator size="small" color={colors.primary} />
                         <Text style={styles.loadingText}>Loading WFH applications...</Text>
                     </View>
                 ) : wfhs.length === 0 ? (
                     <View style={styles.emptyContainer}>
-                        <Feather name="calendar" size={32} color="#ccc" />
+                        <Feather name="calendar" size={32} color={colors.textTertiary} />
                         <Text style={styles.emptyText}>No WFH applications found</Text>
                     </View>
                 ) : (
@@ -126,16 +130,16 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
                         {wfhs.map((wfh, index) => (
                             <View key={wfh.id || index} style={styles.card}>
                                 <View style={styles.iconContainer}>
-                                    <Feather name="home" size={24} color="#4A90FF" />
+                                    <Feather name="home" size={24} color={colors.primary} />
                                 </View>
                                 <View style={styles.cardContent}>
                                     <Text style={styles.cardTitle}>{wfh.name}</Text>
                                     <View style={styles.detailsRow}>
-                                        <Feather name="calendar" size={14} color="#64748B" />
+                                        <Feather name="calendar" size={14} color={colors.textSecondary} />
                                         <Text style={styles.detailText}>{wfh.dates}</Text>
                                     </View>
                                     <View style={styles.detailsRow}>
-                                        <Feather name="clock" size={14} color="#64748B" />
+                                        <Feather name="clock" size={14} color={colors.textSecondary} />
                                         <Text style={styles.detailText}>{wfh.duration}</Text>
                                     </View>
                                 </View>
@@ -148,15 +152,15 @@ const UpcomingWFHs: React.FC<UpcomingWFHsProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         marginHorizontal: 16,
         marginTop: 12,
         borderRadius: 16,
         padding: 12,
         borderWidth: 1,
-        backgroundColor: '#FFFFFF',
-        borderColor: '#E2E8F0',
+        backgroundColor: colors.card,
+        borderColor: colors.border,
     },
     header: {
         flexDirection: 'row',
@@ -168,7 +172,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#4169E1',
+        color: colors.primary,
         textAlign: 'left',
     },
     grid: {
@@ -181,13 +185,13 @@ const styles = StyleSheet.create({
         gap: 10,
         padding: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
+        borderBottomColor: colors.divider,
     },
     iconContainer: {
         width: 50,
         height: 50,
         borderRadius: 25,
-        backgroundColor: '#E0E8FF',
+        backgroundColor: colors.primaryLight,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -198,7 +202,7 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#1E293B',
+        color: colors.text,
     },
     detailsRow: {
         flexDirection: 'row',
@@ -207,7 +211,7 @@ const styles = StyleSheet.create({
     },
     detailText: {
         fontSize: 13,
-        color: '#64748B',
+        color: colors.textSecondary,
     },
     loadingContainer: {
         padding: 20,
@@ -216,7 +220,7 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
     },
     emptyContainer: {
         padding: 30,
@@ -225,7 +229,7 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: 14,
-        color: '#999',
+        color: colors.textSecondary,
     },
 });
 

@@ -63,33 +63,68 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
   const fetchMissedPunches = useCallback(async () => {
     try {
       setIsLoading(true);
+      console.log('📋 MissedPunchSection: Fetching missed punches...');
 
       const [missedPunchResponse, missingPunchOutResponse] = await Promise.all([
         getMissingPunchDetails(),
         getMissingPunchOut(),
       ]);
 
+      console.log('📥 MissedPunchSection API responses:', {
+        missedPunch: {
+          status: missedPunchResponse.status,
+          dataLength: missedPunchResponse.data?.length || 0,
+        },
+        missingPunchOut: {
+          status: missingPunchOutResponse.status,
+          dataLength: missingPunchOutResponse.data?.length || 0,
+        },
+      });
+
       if (missedPunchResponse.status === 'Success' && missedPunchResponse.data) {
-        const missedPunchData: MissedPunch[] = missedPunchResponse.data.map((item: any) => {
-          const date = new Date(item.datetime);
-          const punchType = item.PunchType === '1' ? 'check-in' : 'check-out';
+        const missedPunchData: MissedPunch[] = missedPunchResponse.data
+          .filter((item: any) => {
+            // Filter out missed punches that have been resolved
+            // A missed punch is resolved if:
+            // 1. The approval_status is 'Approved' or 'Rejected' (already processed)
+            // 2. OR if it's for today and the user has already checked in (late check-in)
+            
+            const status = item.approval_status?.toLowerCase() || '';
+            const isProcessed = status.includes('approve') || status.includes('reject');
+            
+            // If already processed, don't show it
+            if (isProcessed) {
+              console.log(`⚠️ MissedPunchSection: Filtering out processed item (status: ${item.approval_status})`);
+              return false;
+            }
+            
+            // For today's date, check if it's a check-in type missed punch
+            // If user has checked in late today, the backend should handle this
+            // But we'll keep all pending items for now
+            return true;
+          })
+          .map((item: any) => {
+            const date = new Date(item.datetime);
+            const punchType = item.PunchType === '1' ? 'check-in' : 'check-out';
 
-          return {
-            id: item.MissPunchReqMasterID,
-            date: item.datetime,
-            dateFormatted: date.toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            }),
-            type: punchType,
-            reason: item.reason || 'No reason provided',
-            status: item.approval_status,
-          };
-        });
+            return {
+              id: item.MissPunchReqMasterID,
+              date: item.datetime,
+              dateFormatted: date.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              }),
+              type: punchType,
+              reason: item.reason || 'No reason provided',
+              status: item.approval_status,
+            };
+          });
 
+        console.log('✅ MissedPunchSection: Parsed missed punches:', missedPunchData.length);
         setMissedPunches(missedPunchData);
       } else {
+        console.log('⚠️ MissedPunchSection: No missed punch data');
         setMissedPunches([]);
       }
 
@@ -106,16 +141,19 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
           };
         });
 
+        console.log('✅ MissedPunchSection: Parsed missing punch-outs:', missingPunchOutData.length);
         setMissingPunchOuts(missingPunchOutData);
       } else {
+        console.log('⚠️ MissedPunchSection: No missing punch-out data');
         setMissingPunchOuts([]);
       }
     } catch (error) {
-      console.error('❌ Failed to fetch missed punches:', error);
+      console.error('❌ MissedPunchSection: Failed to fetch missed punches:', error);
       setMissedPunches([]);
       setMissingPunchOuts([]);
     } finally {
       setIsLoading(false);
+      console.log('🏁 MissedPunchSection: Fetch complete');
     }
   }, [refreshKey]);
 
@@ -245,11 +283,16 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
     }
   };
 
-  if (!isLoading && missedPunches.length === 0 && missingPunchOuts.length === 0) {
-    return null;
-  }
+  // Add debug logging
+  console.log('🔍 MissedPunchSection state:', {
+    isLoading,
+    missedPunchesCount: missedPunches.length,
+    missingPunchOutsCount: missingPunchOuts.length,
+    totalCount: missedPunches.length + missingPunchOuts.length,
+  });
 
   const totalCount = missedPunches.length + missingPunchOuts.length;
+  const hasData = totalCount > 0;
 
   return (
     <>
@@ -271,6 +314,11 @@ const MissedPunchSection: React.FC<MissedPunchSectionProps> = ({ refreshKey }) =
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : !hasData ? (
+          <View style={styles.noDataContainer}>
+            <Feather name="check-circle" size={32} color={colors.primary} />
+            <Text style={styles.noDataText}>No missed punches</Text>
           </View>
         ) : (
           <ScrollView 
@@ -498,6 +546,17 @@ const createStyles = (colors: ThemeColors) =>
     loadingContainer: {
       paddingVertical: 12,
       alignItems: 'center',
+    },
+    noDataContainer: {
+      paddingVertical: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    noDataText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: colors.textSecondary,
     },
     scrollContent: {
       flexDirection: 'row',

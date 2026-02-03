@@ -27,6 +27,7 @@ const LateArrivals: React.FC<LateArrivalsProps> = ({ title, refreshKey }) => {
     const fetchLateArrivals = useCallback(async () => {
         try {
             setIsLoading(true);
+            console.log('🔄 [LateArrivals] Fetching late arrivals...');
             
             const response = await getEarlyLatePunchList({
                 checkoutType: 'Late',
@@ -35,11 +36,29 @@ const LateArrivals: React.FC<LateArrivalsProps> = ({ title, refreshKey }) => {
                 sortOrder: 'desc'
             });
 
+            console.log('📡 [LateArrivals] API response:', {
+                status: response.status,
+                dataLength: response.data?.length || 0,
+            });
+
             if (response.status === 'Success' && response.data && response.data.length > 0) {
+                console.log(`📊 [LateArrivals] Total items received: ${response.data.length}`);
+                
+                // Log each item for debugging
+                response.data.forEach((item: any, index: number) => {
+                    console.log(`🔍 [LateArrivals] Item ${index}: CheckoutType="${item.CheckoutType}"`);
+                });
+
                 const transformedData: LateArrivalData[] = response.data
                     .filter((item: any) => {
                         const checkoutType = item.CheckoutType?.toString().toLowerCase();
-                        return checkoutType === 'late';
+                        const isLate = checkoutType === 'late';
+                        
+                        if (!isLate) {
+                            console.log(`⚠️ [LateArrivals] Filtering out item with CheckoutType="${item.CheckoutType}"`);
+                        }
+                        
+                        return isLate;
                     })
                     .map((item: any) => ({
                         id: item.EarlyLatePunchMasterID,
@@ -48,11 +67,14 @@ const LateArrivals: React.FC<LateArrivalsProps> = ({ title, refreshKey }) => {
                         employeeName: item.EmployeeName || 'Employee',
                     }));
 
+                console.log(`✅ [LateArrivals] Filtered to ${transformedData.length} Late items`);
                 setArrivals(transformedData);
             } else {
+                console.log('ℹ️ [LateArrivals] No data in response');
                 setArrivals([]);
             }
         } catch (error) {
+            console.error('❌ [LateArrivals] Failed to fetch:', error);
             setArrivals([]);
         } finally {
             setIsLoading(false);

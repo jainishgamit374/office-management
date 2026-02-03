@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { submitEarlyCheckoutRequest, submitLateCheckinRequest } from '@/lib/earlyLatePunch';
 import Feather from '@expo/vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -25,9 +26,10 @@ interface DropdownProps {
     options: string[];
     onSelect: (value: string) => void;
     icon?: string;
+    colors: any;
 }
 
-const Dropdown: React.FC<DropdownProps> = ({ label, value, options, onSelect, icon = 'chevron-down' }) => {
+const Dropdown: React.FC<DropdownProps> = ({ label, value, options, onSelect, icon = 'chevron-down', colors }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [animation] = useState(new Animated.Value(0));
 
@@ -57,24 +59,63 @@ const Dropdown: React.FC<DropdownProps> = ({ label, value, options, onSelect, ic
         outputRange: ['0deg', '180deg'],
     });
 
+    const dropdownStyles = {
+        dropdownContainer: { marginBottom: 0 },
+        dropdownLabel: { fontSize: 14, fontWeight: '600' as const, marginBottom: 8 },
+        dropdownButton: {
+            flexDirection: 'row' as const,
+            alignItems: 'center' as const,
+            justifyContent: 'space-between' as const,
+            borderRadius: 12,
+            padding: 16,
+            borderWidth: 1,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.08,
+            shadowRadius: 6,
+            elevation: 4,
+        },
+        dropdownButtonText: { fontSize: 15, fontWeight: '600' as const },
+        dropdownList: {
+            borderRadius: 12,
+            marginTop: 8,
+            overflow: 'hidden' as const,
+            borderWidth: 1,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.15,
+            shadowRadius: 12,
+            elevation: 8,
+        },
+        dropdownItem: {
+            flexDirection: 'row' as const,
+            alignItems: 'center' as const,
+            justifyContent: 'space-between' as const,
+            padding: 16,
+            borderBottomWidth: 1,
+        },
+        dropdownItemText: { fontSize: 15 },
+    };
+
     return (
-        <View style={styles.dropdownContainer}>
-            <Text style={styles.dropdownLabel}>{label}</Text>
+        <View style={dropdownStyles.dropdownContainer}>
+            <Text style={[dropdownStyles.dropdownLabel, { color: colors.text }]}>{label}</Text>
             <TouchableOpacity
-                style={styles.dropdownButton}
+                style={[dropdownStyles.dropdownButton, { backgroundColor: colors.card, borderColor: colors.border }]}
                 onPress={toggleDropdown}
                 activeOpacity={0.7}
             >
-                <Text style={styles.dropdownButtonText}>{value}</Text>
+                <Text style={[dropdownStyles.dropdownButtonText, { color: colors.text }]}>{value}</Text>
                 <Animated.View style={{ transform: [{ rotate: rotateIcon }] }}>
-                    <Feather name={icon as any} size={20} color="#4A90FF" />
+                    <Feather name={icon as any} size={20} color={colors.primary} />
                 </Animated.View>
             </TouchableOpacity>
 
             {isOpen && (
                 <Animated.View
                     style={[
-                        styles.dropdownList,
+                        dropdownStyles.dropdownList,
+                        { backgroundColor: colors.card, borderColor: colors.border },
                         {
                             height: dropdownHeight,
                             opacity: animation,
@@ -89,22 +130,23 @@ const Dropdown: React.FC<DropdownProps> = ({ label, value, options, onSelect, ic
                             <TouchableOpacity
                                 key={index}
                                 style={[
-                                    styles.dropdownItem,
-                                    option === value && styles.dropdownItemActive,
+                                    dropdownStyles.dropdownItem,
+                                    { borderBottomColor: colors.divider },
+                                    option === value && { backgroundColor: colors.primaryLight },
                                 ]}
                                 onPress={() => handleSelect(option)}
                                 activeOpacity={0.7}
                             >
                                 <Text
                                     style={[
-                                        styles.dropdownItemText,
-                                        option === value && styles.dropdownItemTextActive,
+                                        dropdownStyles.dropdownItemText,
+                                        { color: option === value ? colors.primary : colors.textSecondary },
                                     ]}
                                 >
                                     {option}
                                 </Text>
                                 {option === value && (
-                                    <Feather name="check" size={18} color="#4A90FF" />
+                                    <Feather name="check" size={18} color={colors.primary} />
                                 )}
                             </TouchableOpacity>
                         ))}
@@ -116,6 +158,9 @@ const Dropdown: React.FC<DropdownProps> = ({ label, value, options, onSelect, ic
 };
 
 const Earlycheckoutreq = () => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+    
     const [requestType, setRequestType] = useState<RequestType>('Early Check-Out');
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [selectedTime, setSelectedTime] = useState(new Date());
@@ -355,6 +400,7 @@ const Earlycheckoutreq = () => {
                         value={requestType}
                         options={['Early Check-Out', 'Late Check-In']}
                         onSelect={(value) => setRequestType(value as RequestType)}
+                        colors={colors}
                     />
                 </View>
 
@@ -369,7 +415,7 @@ const Earlycheckoutreq = () => {
                             onPress={() => setShowDatePicker(true)}
                         >
                             <View style={styles.dateTimeIconContainer}>
-                                <Feather name="calendar" size={20} color="#4A90FF" />
+                                <Feather name="calendar" size={20} color={colors.primary} />
                             </View>
                             <View style={styles.dateTimeTextContainer}>
                                 <Text style={styles.dateTimeLabel}>Date</Text>
@@ -383,7 +429,7 @@ const Earlycheckoutreq = () => {
                             onPress={() => setShowTimePicker(true)}
                         >
                             <View style={styles.dateTimeIconContainer}>
-                                <Feather name="clock" size={20} color="#4A90FF" />
+                                <Feather name="clock" size={20} color={colors.primary} />
                             </View>
                             <View style={styles.dateTimeTextContainer}>
                                 <Text style={styles.dateTimeLabel}>Time</Text>
@@ -419,7 +465,7 @@ const Earlycheckoutreq = () => {
                     <TextInput
                         style={styles.reasonInput}
                         placeholder={`Enter reason for ${requestType.toLowerCase()}...`}
-                        placeholderTextColor="#999"
+                        placeholderTextColor={colors.textTertiary}
                         multiline
                         numberOfLines={5}
                         value={reason}
@@ -455,7 +501,7 @@ const Earlycheckoutreq = () => {
                 {/* Info Card */}
                 <View style={styles.infoCard}>
                     <View style={styles.infoIconContainer}>
-                        <Feather name="info" size={20} color="#4A90FF" />
+                        <Feather name="info" size={20} color={colors.primary} />
                     </View>
                     <View style={styles.infoTextContainer}>
                         <Text style={styles.infoTitle}>Important Note</Text>
@@ -471,10 +517,11 @@ const Earlycheckoutreq = () => {
     );
 };
 
-const styles = StyleSheet.create({
+
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F7FA',
+        backgroundColor: colors.background,
     },
     scrollContent: {
         padding: 16,
@@ -503,12 +550,12 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 24,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
         marginBottom: 4,
     },
     headerSubtitle: {
         fontSize: 14,
-        color: '#999',
+        color: colors.textTertiary,
     },
 
     // Status Cards
@@ -519,7 +566,7 @@ const styles = StyleSheet.create({
     },
     statusCard: {
         flex: 1,
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 16,
         padding: 16,
         alignItems: 'center',
@@ -547,11 +594,11 @@ const styles = StyleSheet.create({
     statusCardText: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#666',
+        color: colors.textSecondary,
         textAlign: 'center',
     },
     statusCardTextActive: {
-        color: '#333',
+        color: colors.text,
         fontWeight: '700',
     },
     activeIndicator: {
@@ -567,7 +614,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         marginBottom: 12,
     },
 
@@ -578,18 +625,18 @@ const styles = StyleSheet.create({
     dropdownLabel: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         marginBottom: 8,
     },
     dropdownButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.08,
@@ -599,15 +646,15 @@ const styles = StyleSheet.create({
     dropdownButtonText: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
     },
     dropdownList: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         marginTop: 8,
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.15,
@@ -620,18 +667,18 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
+        borderBottomColor: colors.divider,
     },
     dropdownItemActive: {
-        backgroundColor: '#F0F8FF',
+        backgroundColor: colors.primaryLight,
     },
     dropdownItemText: {
         fontSize: 15,
-        color: '#666',
+        color: colors.textSecondary,
     },
     dropdownItemTextActive: {
         fontWeight: '600',
-        color: '#4A90FF',
+        color: colors.primary,
     },
 
     // Date & Time
@@ -643,12 +690,12 @@ const styles = StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 14,
         gap: 12,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.08,
@@ -659,10 +706,10 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: '#E3F2FD',
+        backgroundColor: colors.primaryLight,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#4A90FF',
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
@@ -673,7 +720,7 @@ const styles = StyleSheet.create({
     },
     dateTimeLabel: {
         fontSize: 11,
-        color: '#999',
+        color: colors.textTertiary,
         marginBottom: 4,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
@@ -682,18 +729,18 @@ const styles = StyleSheet.create({
     dateTimeValue: {
         fontSize: 14,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
     },
 
     // Reason Input
     reasonInput: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
         fontSize: 15,
-        color: '#333',
+        color: colors.text,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         minHeight: 140,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 3 },
@@ -703,7 +750,7 @@ const styles = StyleSheet.create({
     },
     characterCount: {
         fontSize: 12,
-        color: '#999',
+        color: colors.textTertiary,
         textAlign: 'right',
         marginTop: 8,
     },
@@ -736,21 +783,21 @@ const styles = StyleSheet.create({
     // Info Card
     infoCard: {
         flexDirection: 'row',
-        backgroundColor: '#E3F2FD',
+        backgroundColor: colors.primaryLight,
         borderRadius: 12,
         padding: 16,
         gap: 12,
         borderWidth: 1,
-        borderColor: '#BBDEFB',
+        borderColor: colors.border,
     },
     infoIconContainer: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#4A90FF',
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
@@ -762,12 +809,12 @@ const styles = StyleSheet.create({
     infoTitle: {
         fontSize: 14,
         fontWeight: '700',
-        color: '#1976D2',
+        color: colors.primary,
         marginBottom: 4,
     },
     infoText: {
         fontSize: 13,
-        color: '#1565C0',
+        color: colors.textSecondary,
         lineHeight: 20,
     },
 });

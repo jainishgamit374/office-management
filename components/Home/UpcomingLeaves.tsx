@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { getUpcomingLeaves } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
@@ -36,6 +37,9 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
     scaleAnims,
     refreshKey,
 }) => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+    
     const [leaves, setLeaves] = useState<LeaveDetail[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isExpanded, setIsExpanded] = useState(false);
@@ -163,19 +167,19 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
                 <Feather 
                     name={isExpanded ? 'chevron-up' : 'chevron-down'} 
                     size={20} 
-                    color="#4169E1" 
+                    color={colors.primary} 
                 />
             </TouchableOpacity>
 
             {isExpanded && (
                 isLoading ? (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="small" color="#4169E1" />
+                        <ActivityIndicator size="small" color={colors.primary} />
                         <Text style={styles.loadingText}>Loading...</Text>
                     </View>
                 ) : leaves.length === 0 ? (
                     <View style={styles.emptyContainer}>
-                        <Feather name="calendar" size={32} color="#ccc" />
+                        <Feather name="calendar" size={32} color={colors.textTertiary} />
                         <Text style={styles.emptyText}>No upcoming leaves</Text>
                     </View>
                 ) : (
@@ -183,20 +187,20 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
                         {leaves.map((leave, index) => (
                             <View key={leave.id || index} style={styles.card}>
                                 <View style={styles.iconContainer}>
-                                    <Feather name="calendar" size={24} color="#10B981" />
+                                    <Feather name="calendar" size={24} color={colors.success} />
                                 </View>
                                 <View style={styles.cardContent}>
                                     <Text style={styles.cardTitle}>{leave.name}</Text>
                                     <View style={styles.detailsRow}>
-                                        <Feather name="briefcase" size={14} color="#64748B" />
+                                        <Feather name="briefcase" size={14} color={colors.textSecondary} />
                                         <Text style={styles.detailText}>{leave.leaveType}</Text>
                                     </View>
                                     <View style={styles.detailsRow}>
-                                        <Feather name="calendar" size={14} color="#64748B" />
+                                        <Feather name="calendar" size={14} color={colors.textSecondary} />
                                         <Text style={styles.detailText}>{leave.dates}</Text>
                                     </View>
                                     <View style={styles.detailsRow}>
-                                        <Feather name="clock" size={14} color="#64748B" />
+                                        <Feather name="clock" size={14} color={colors.textSecondary} />
                                         <Text style={styles.detailText}>{leave.duration}</Text>
                                     </View>
                                 </View>
@@ -209,15 +213,15 @@ const UpcomingLeaves: React.FC<UpcomingLeavesProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         marginHorizontal: 16,
         marginTop: 12,
         borderRadius: 16,
         padding: 12,
         borderWidth: 1,
-        backgroundColor: '#FFFFFF',
-        borderColor: '#E2E8F0',
+        backgroundColor: colors.card,
+        borderColor: colors.border,
     },
     header: {
         flexDirection: 'row',
@@ -229,7 +233,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#4169E1',
+        color: colors.primary,
         textAlign: 'left',
     },
     grid: {
@@ -242,7 +246,7 @@ const styles = StyleSheet.create({
         gap: 10,
         padding: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
+        borderBottomColor: colors.divider,
     },
     cardContent: {
         flex: 1,
@@ -252,14 +256,14 @@ const styles = StyleSheet.create({
         width: 50,
         height: 50,
         borderRadius: 25,
-        backgroundColor: '#DCFCE7',
+        backgroundColor: colors.primaryLight,
         justifyContent: 'center',
         alignItems: 'center',
     },
     cardTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#1E293B',
+        color: colors.text,
     },
     detailsRow: {
         flexDirection: 'row',
@@ -268,7 +272,7 @@ const styles = StyleSheet.create({
     },
     detailText: {
         fontSize: 13,
-        color: '#64748B',
+        color: colors.textSecondary,
     },
     loadingContainer: {
         padding: 20,
@@ -277,7 +281,7 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         fontSize: 14,
-        color: '#64748B',
+        color: colors.textSecondary,
     },
     emptyContainer: {
         padding: 30,
@@ -286,7 +290,7 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: 14,
-        color: '#64748B',
+        color: colors.textSecondary,
     },
 });
 

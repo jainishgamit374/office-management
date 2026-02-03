@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import Feather from '@expo/vector-icons/Feather';
 import React, { useState } from 'react';
 import {
@@ -22,6 +23,8 @@ type Technology = {
 };
 
 const Helpandfaq = () => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
     const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
 
     const technologies: Technology[] = [
@@ -100,7 +103,7 @@ const Helpandfaq = () => {
                 {/* About Section */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Feather name="info" size={20} color="#4A90FF" />
+                        <Feather name="info" size={20} color={colors.primary} />
                         <Text style={styles.sectionTitle}>About Our Services</Text>
                     </View>
                     <View style={styles.aboutCard}>
@@ -116,7 +119,7 @@ const Helpandfaq = () => {
                 {/* Technologies Section */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Feather name="code" size={20} color="#4A90FF" />
+                        <Feather name="code" size={20} color={colors.primary} />
                         <Text style={styles.sectionTitle}>Technologies We Offer</Text>
                     </View>
                     <View style={styles.techGrid}>
@@ -139,14 +142,14 @@ const Helpandfaq = () => {
                 {/* Services Section */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Feather name="star" size={20} color="#4A90FF" />
+                        <Feather name="star" size={20} color={colors.primary} />
                         <Text style={styles.sectionTitle}>Services Included</Text>
                     </View>
                     <View style={styles.servicesGrid}>
                         {services.map((service, index) => (
                             <View key={index} style={styles.serviceCard}>
                                 <View style={styles.serviceIconContainer}>
-                                    <Feather name={service.icon as any} size={20} color="#4A90FF" />
+                                    <Feather name={service.icon as any} size={20} color={colors.primary} />
                                 </View>
                                 <View style={styles.serviceContent}>
                                     <Text style={styles.serviceTitle}>{service.title}</Text>
@@ -162,7 +165,7 @@ const Helpandfaq = () => {
                 {/* FAQ Section */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
-                        <Feather name="help-circle" size={20} color="#4A90FF" />
+                        <Feather name="help-circle" size={20} color={colors.primary} />
                         <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
                     </View>
                     <View style={styles.faqContainer}>
@@ -176,7 +179,7 @@ const Helpandfaq = () => {
                                     <Feather
                                         name={expandedFAQ === index ? 'chevron-up' : 'chevron-down'}
                                         size={20}
-                                        color="#666"
+                                        color={colors.textSecondary}
                                     />
                                 </Pressable>
                                 {expandedFAQ === index && (
@@ -192,7 +195,7 @@ const Helpandfaq = () => {
                 {/* Contact Section */}
                 <View style={styles.contactSection}>
                     <View style={styles.contactCard}>
-                        <Feather name="mail" size={32} color="#4A90FF" />
+                        <Feather name="mail" size={32} color={colors.primary} />
                         <Text style={styles.contactTitle}>Still have questions?</Text>
                         <Text style={styles.contactText}>
                             Feel free to reach out to our support team for any additional queries
@@ -207,10 +210,10 @@ const Helpandfaq = () => {
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F7FA',
+        backgroundColor: colors.background,
     },
     scrollContent: {
         padding: 16,
@@ -224,13 +227,13 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 24,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
         marginBottom: 6,
         letterSpacing: 0.3,
     },
     headerSubtitle: {
         fontSize: 14,
-        color: '#999',
+        color: colors.textTertiary,
         lineHeight: 20,
     },
 
@@ -247,16 +250,16 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
     },
 
     // About
     aboutCard: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
@@ -265,7 +268,7 @@ const styles = StyleSheet.create({
     },
     aboutText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
         lineHeight: 22,
     },
 
@@ -277,12 +280,12 @@ const styles = StyleSheet.create({
     },
     techCard: {
         width: '48%',
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
@@ -300,7 +303,7 @@ const styles = StyleSheet.create({
     techName: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         textAlign: 'center',
     },
 
@@ -310,13 +313,13 @@ const styles = StyleSheet.create({
     },
     serviceCard: {
         flexDirection: 'row',
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 14,
         alignItems: 'center',
         gap: 12,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
@@ -327,7 +330,7 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: '#E3F2FD',
+        backgroundColor: colors.primaryLight,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -337,12 +340,12 @@ const styles = StyleSheet.create({
     serviceTitle: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         marginBottom: 2,
     },
     serviceDescription: {
         fontSize: 12,
-        color: '#999',
+        color: colors.textTertiary,
     },
 
     // FAQ
@@ -350,10 +353,10 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     faqItem: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         overflow: 'hidden',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -372,7 +375,7 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 15,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         lineHeight: 22,
     },
     faqAnswer: {
@@ -382,7 +385,7 @@ const styles = StyleSheet.create({
     },
     faqAnswerText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
         lineHeight: 22,
     },
 
@@ -391,20 +394,19 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
     contactCard: {
-        // backgroundColor: '#0d6baeff',
-        backgroundColor: '#E3F2FD',
+        backgroundColor: colors.primaryLight,
         borderRadius: 16,
         padding: 24,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#BBDEFB',
+        borderColor: colors.border,
         width: '100%',
         overflow: 'hidden',
     },
     contactTitle: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
         marginTop: 12,
         marginBottom: 6,
         width: '100%',
@@ -412,7 +414,7 @@ const styles = StyleSheet.create({
     },
     contactText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
         textAlign: 'center',
         lineHeight: 20,
         marginBottom: 16,
@@ -427,7 +429,7 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         color: '#FFF',
-        backgroundColor: '#4A90FF',
+        backgroundColor: colors.primary,
         paddingHorizontal: 24,
         paddingVertical: 12,
         borderRadius: 8,

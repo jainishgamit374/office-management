@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { getTodayWFH } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
@@ -25,6 +26,9 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
     scaleAnim,
     refreshKey,
 }) => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+    
     const [employees, setEmployees] = useState<WFHEmployee[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -81,14 +85,14 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
                 <Feather 
                     name={isExpanded ? 'chevron-up' : 'chevron-down'} 
                     size={20} 
-                    color="#4169E1" 
+                    color={colors.primary} 
                 />
             </TouchableOpacity>
 
             {isExpanded && (
                 isLoading ? (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="small" color="#4169E1" />
+                        <ActivityIndicator size="small" color={colors.primary} />
                         <Text style={styles.loadingText}>Loading...</Text>
                     </View>
                 ) : employees.length > 0 ? (
@@ -96,12 +100,12 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
                         {employees.map((employee) => (
                             <View key={employee.id} style={styles.card}>
                                 <View style={styles.iconContainer}>
-                                    <Feather name="user" size={24} color="#4169E1" />
+                                    <Feather name="user" size={24} color={colors.primary} />
                                 </View>
                                 <View style={styles.cardContent}>
                                     <Text style={styles.cardTitle}>{employee.name}</Text>
                                     <View style={styles.detailsRow}>
-                                        <Feather name="briefcase" size={14} color="#64748B" />
+                                        <Feather name="briefcase" size={14} color={colors.textSecondary} />
                                         <Text style={styles.detailText}>{employee.task}</Text>
                                     </View>
                                 </View>
@@ -110,7 +114,7 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
                     </View>
                 ) : (
                     <View style={styles.emptyContainer}>
-                        <Feather name="users" size={32} color="#ccc" />
+                        <Feather name="users" size={32} color={colors.textTertiary} />
                         <Text style={styles.emptyText}>No employees working from home today</Text>
                     </View>
                 )
@@ -119,15 +123,15 @@ const EmployeesWFHToday: React.FC<EmployeesWFHTodayProps> = ({
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         marginHorizontal: 16,
         marginTop: 12,
         borderRadius: 16,
         padding: 12,
         borderWidth: 1,
-        backgroundColor: '#FFFFFF',
-        borderColor: '#E2E8F0',
+        backgroundColor: colors.card,
+        borderColor: colors.border,
     },
     header: {
         flexDirection: 'row',
@@ -139,7 +143,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#4169E1',
+        color: colors.primary,
         textAlign: 'left',
     },
     grid: {
@@ -152,13 +156,13 @@ const styles = StyleSheet.create({
         gap: 10,
         padding: 10,
         borderBottomWidth: 1,
-        borderBottomColor: '#F1F5F9',
+        borderBottomColor: colors.divider,
     },
     iconContainer: {
         width: 50,
         height: 50,
         borderRadius: 25,
-        backgroundColor: '#E0E8FF',
+        backgroundColor: colors.primaryLight,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -169,7 +173,7 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#1E293B',
+        color: colors.text,
     },
     detailsRow: {
         flexDirection: 'row',
@@ -178,7 +182,7 @@ const styles = StyleSheet.create({
     },
     detailText: {
         fontSize: 13,
-        color: '#64748B',
+        color: colors.textSecondary,
     },
     loadingContainer: {
         padding: 20,
@@ -187,7 +191,7 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
     },
     emptyContainer: {
         padding: 30,
@@ -196,7 +200,7 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: 14,
-        color: '#999',
+        color: colors.textSecondary,
     },
 });
 

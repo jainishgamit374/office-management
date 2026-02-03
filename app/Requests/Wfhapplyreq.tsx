@@ -1,3 +1,4 @@
+import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { authApiRequest } from '@/lib/api';
 import Feather from '@expo/vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -16,6 +17,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const Wfhapplyreq = () => {
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
+    
     const [startDate, setStartDate] = useState(new Date());
     const [endDate, setEndDate] = useState(new Date());
     const [showStartPicker, setShowStartPicker] = useState(false);
@@ -153,7 +157,7 @@ const Wfhapplyreq = () => {
                 <View style={styles.header}>
                     <View style={styles.headerTop}>
                         <View style={styles.headerIconContainer}>
-                            <Feather name="home" size={28} color="#007bff" />
+                            <Feather name="home" size={28} color={colors.primary} />
                         </View>
                         <View style={styles.headerTextContainer}>
                             <Text style={styles.headerTitle}>Work From Home</Text>
@@ -174,13 +178,13 @@ const Wfhapplyreq = () => {
                         onPress={() => setShowStartPicker(true)}
                     >
                         <View style={styles.dateIconContainer}>
-                            <Feather name="calendar" size={20} color="#007bff" />
+                            <Feather name="calendar" size={20} color={colors.primary} />
                         </View>
                         <View style={styles.dateTextContainer}>
                             <Text style={styles.dateLabel}>Start Date</Text>
                             <Text style={styles.dateValue}>{formatDate(startDate)}</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#999" />
+                        <Feather name="chevron-right" size={20} color={colors.textTertiary} />
                     </TouchableOpacity>
 
                     {/* End Date */}
@@ -189,18 +193,18 @@ const Wfhapplyreq = () => {
                         onPress={() => setShowEndPicker(true)}
                     >
                         <View style={styles.dateIconContainer}>
-                            <Feather name="calendar" size={20} color="#007bff" />
+                            <Feather name="calendar" size={20} color={colors.primary} />
                         </View>
                         <View style={styles.dateTextContainer}>
                             <Text style={styles.dateLabel}>End Date</Text>
                             <Text style={styles.dateValue}>{formatDate(endDate)}</Text>
                         </View>
-                        <Feather name="chevron-right" size={20} color="#999" />
+                        <Feather name="chevron-right" size={20} color={colors.textTertiary} />
                     </TouchableOpacity>
 
                     {/* Total Days Display */}
                     <View style={styles.totalDaysContainer}>
-                        <Feather name="clock" size={16} color="#007bff" />
+                        <Feather name="clock" size={16} color={colors.primary} />
                         <Text style={styles.totalDaysText}>
                             Total: {calculateDays()} {calculateDays() === 1 ? 'Day' : 'Days'}
                         </Text>
@@ -263,7 +267,7 @@ const Wfhapplyreq = () => {
                                     <Feather
                                         name="sunrise"
                                         size={18}
-                                        color={isFirstHalf ? '#FFF' : '#007bff'}
+                                        color={isFirstHalf ? '#FFF' : colors.primary}
                                     />
                                     <Text
                                         style={[
@@ -285,7 +289,7 @@ const Wfhapplyreq = () => {
                                     <Feather
                                         name="sunset"
                                         size={18}
-                                        color={!isFirstHalf ? '#FFF' : '#007bff'}
+                                        color={!isFirstHalf ? '#FFF' : colors.primary}
                                     />
                                     <Text
                                         style={[
@@ -307,7 +311,7 @@ const Wfhapplyreq = () => {
                     <TextInput
                         style={styles.reasonInput}
                         placeholder="Enter reason for work from home (minimum 10 characters)..."
-                        placeholderTextColor="#999"
+                        placeholderTextColor={colors.textTertiary}
                         multiline
                         numberOfLines={5}
                         value={reason}
@@ -338,7 +342,7 @@ const Wfhapplyreq = () => {
                 {/* Info Card */}
                 <View style={styles.infoCard}>
                     <View style={styles.infoIconContainer}>
-                        <Feather name="info" size={20} color="#007bff" />
+                        <Feather name="info" size={20} color={colors.primary} />
                     </View>
                     <View style={styles.infoTextContainer}>
                         <Text style={styles.infoTitle}>Important Note</Text>
@@ -353,10 +357,10 @@ const Wfhapplyreq = () => {
     );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F7FA',
+        backgroundColor: colors.background,
     },
     scrollContent: {
         padding: 16,
@@ -376,7 +380,7 @@ const styles = StyleSheet.create({
         width: 56,
         height: 56,
         borderRadius: 28,
-        backgroundColor: '#007bff20',
+        backgroundColor: colors.primaryLight,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -386,12 +390,12 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 24,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
         marginBottom: 4,
     },
     headerSubtitle: {
         fontSize: 14,
-        color: '#999',
+        color: colors.textTertiary,
     },
 
     // Section
@@ -401,7 +405,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         marginBottom: 12,
     },
 
@@ -409,12 +413,12 @@ const styles = StyleSheet.create({
     dateBox: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 14,
         gap: 12,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.08,
@@ -425,10 +429,10 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: '#E3F2FD',
+        backgroundColor: colors.primaryLight,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#007bff',
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
@@ -439,7 +443,7 @@ const styles = StyleSheet.create({
     },
     dateLabel: {
         fontSize: 11,
-        color: '#999',
+        color: colors.textTertiary,
         marginBottom: 4,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
@@ -448,7 +452,7 @@ const styles = StyleSheet.create({
     dateValue: {
         fontSize: 14,
         fontWeight: '700',
-        color: '#333',
+        color: colors.text,
     },
     totalDaysContainer: {
         flexDirection: 'row',
@@ -457,26 +461,26 @@ const styles = StyleSheet.create({
         marginTop: 12,
         paddingHorizontal: 12,
         paddingVertical: 10,
-        backgroundColor: '#E3F2FD',
+        backgroundColor: colors.primaryLight,
         borderRadius: 8,
         alignSelf: 'flex-start',
     },
     totalDaysText: {
         fontSize: 14,
         fontWeight: '700',
-        color: '#007bff',
+        color: colors.primary,
     },
 
     // Checkbox
     checkboxContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
         gap: 14,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.08,
@@ -488,14 +492,14 @@ const styles = StyleSheet.create({
         height: 28,
         borderRadius: 8,
         borderWidth: 2,
-        borderColor: '#D1D5DB',
+        borderColor: colors.border,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
     },
     checkboxActive: {
-        backgroundColor: '#007bff',
-        borderColor: '#007bff',
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
     },
     checkboxTextContainer: {
         flex: 1,
@@ -503,23 +507,23 @@ const styles = StyleSheet.create({
     checkboxLabel: {
         fontSize: 15,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         marginBottom: 4,
     },
     checkboxSubtext: {
         fontSize: 12,
-        color: '#999',
+        color: colors.textTertiary,
     },
 
     // Reason Input
     reasonInput: {
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
         fontSize: 15,
-        color: '#333',
+        color: colors.text,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
         minHeight: 140,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 3 },
@@ -529,7 +533,7 @@ const styles = StyleSheet.create({
     },
     characterCount: {
         fontSize: 12,
-        color: '#999',
+        color: colors.textTertiary,
         textAlign: 'right',
         marginTop: 8,
     },
@@ -539,11 +543,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#007bff',
+        backgroundColor: colors.primary,
         borderRadius: 12,
         padding: 18,
         gap: 10,
-        shadowColor: '#007bff',
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
@@ -557,23 +561,23 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     },
     submitButtonDisabled: {
-        backgroundColor: '#999',
+        backgroundColor: colors.textTertiary,
         shadowOpacity: 0.1,
     },
 
     // Half-Day Selector
     halfDaySelector: {
         marginTop: 16,
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: colors.border,
     },
     halfDayLabel: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#333',
+        color: colors.text,
         marginBottom: 12,
     },
     halfDayButtons: {
@@ -586,20 +590,20 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        backgroundColor: '#E3F2FD',
+        backgroundColor: colors.primaryLight,
         borderRadius: 10,
         padding: 14,
         borderWidth: 2,
-        borderColor: '#E3F2FD',
+        borderColor: colors.primaryLight,
     },
     halfDayButtonActive: {
-        backgroundColor: '#007bff',
-        borderColor: '#007bff',
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
     },
     halfDayButtonText: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#007bff',
+        color: colors.primary,
     },
     halfDayButtonTextActive: {
         color: '#FFF',
@@ -608,21 +612,21 @@ const styles = StyleSheet.create({
     // Info Card
     infoCard: {
         flexDirection: 'row',
-        backgroundColor: '#D1FAE5',
+        backgroundColor: colors.primaryLight,
         borderRadius: 12,
         padding: 16,
         gap: 12,
         borderWidth: 1,
-        borderColor: '#BBDEFB',
+        borderColor: colors.border,
     },
     infoIconContainer: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: '#FFF',
+        backgroundColor: colors.card,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#10B981',
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
@@ -634,12 +638,12 @@ const styles = StyleSheet.create({
     infoTitle: {
         fontSize: 14,
         fontWeight: '700',
-        color: '#1976D2',
+        color: colors.primary,
         marginBottom: 4,
     },
     infoText: {
         fontSize: 13,
-        color: '#1565C0',
+        color: colors.textSecondary,
         lineHeight: 20,
     },
 });

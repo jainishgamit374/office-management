@@ -306,6 +306,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         
         const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour, min, sec);
         console.log('✅ Parsed DD-MM-YYYY Format:', date);
+        console.log('🌍 Timezone Debug:', {
+          input: timeString,
+          parsedISO: date.toISOString(),
+          parsedLocal: date.toString(),
+          deviceTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          deviceOffset: date.getTimezoneOffset(),
+        });
         return date;
       }
       
@@ -631,12 +638,30 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
   }, [applyState, getLocalDateString]);
 
   const formatTime = (date: Date | null): string => {
-    if (!date) return '--:--';
-    return date.toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      console.warn('⚠️ formatTime: Invalid date object:', date);
+      return '--:--';
+    }
+    
+    try {
+      const formatted = date.toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Kolkata', // Explicitly set IST timezone
+      });
+      console.log('🕐 formatTime:', { input: date.toISOString(), output: formatted });
+      return formatted;
+    } catch (error) {
+      console.error('❌ Error formatting time:', error);
+      // Fallback to manual formatting
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours % 12 || 12;
+      const displayMinutes = minutes.toString().padStart(2, '0');
+      return `${displayHours.toString().padStart(2, '0')}:${displayMinutes} ${period}`;
+    }
   };
 
   // ============ HELPER: Validate API response is from today ============

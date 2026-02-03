@@ -1,3 +1,4 @@
+import { useRefresh } from '@/contexts/RefreshContext';
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { applyLeave, calculateLeaveDays, getEmployeeLeaveBalance, validateLeaveApplication } from '@/lib/leaves';
 import Feather from '@expo/vector-icons/Feather';
@@ -21,6 +22,7 @@ type LeaveType = 'PL' | 'CL' | 'SL' | 'LWP';
 
 const Leaveapplyreq = () => {
     const { colors } = useTheme();
+    const { triggerRefresh } = useRefresh();
     const styles = useMemo(() => createStyles(colors), [colors]);
 
     const [selectedLeaveType, setSelectedLeaveType] = useState<LeaveType | null>(null);
@@ -211,6 +213,8 @@ const Leaveapplyreq = () => {
                         setEndDate(new Date());
                         setContactNumber('');
                         fetchLeaveBalance();
+                        // Trigger global refresh to update all components
+                        triggerRefresh();
                     },
                 }]
             );

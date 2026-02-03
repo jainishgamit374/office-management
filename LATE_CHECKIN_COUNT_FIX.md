@@ -137,12 +137,6 @@ Same process for early check-out (before 6:30 PM).
 
 The late check-in count now **increases correctly** after checking in after 9:30 AM, and the early check-out count increases after checking out before 6:30 PM. All data is stored in the backend and fetched from the API! 🚀
 
+---
 
-npx eas build:configure
-npx eas build -p android --profile preview; 
-
-
-Push update to preview	eas update --branch preview --message "fix: bug fix"
-Push update to production	eas update --branch production --message "fix: bug fix"
-View update history	eas update:list
-Rollback update	eas update:rollback --channel preview
+> 📦 **Deployment**: For build and deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).

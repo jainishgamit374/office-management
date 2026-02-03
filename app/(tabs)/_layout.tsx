@@ -112,6 +112,7 @@ export default function TabsLayout() {
                 screenOptions={{
                     headerShown: false,
                     tabBarShowLabel: true,
+                    animation: 'shift',
                 }}
             >
                 <Tabs.Screen

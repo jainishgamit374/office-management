@@ -1,14 +1,14 @@
 // components/CheckInCard.tsx
 import { useTheme } from '@/contexts/ThemeContext';
 import {
-  API_BASE_URL,
-  formatMinutesToHours,
-  getCurrentLocation,
-  getPunchStatus,
-  hasLocationPermission,
-  isLateCheckIn,
-  requestLocationPermission,
-  type PunchStatusResponse
+    API_BASE_URL,
+    formatMinutesToHours,
+    getCurrentLocation,
+    getPunchStatus,
+    hasLocationPermission,
+    isLateCheckIn,
+    requestLocationPermission,
+    type PunchStatusResponse
 } from '@/lib/attendance';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,19 +16,19 @@ import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  AppState,
-  Dimensions,
-  PanResponder,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  UIManager,
-  View,
-  type GestureResponderEvent,
-  type PanResponderGestureState,
+    ActivityIndicator,
+    Animated,
+    AppState,
+    Dimensions,
+    PanResponder,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    UIManager,
+    View,
+    type GestureResponderEvent,
+    type PanResponderGestureState,
 } from 'react-native';
 
 // ============ CONSTANTS ============
@@ -1177,6 +1177,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         }
 
         Animated.timing(colorAnim, { toValue: 1, duration: 800, useNativeDriver: false }).start();
+        
+        // Update status immediately from server (force refresh to bypass cooldown)
+        await fetchPunchStatus(false, true, true);
+        
+        // Trigger parent refresh to update all components on the home screen
+        onRefreshRequest?.();
+        
         return true;
 
       } else if (currentPunchType === 1) {
@@ -1293,6 +1300,13 @@ const CheckInCard: React.FC<CheckInCardProps> = ({
         }
 
         Animated.timing(colorAnim, { toValue: 2, duration: 800, useNativeDriver: false }).start();
+
+        // Update status immediately from server (force refresh to bypass cooldown)
+        await fetchPunchStatus(false, true, true);
+        
+        // Trigger parent refresh to update all components on the home screen
+        onRefreshRequest?.();
+        
         return true;
 
       } else if (currentPunchType === 2) {

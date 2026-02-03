@@ -1,415 +1,298 @@
-// app/(tabs)/explore.tsx
-import { useTabBar } from '@/constants/TabBarContext';
+// app/(tabs)/explore.tsx - MySpace Screen
 import { useTheme } from '@/contexts/ThemeContext';
+import { formatTimeForDisplay, getPunchStatus, type PunchStatusResponse } from '@/lib/attendance';
 import Feather from '@expo/vector-icons/Feather';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useRef, useState } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    Animated,
+    Dimensions,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-interface CardItem {
-  icon: React.ComponentProps<typeof Feather>['name'];
-  title: string;
-  description: string;
-  route: string;
-  gradient: [string, string];
-  badge?: string;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const CARD_SIZE = (SCREEN_WIDTH - 32 - 14) / 2;
+
+// ═══════════════════════════════════════════════════════════
+// TYPE DEFINITIONS
+// ═══════════════════════════════════════════════════════════
+
+import { CATEGORIES, Category } from '@/lib/categories';
+
+// Quick stats configuration (values will be filled from API)
+const QUICK_STATS_CONFIG = [
+  { id: 'checkin', icon: 'clock' as const, label: 'Check-in' },
+  { id: 'leave', icon: 'calendar' as const, label: 'Leaves Left' },
+  { id: 'pending', icon: 'bell' as const, label: 'Pending' },
+];
+
+// ═══════════════════════════════════════════════════════════
+// QUICK STAT CARD COMPONENT
+// ═══════════════════════════════════════════════════════════
+
+interface QuickStatData {
+  id: string;
+  icon: keyof typeof Feather.glyphMap;
+  value: string;
+  label: string;
 }
 
-interface CategoryData {
-  title: string;
-  icon: React.ComponentProps<typeof Feather>['name'];
-  count: number;
-  items: CardItem[];
+const QuickStatCard = React.memo(({ stat, colors }: { stat: QuickStatData; colors: any }) => (
+  <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View style={[styles.statIconContainer, { backgroundColor: `${colors.primary}15` }]}>
+      <Feather name={stat.icon} size={18} color={colors.primary} />
+    </View>
+    <Text style={[styles.statValue, { color: colors.text }]}>{stat.value}</Text>
+    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{stat.label}</Text>
+  </View>
+));
+
+// Category Modal Component has been replaced by app/category/[id].tsx route
+
+// ═══════════════════════════════════════════════════════════
+// CATEGORY CARD COMPONENT
+// ═══════════════════════════════════════════════════════════
+
+interface CategoryCardProps {
+  category: Category;
+  index: number;
+  onPress: () => void;
+  colors: any;
 }
 
-const FeatureCard = ({ item }: { item: CardItem }) => {
-  const { colors } = useTheme();
+const CategoryCard = React.memo(({ category, index, onPress, colors }: CategoryCardProps) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  
-  // Use first gradient color as accent
-  const accentColor = item.gradient[0];
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const translateYAnim = useRef(new Animated.Value(30)).current;
 
-  const handlePressIn = () => {
+  // Use the first gradient color as the accent color
+  const accentColor = category.gradient[0];
+
+  useEffect(() => {
+    const delay = index * 100;
+    
+    Animated.parallel([
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 400,
+        delay,
+        useNativeDriver: true,
+      }),
+      Animated.spring(translateYAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 80,
+        delay,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [index, opacityAnim, translateYAnim]);
+
+  const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, {
       toValue: 0.95,
+      friction: 8,
+      tension: 100,
       useNativeDriver: true,
     }).start();
-  };
+  }, [scaleAnim]);
 
-  const handlePressOut = () => {
+  const handlePressOut = useCallback(() => {
     Animated.spring(scaleAnim, {
       toValue: 1,
-      friction: 3,
-      tension: 40,
+      friction: 8,
+      tension: 100,
       useNativeDriver: true,
     }).start();
-  };
-
-  const handlePress = () => {
-    router.push(item.route as any);
-  };
+  }, [scaleAnim]);
 
   return (
-    <Animated.View style={[styles.cardWrapper, { transform: [{ scale: scaleAnim }] }]}>
-      <Pressable
-        onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-      >
-        <View style={styles.cardHeader}>
-          <View style={[styles.iconContainer, { backgroundColor: `${accentColor}15` }]}>
-            <Feather name={item.icon} size={22} color={accentColor} />
-          </View>
-          {item.badge && (
-            <View style={[styles.badge, { backgroundColor: accentColor }]}>
-              <Text style={styles.badgeText}>{item.badge}</Text>
+    <Animated.View
+      style={[
+        styles.cardWrapper,
+        {
+          opacity: opacityAnim,
+          transform: [{ translateY: translateYAnim }, { scale: scaleAnim }],
+        },
+      ]}
+    >
+      <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+        <View style={[styles.categoryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {/* Badge */}
+          {category.badge && (
+            <View style={styles.cardBadge}>
+              <Text style={styles.cardBadgeText}>{category.badge}</Text>
             </View>
           )}
-        </View>
-        <View style={styles.cardBody}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>{item.title}</Text>
-          <Text style={[styles.cardDescription, { color: colors.textSecondary }]}>{item.description}</Text>
+
+          {/* Icon */}
+          <View style={[styles.cardIconContainer, { backgroundColor: `${accentColor}15` }]}>
+            <Feather name={category.icon} size={28} color={accentColor} />
+          </View>
+
+          {/* Content */}
+          <View style={styles.cardContent}>
+            <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={2}>{category.title}</Text>
+            <View style={styles.cardSubtitleRow}>
+              <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>{category.subtitle}</Text>
+              <Feather name="chevron-right" size={14} color={colors.textSecondary} />
+            </View>
+          </View>
         </View>
       </Pressable>
     </Animated.View>
   );
-};
+});
 
-const CollapsibleSection = ({ category }: { category: CategoryData }) => {
+// ═══════════════════════════════════════════════════════════
+// MAIN SCREEN COMPONENT
+// ═══════════════════════════════════════════════════════════
+
+export default function MySpaceScreen() {
   const { colors } = useTheme();
-  const [expanded, setExpanded] = useState(false);
-  const animatedHeight = useRef(new Animated.Value(0)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
+  const [quickStats, setQuickStats] = useState<QuickStatData[]>([
+    { id: 'checkin', icon: 'clock', value: '--:--', label: 'Check-in' },
+    { id: 'leave', icon: 'calendar', value: '--', label: 'Leaves Left' },
+    { id: 'pending', icon: 'bell', value: '--', label: 'Pending' },
+  ]);
 
-  const toggleExpand = () => {
-    const toValue = expanded ? 0 : 1;
-    
-    Animated.parallel([
-      Animated.spring(animatedHeight, {
-        toValue,
-        useNativeDriver: false,
-        friction: 8,
-        tension: 40,
-      }),
-      Animated.spring(rotateAnim, {
-        toValue,
-        useNativeDriver: true,
-        friction: 8,
-        tension: 40,
-      }),
-    ]).start();
-
-    setExpanded(!expanded);
-  };
-
-  const rotation = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '180deg'],
-  });
-
-  const maxHeight = animatedHeight.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1000],
-  });
-
-  return (
-    <View style={[styles.section, { backgroundColor: colors.card }]}>
-      <Pressable onPress={toggleExpand}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionHeaderLeft}>
-            <View style={[styles.sectionIcon, { backgroundColor: colors.primaryLight }]}>
-              <Feather name={category.icon} size={20} color={colors.primary} />
-            </View>
-            <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                {category.title}
-              </Text>
-              <Text style={[styles.sectionCount, { color: colors.textSecondary }]}>
-                {category.count} items
-              </Text>
-            </View>
-          </View>
-          <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-            <Feather name="chevron-down" size={24} color={colors.textSecondary} />
-          </Animated.View>
-        </View>
-      </Pressable>
-
-      <Animated.View style={[styles.collapsibleContent, { maxHeight, opacity: animatedHeight }]}>
-        <View style={styles.cardGrid}>
-          {category.items.map((item, index) => (
-            <FeatureCard key={index} item={item} />
-          ))}
-        </View>
-      </Animated.View>
-    </View>
-  );
-};
-
-export default function ExploreScreen() {
-  const { colors } = useTheme();
-
-  // Get tab bar context for scroll animation
-  const { scrollY, lastScrollY, tabBarTranslateY } = useTabBar();
-
-  // Category data
-  const categories: CategoryData[] = [
-    {
-      title: 'Attendance & Time',
-      icon: 'clock',
-      count: 8,
-      items: [
-        {
-          icon: 'clock',
-          title: 'Attendance History',
-          description: 'View check-in records',
-          route: '/Attendance/AttendenceList',
-          gradient: ['#667eea', '#764ba2'],
-          badge: 'New',
-        },
-        {
-          icon: 'calendar',
-          title: 'Leave Calendar',
-          description: 'Leaves & holidays',
-          route: '/Attendance/LeaveCalender',
-          gradient: ['#f093fb', '#f5576c'],
-        },
-        {
-          icon: 'user-x',
-          title: 'Absence List',
-          description: 'Employee absences',
-          route: '/Attendance/AbsenceList',
-          gradient: ['#4facfe', '#00f2fe'],
-        },
-        {
-          icon: 'log-out',
-          title: 'Early Checkout',
-          description: 'Early checkout list',
-          route: '/Attendance/EarlyCheckoutList',
-          gradient: ['#43e97b', '#38f9d7'],
-        },
-        {
-          icon: 'alert-circle',
-          title: 'Missed Punch',
-          description: 'Missed punch list',
-          route: '/Attendance/MissPunchList',
-          gradient: ['#fa709a', '#fee140'],
-        },
-        {
-          icon: 'user-x',
-          title: 'Is Away List',
-          description: 'Away requests',
-          route: '/Attendance/IsAwayList',
-          gradient: ['#30cfd0', '#330867'],
-        },
-        {
-          icon: 'check-circle',
-          title: 'Leave Approval',
-          description: 'Approval requests',
-          route: '/Attendance/LeaveApprovalList',
-          gradient: ['#a8edea', '#fed6e3'],
-        },
-        {
-          icon: 'home',
-          title: 'Work From Home',
-          description: 'WFH requests',
-          route: '/Attendance/Wfhlist',
-          gradient: ['#ffecd2', '#fcb69f'],
-        },
-      ],
-    },
-    {
-      title: 'Leave Management',
-      icon: 'calendar',
-      count: 4,
-      items: [
-        {
-          icon: 'file-plus',
-          title: 'Apply Leave',
-          description: 'Submit leave request',
-          route: '/Requests/Leaveapplyreq',
-          gradient: ['#667eea', '#764ba2'],
-        },
-        {
-          icon: 'file-text',
-          title: 'Leave Requests',
-          description: 'All leave applications',
-          route: '/ViewAllRequest/LeaveApplication',
-          gradient: ['#f093fb', '#f5576c'],
-        },
-        {
-          icon: 'check-circle',
-          title: 'Leave Approval',
-          description: 'Pending approvals',
-          route: '/Attendance/LeaveApprovalList',
-          gradient: ['#4facfe', '#00f2fe'],
-          badge: '3',
-        },
-        {
-          icon: 'calendar',
-          title: 'Leave Calendar',
-          description: 'View calendar',
-          route: '/Attendance/LeaveCalender',
-          gradient: ['#43e97b', '#38f9d7'],
-        },
-      ],
-    },
-    {
-      title: 'Requests',
-      icon: 'send',
-      count: 7,
-      items: [
-        {
-          icon: 'alert-circle',
-          title: 'Miss Punch',
-          description: 'Report missed punch',
-          route: '/Requests/Misspunchreq',
-          gradient: ['#fa709a', '#fee140'],
-        },
-        {
-          icon: 'log-out',
-          title: 'Early Checkout',
-          description: 'Request early leave',
-          route: '/Requests/Earlycheckoutreq',
-          gradient: ['#30cfd0', '#330867'],
-        },
-        {
-          icon: 'home',
-          title: 'Apply WFH',
-          description: 'Work from home',
-          route: '/Requests/Wfhapplyreq',
-          gradient: ['#a8edea', '#fed6e3'],
-        },
-        {
-          icon: 'log-out',
-          title: 'Early/Late Requests',
-          description: 'View all requests',
-          route: '/ViewAllRequest/EarlyCheckout',
-          gradient: ['#ffecd2', '#fcb69f'],
-        },
-        {
-          icon: 'home',
-          title: 'WFH Requests',
-          description: 'All WFH requests',
-          route: '/ViewAllRequest/Wfhrequest',
-          gradient: ['#667eea', '#764ba2'],
-        },
-        {
-          icon: 'alert-circle',
-          title: 'Miss Punch Requests',
-          description: 'View all requests',
-          route: '/ViewAllRequest/ViewAllMisspunch',
-          gradient: ['#f093fb', '#f5576c'],
-        },
-        {
-          icon: 'file-plus',
-          title: 'Apply Leave',
-          description: 'Submit leave',
-          route: '/Requests/Leaveapplyreq',
-          gradient: ['#4facfe', '#00f2fe'],
-        },
-      ],
-    },
-    {
-      title: 'Resources & Support',
-      icon: 'info',
-      count: 4,
-      items: [
-        {
-          icon: 'file-text',
-          title: 'HR Policies',
-          description: 'Company guidelines',
-          route: '/Resources/HrPolicies',
-          gradient: ['#43e97b', '#38f9d7'],
-        },
-        {
-          icon: 'users',
-          title: 'Team Directory',
-          description: 'Find teammates',
-          route: '/Resources/TeamDirectory',
-          gradient: ['#fa709a', '#fee140'],
-        },
-        {
-          icon: 'help-circle',
-          title: 'Help & FAQ',
-          description: 'Get help',
-          route: '/Support/Helpandfaq',
-          gradient: ['#30cfd0', '#330867'],
-        },
-        {
-          icon: 'info',
-          title: 'About',
-          description: 'App info',
-          route: '/Support/About',
-          gradient: ['#a8edea', '#fed6e3'],
-        },
-      ],
-    },
-  ];
-
-  // Handle scroll for tab bar animation
-  const handleScroll = Animated.event(
-    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-    {
-      useNativeDriver: false,
-      listener: (event: any) => {
-        const currentScrollY = event.nativeEvent.contentOffset.y;
-        const diff = currentScrollY - lastScrollY.current;
-
-        if (diff > 0 && currentScrollY > 50) {
-          // Scrolling down - hide tab bar
-          Animated.spring(tabBarTranslateY, {
-            toValue: 150,
-            useNativeDriver: true,
-            friction: 8,
-            tension: 40,
-          }).start();
-        } else if (diff < 0) {
-          // Scrolling up - show tab bar
-          Animated.spring(tabBarTranslateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            friction: 8,
-            tension: 40,
-          }).start();
+  // Fetch real data from API
+  const fetchQuickStats = useCallback(async () => {
+    try {
+      const response: PunchStatusResponse = await getPunchStatus();
+      
+      if (response.status === 'Success' && response.data) {
+        // Get punch type: 0 = Not punched, 1 = Checked In, 2 = Checked Out
+        const punchType = response.data.punch?.PunchType ?? 0;
+        
+        // Determine what time to show based on punch status
+        let timeLabel = 'Shift Start';
+        let timeValue = '09:30 AM'; // Default shift start
+        let timeIcon: keyof typeof Feather.glyphMap = 'clock';
+        
+        // Get shift start time from API if available
+        const shiftStartTime = response.data.today?.shift?.StartTime;
+        if (shiftStartTime) {
+          // Convert 24hr format "09:30" to 12hr format "09:30 AM"
+          const [hours, minutes] = shiftStartTime.split(':');
+          const hour = parseInt(hours, 10);
+          const ampm = hour >= 12 ? 'PM' : 'AM';
+          const hour12 = hour % 12 || 12;
+          timeValue = `${hour12}:${minutes} ${ampm}`;
         }
-
-        lastScrollY.current = currentScrollY;
-      },
+        
+        if (punchType === 2) {
+          // Checked out - show checkout time
+          const checkOutTime = response.data.punch?.PunchOutTime || 
+                              response.data.punch?.PunchOutTimeISO || 
+                              response.data.punch?.PunchDateTime;
+          timeValue = checkOutTime ? formatTimeForDisplay(checkOutTime) : timeValue;
+          timeLabel = 'Check-out';
+          timeIcon = 'log-out';
+        } else if (punchType === 1) {
+          // Checked in - show check-in time
+          const checkInTime = response.data.punch?.PunchInTime || 
+                             response.data.punch?.PunchInTimeISO || 
+                             response.data.punch?.PunchDateTime;
+          timeValue = checkInTime ? formatTimeForDisplay(checkInTime) : timeValue;
+          timeLabel = 'Check-in';
+          timeIcon = 'log-in';
+        }
+        
+        // Calculate total leave balance
+        let totalLeaves = 0;
+        if (response.data.leaveBalance) {
+          Object.values(response.data.leaveBalance).forEach((leave: any) => {
+            if (leave.available) {
+              totalLeaves += leave.available;
+            }
+          });
+        }
+        
+        // Get pending requests count
+        const pendingCount = response.data.pendingRequests?.total || 0;
+        
+        setQuickStats([
+          { id: 'checkin', icon: timeIcon, value: timeValue, label: timeLabel },
+          { id: 'leave', icon: 'calendar', value: totalLeaves.toString(), label: 'Leaves Left' },
+          { id: 'pending', icon: 'bell', value: pendingCount.toString(), label: 'Pending' },
+        ]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch quick stats:', error);
     }
+  }, []);
+
+  // Fetch data when screen focuses
+  useFocusEffect(
+    useCallback(() => {
+      fetchQuickStats();
+    }, [fetchQuickStats])
   );
+
+  const handleCategoryPress = useCallback((category: Category) => {
+    router.push(`/category/${category.id}`);
+  }, []);
+
+  const themedColors = { ...colors, isDark: colors.background === '#000000' || colors.background === '#111111' };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Animated.ScrollView
+      <ScrollView
         showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 + insets.bottom }]}
       >
         {/* Header */}
-        <View style={styles.headerContainer}>
-          <Feather name="grid" size={60} color={colors.primary} />
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>My Space</Text>
+            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+              Quick access to all features
+            </Text>
+          </View>
+          <Pressable
+            style={[styles.settingsButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/profile')}
+          >
+            <Feather name="settings" size={20} color={colors.text} />
+          </Pressable>
         </View>
 
-        {/* Title */}
-        <Text style={[styles.title, { color: colors.text }]}>
-          MySpace
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Manage your work efficiently with organized tools
-        </Text>
+        {/* Quick Stats */}
+        <View style={styles.statsRow}>
+          {quickStats.map((stat) => (
+            <QuickStatCard key={stat.id} stat={stat} colors={colors} />
+          ))}
+        </View>
 
-        {/* Collapsible Sections */}
-        {categories.map((category, index) => (
-          <CollapsibleSection key={index} category={category} />
-        ))}
-      </Animated.ScrollView>
+        {/* Categories */}
+        <View style={styles.categoryGrid}>
+          {CATEGORIES.map((category, index) => (
+            <CategoryCard
+              key={category.id}
+              category={category}
+              index={index}
+              onPress={() => handleCategoryPress(category)}
+              colors={colors}
+            />
+          ))}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
+
+// ═══════════════════════════════════════════════════════════
+// STYLES
+// ═══════════════════════════════════════════════════════════
 
 const styles = StyleSheet.create({
   container: {
@@ -417,113 +300,286 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 120,
   },
-  headerContainer: {
-    paddingVertical: 40,
-    justifyContent: 'center',
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 20,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-    marginBottom: 8,
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
   },
-  subtitle: {
-    fontSize: 16,
+  headerSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+
+  // Quick Stats
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
     marginBottom: 24,
-    lineHeight: 22,
   },
-  section: {
-    marginBottom: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    ...Platform.select({ android: { elevation: 4 } }),
+  statCard: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  statValue: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  // Section Header
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-  },
-  sectionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  sectionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 2,
+    fontWeight: '600',
   },
-  sectionCount: {
+  sectionHint: {
     fontSize: 13,
   },
-  collapsibleContent: {
-    overflow: 'hidden',
-  },
-  cardGrid: {
+
+  // Category Grid
+  categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 12,
-    paddingTop: 0,
-    gap: 12,
+    gap: 14,
   },
   cardWrapper: {
-    width: '48%',
+    width: CARD_SIZE,
   },
-  card: {
-    borderRadius: 16,
+  categoryCard: {
+    width: CARD_SIZE,
+    height: CARD_SIZE,
+    borderRadius: 20,
     padding: 16,
-    height: 130,
     justifyContent: 'space-between',
     borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
-  cardHeader: {
+  cardIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardContent: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    flex: 1,
+  },
+  cardSubtitleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
+    alignItems: 'center',
+    gap: 4,
   },
-  iconContainer: {
+  cardBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  cardBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
+  // Modal
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  modalHeaderLeft: {
+    flex: 1,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingRight: 12,
+  },
+  backButtonText: {
+    fontSize: 17,
+    fontWeight: '400',
+    marginLeft: -2,
+  },
+  modalHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalTitleSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  modalCategoryIcon: {
     width: 48,
     height: 48,
     borderRadius: 12,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+  modalHeaderContent: {
+    flex: 1,
   },
-  badgeText: {
-    color: '#fff',
-    fontSize: 11,
+  modalTitle: {
+    fontSize: 20,
     fontWeight: '700',
   },
-  cardBody: {
-    gap: 4,
+  modalSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
   },
-  cardTitle: {
+  modalBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  modalBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  divider: {
+    height: 1,
+    marginHorizontal: 16,
+  },
+
+  // Feature List
+  featureList: {
+    flex: 1,
+  },
+  featureListContent: {
+    padding: 16,
+    gap: 10,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 14,
+  },
+  featureIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  featureTitle: {
     fontSize: 15,
     fontWeight: '600',
-    marginBottom: 2,
   },
-  cardDescription: {
+  featureSubtitle: {
     fontSize: 12,
-    lineHeight: 16,
+    marginTop: 2,
+  },
+  featureRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  featureBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  featureBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
-

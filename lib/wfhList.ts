@@ -40,7 +40,7 @@ export const getWFHList = async (): Promise<WFHListResponse> => {
         }
 
         const response = await fetch(
-            `${BASE_URL}/wfhlist/`,
+            `${BASE_URL}/workfromhomeapprovals/`,
             {
                 method: 'GET',
                 headers: {
@@ -53,11 +53,16 @@ export const getWFHList = async (): Promise<WFHListResponse> => {
 
         let responseData;
         try {
-            responseData = await response.json();
-            console.log('📊 WFH list response:', responseData);
-        } catch (jsonError) {
-            console.error('Failed to parse JSON:', jsonError);
-            throw new Error('Server returned invalid response');
+            const text = await response.text();
+            try {
+                responseData = JSON.parse(text);
+                console.log('📊 WFH list response:', responseData);
+            } catch (e) {
+                console.error('Failed to parse JSON. Raw response:', text.substring(0, 200));
+                throw new Error('Server returned invalid JSON response');
+            }
+        } catch (error: any) {
+            throw new Error('Failed to read response');
         }
 
         if (!response.ok) {
@@ -68,8 +73,26 @@ export const getWFHList = async (): Promise<WFHListResponse> => {
             throw new Error(errorMessage);
         }
 
+        // Map various possible response structures to WFHEmployee[]
+        const rawList = responseData.approval_requests || responseData.pending_approvals || responseData.data || responseData.requests || [];
+
+        const mappedData: WFHEmployee[] = rawList.map((item: any) => ({
+            id: (item.TranID || item.id || Math.random()).toString(),
+            employeeName: item.EmployeeName || item.employeeName || 'Unknown',
+            employeeId: item.EmployeeCode || item.employeeId || '—',
+            department: item.DepartmentName || item.department || '—',
+            date: item.DateTime || item.date || new Date().toISOString(),
+            isHalfDay: item.IsHalfDay || item.isHalfDay || false,
+            reason: item.Reason || item.reason || '',
+            approvalStatus: item.ApprovalStatus || item.approvalStatus || 'Pending',
+            approvedBy: item.ApprovedBy || item.approvedBy
+        }));
+
         console.log('✅ WFH list fetched successfully');
-        return responseData;
+        return {
+            status: 'Success',
+            data: mappedData
+        };
     } catch (error: any) {
         console.error('❌ Get WFH list error:', error);
         let errorMessage = 'Failed to fetch WFH list';

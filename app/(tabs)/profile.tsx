@@ -2,9 +2,10 @@ import { useTabBar } from '@/constants/TabBarContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ThemeColors, useTheme } from '@/contexts/ThemeContext';
 import { signOut } from '@/lib/appwrite';
+import { getPunchStatus } from '@/lib/attendance';
 import Feather from '@expo/vector-icons/Feather';
 import { router } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Animated, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -222,10 +223,34 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
 const Profile = () => {
     const { theme, toggleTheme, colors } = useTheme();
     const { user, refreshUser } = useAuth();
+    const [attendanceStats, setAttendanceStats] = useState({
+        present: 0,
+        absent: 0,
+        leaves: 0,
+    });
 
     useEffect(() => {
         // Ensure we have the latest user profile when visiting the profile tab
         refreshUser();
+        
+        // Fetch attendance stats
+        const fetchAttendanceStats = async () => {
+            try {
+                const response = await getPunchStatus();
+                if (response.status === 'Success' && response.data?.attendance?.thisMonth) {
+                    const monthData = response.data.attendance.thisMonth;
+                    setAttendanceStats({
+                        present: monthData.present || 0,
+                        absent: monthData.absent || 0,
+                        leaves: monthData.leaves || 0,
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to fetch attendance stats:', error);
+            }
+        };
+        
+        fetchAttendanceStats();
     }, []);
 
     // Get tab bar context for scroll animation
@@ -296,15 +321,21 @@ const Profile = () => {
                 <View style={styles.header}>
                     <View style={{ width: 24 }} />
                     <Text style={styles.headerTitle}>Profile</Text>
-                    <TouchableOpacity onPress={() => router.push('/edit-profile')}>
-                        <Feather name="edit-2" size={20} color={colors.primary} />
-                    </TouchableOpacity>
+                    <View style={{ width: 24 }} />
                 </View>
 
                 {/* Profile Card */}
                 <View style={styles.profileCard}>
                     <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>JG</Text>
+                        <Text style={styles.avatarText}>
+                            {user?.name
+                                ? user.name
+                                    .split(' ')
+                                    .slice(0, 2)
+                                    .map(word => word.charAt(0).toUpperCase())
+                                    .join('')
+                                : '??'}
+                        </Text>
                     </View>
                     <Text style={styles.name}>{user?.name || '—'}</Text>
                     {user?.designation ? (
@@ -320,15 +351,15 @@ const Profile = () => {
                 {/* Stats */}
                 <View style={styles.statsRow}>
                     <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>24</Text>
+                        <Text style={styles.statNumber}>{attendanceStats.present}</Text>
                         <Text style={styles.statLabel}>Present</Text>
                     </View>
                     <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>2</Text>
+                        <Text style={styles.statNumber}>{attendanceStats.absent}</Text>
                         <Text style={styles.statLabel}>Absent</Text>
                     </View>
                     <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>5</Text>
+                        <Text style={styles.statNumber}>{attendanceStats.leaves}</Text>
                         <Text style={styles.statLabel}>Leaves</Text>
                     </View>
                 </View>
@@ -437,54 +468,6 @@ const Profile = () => {
                             thumbColor={theme === 'dark' ? '#FFF' : '#F4F3F4'}
                         />
                     </View>
-
-                    {/* Reset Attendance Toggle (Testing) */}
-                    <TouchableOpacity
-                        style={styles.menuRow}
-                        onPress={async () => {
-                            Alert.alert(
-                                'Reset Attendance',
-                                'This will clear local punch records only.\n\n⚠️ Note: Backend server records are NOT deleted. If you see "Already Checked Out", the backend still has your punch data.\n\nUse for testing local state only.',
-                                [
-                                    { text: 'Cancel', style: 'cancel' },
-                                    {
-                                        text: 'Reset Local Data',
-                                        style: 'destructive',
-                                        onPress: async () => {
-                                            try {
-                                                const { clearTodayAttendance } = await import('@/lib/localAttendance');
-                                                await clearTodayAttendance(true); // Pass true for force mode
-                                                Alert.alert(
-                                                    'Success! 🎉',
-                                                    'Local data cleared and force reset enabled.\n\nNavigate to Home to punch in fresh (backend status will be ignored).',
-                                                    [
-                                                        {
-                                                            text: 'Go to Home',
-                                                            onPress: () => router.push('/')
-                                                        },
-                                                        {
-                                                            text: 'OK',
-                                                            style: 'cancel'
-                                                        }
-                                                    ]
-                                                );
-                                            } catch (error: any) {
-                                                Alert.alert('Error', error.message || 'Failed to reset attendance');
-                                            }
-                                        }
-                                    }
-                                ]
-                            );
-                        }}
-                    >
-                        <View style={styles.menuLeft}>
-                            <View style={[styles.menuIcon, { backgroundColor: theme === 'dark' ? '#3A1A1A' : '#FFEBEE' }]}>
-                                <Feather name="refresh-cw" size={18} color={colors.error} />
-                            </View>
-                            <Text style={styles.menuText}>Reset Attendance (Test)</Text>
-                        </View>
-                        <Feather name="chevron-right" size={20} color={colors.border} />
-                    </TouchableOpacity>
 
                     <TouchableOpacity style={styles.menuRow}>
                         <View style={styles.menuLeft}>

@@ -44,6 +44,7 @@
 
 // app/_layout.tsx
 import { AuthProvider } from '@/contexts/AuthContext';
+import { RefreshProvider } from '@/contexts/RefreshContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import * as NavigationBar from 'expo-navigation-bar';
 import { Stack } from 'expo-router';
@@ -63,11 +64,19 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-        </Stack>
-        <Toast />
+        <RefreshProvider>
+          <Stack 
+            screenOptions={{ 
+              headerShown: false,
+              animation: 'slide_from_right',
+              animationDuration: 300,
+            }}
+          >
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+          <Toast />
+        </RefreshProvider>
       </AuthProvider>
     </ThemeProvider>
   );

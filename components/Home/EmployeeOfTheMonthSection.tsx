@@ -57,8 +57,10 @@ const EmployeeOfTheMonthSection: React.FC<EmployeeOfTheMonthSectionProps> = ({ r
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Feather name="award" size={24} color="#FFD700" />
-                <Text style={styles.title}>Employee of the Month</Text>
+                <View style={styles.headerLeft}>
+                    <Feather name="award" size={24} color="#FFD700" />
+                    <Text style={styles.title}>Employee of the Month</Text>
+                </View>
             </View>
 
             {isLoading ? (
@@ -113,6 +115,11 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         marginBottom: 12,
         paddingVertical: 4,
+    },
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
     title: {
         fontSize: 16,

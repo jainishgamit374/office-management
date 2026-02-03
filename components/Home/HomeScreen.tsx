@@ -1,5 +1,6 @@
 import Navbar from '@/components/Navigation/Navbar';
 import { useTabBar } from '@/constants/TabBarContext';
+import { useRefresh } from '@/contexts/RefreshContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import React, { useCallback, useRef, useState } from 'react';
 import { Animated, RefreshControl, ScrollView, StyleSheet } from 'react-native';
@@ -21,12 +22,12 @@ import UpcomingWFHs from './UpcomingWFHs';
 
 const HomeScreen: React.FC = () => {
   const { colors } = useTheme();
+  const { refreshKey, triggerRefresh } = useRefresh();
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [hasCheckedOut, setHasCheckedOut] = useState(false);
   const [hasEverCheckedIn, setHasEverCheckedIn] = useState(false);
   const [expandedLeave, setExpandedLeave] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const totalTasks = 12;
   const tasksToComplete = 4;
@@ -111,14 +112,14 @@ const HomeScreen: React.FC = () => {
   
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setRefreshKey(prev => prev + 1);
+    triggerRefresh();
     
     // Simulate a delay for the refresh animation
     // The actual components will refresh via the refreshKey prop
     setTimeout(() => {
       setRefreshing(false);
     }, 1500);
-  }, []);
+  }, [triggerRefresh]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -156,6 +157,7 @@ const HomeScreen: React.FC = () => {
         <CheckInCard
           onCheckInChange={handleCheckInChange}
           refreshKey={refreshKey}
+          onRefreshRequest={onRefresh}
         />
 
 

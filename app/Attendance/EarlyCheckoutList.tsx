@@ -77,7 +77,7 @@ const EarlyCheckoutList = () => {
             {/* Header with ID */}
             <View style={styles.cardHeader}>
                 <View style={styles.idBadge}>
-                    <Text style={styles.idText}>#{item.EarlyCheckoutReqMasterID}</Text>
+                    <Text style={styles.idText}>#{item.EarlyCheckoutReqMasterID || item.TranID}</Text>
                 </View>
                 <View style={styles.statusBadge}>
                     <View style={styles.statusDot} />
@@ -181,7 +181,7 @@ const EarlyCheckoutList = () => {
                 <FlatList
                     data={requests}
                     renderItem={renderRequestCard}
-                    keyExtractor={(item) => item.EarlyCheckoutReqMasterID.toString()}
+                    keyExtractor={(item, index) => (item.EarlyCheckoutReqMasterID || item.TranID || index).toString()}
                     contentContainerStyle={styles.listContent}
                     ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
                     refreshControl={
